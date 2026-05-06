@@ -83,7 +83,19 @@
       padding: 16px 18px;
       border-top: 2px solid var(--border);
       display: flex; align-items: center; gap: 11px;
+      position: relative; cursor: default;
     }
+    .sb-logout {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--cream);
+      opacity: 0; pointer-events: none;
+      transition: opacity .15s;
+      border-top: 2px solid var(--border);
+      font-size: 13px; font-weight: 600; color: var(--urgent);
+      cursor: pointer; gap: 6px;
+    }
+    .sb-user:hover .sb-logout { opacity: 1; pointer-events: auto; }
     .sb-av {
       width: 34px; height: 34px; border-radius: 50%;
       background: var(--text); color: #fff;
@@ -614,6 +626,10 @@
     <div class="sb-user">
       <div class="sb-av" id="sb-av">??</div>
       <div><div class="sb-name" id="sb-name"></div><div class="sb-role" id="sb-role"></div></div>
+      <div class="sb-logout" onclick="doLogout()">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/><path d="M10 11l3-3-3-3"/><path d="M13 8H6"/></svg>
+        Sign Out
+      </div>
     </div>
   </aside>
 
@@ -878,6 +894,13 @@ async function init() {
     if (res.ok) { currentMember = await res.json(); showApp(); }
     else showLogin();
   } catch { showLogin(); }
+}
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  currentMember = null; currentTasks = []; shopMembers = [];
+  document.getElementById('app').style.display = 'none';
+  showLogin();
 }
 
 function showLogin() {
