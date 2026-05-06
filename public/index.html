@@ -507,10 +507,86 @@
       .hero-section.desk-only { display: flex; }
       .mob-only { display: none; }
     }
+
+    /* ── Login overlay ─────────────────────────── */
+    #login-overlay {
+      position: fixed; inset: 0;
+      background: var(--cream);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999;
+    }
+    .login-card {
+      width: 100%; max-width: 360px;
+      background: var(--bg);
+      border-radius: 18px;
+      padding: 40px 32px;
+      box-shadow: 0 4px 40px rgba(0,0,0,.08);
+      margin: 20px;
+    }
+    .login-brand { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+    .login-sub   { font-size: 14px; color: var(--t2); margin-top: 4px; margin-bottom: 32px; }
+    .login-error {
+      background: var(--urg-bg); color: var(--urgent);
+      font-size: 13px; padding: 10px 14px;
+      border-radius: 8px; margin-bottom: 16px;
+    }
+    .login-field { margin-bottom: 16px; }
+    .login-field label {
+      display: block; font-size: 11px; font-weight: 600;
+      color: var(--t2); margin-bottom: 6px;
+      letter-spacing: .06em; text-transform: uppercase;
+    }
+    .login-field input {
+      width: 100%; padding: 12px 14px;
+      border: 2px solid var(--border); border-radius: 10px;
+      font-family: inherit; font-size: 15px; color: var(--text);
+      background: var(--bg); outline: none;
+      transition: border-color .15s;
+    }
+    .login-field input:focus { border-color: var(--text); }
+    .login-btn {
+      width: 100%; padding: 13px;
+      background: var(--text); color: #fff;
+      border: none; border-radius: 10px;
+      font-family: inherit; font-size: 15px; font-weight: 600;
+      cursor: pointer; margin-top: 8px;
+      transition: opacity .15s;
+    }
+    .login-btn:hover  { opacity: .85; }
+    .login-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Note save button ──────────────────────── */
+    .note-save-btn {
+      display: inline-block; margin-top: 6px;
+      padding: 5px 14px;
+      background: var(--text); color: #fff;
+      border: none; border-radius: 6px;
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-<div id="app">
+
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-brand">108th CES</div>
+    <div class="login-sub">UTA Task Tracker</div>
+    <div id="login-error" class="login-error" style="display:none"></div>
+    <div class="login-field">
+      <label>Username</label>
+      <input type="text" id="login-slug" placeholder="gablin"
+             autocomplete="username" autocapitalize="none" autocorrect="off">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="login-pwd" autocomplete="current-password">
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<div id="app" style="display:none">
 
   <!-- ═══ SIDEBAR (white) ════════════════════════ -->
   <aside class="sidebar">
@@ -536,8 +612,8 @@
       <div class="sb-spacer"></div>
     </div>
     <div class="sb-user">
-      <div class="sb-av">SJ</div>
-      <div><div class="sb-name">Smith, J.</div><div class="sb-role">SSgt · Electrical</div></div>
+      <div class="sb-av" id="sb-av">??</div>
+      <div><div class="sb-name" id="sb-name"></div><div class="sb-role" id="sb-role"></div></div>
     </div>
   </aside>
 
@@ -545,8 +621,7 @@
   <header class="mob-hdr">
     <div class="mob-eye">108th CES UTA Tracker</div>
     <div class="mob-ttl" id="mob-title">May 2026 UTA</div>
-    <div class="mob-sub" id="mob-sub">SSgt Smith, J. · Electrical</div>
-    <div class="demo-pill"><span class="demo-dot"></span>Prototype — use nav to switch views</div>
+    <div class="mob-sub" id="mob-sub"></div>
   </header>
 
   <!-- ═══ MAIN ════════════════════════════════════ -->
@@ -558,7 +633,7 @@
         <div class="desk-ttl" id="desk-title">May 2026 UTA</div>
         <div class="desk-sub" id="desk-sub">SSgt Smith, J. · Electrical</div>
       </div>
-      <div class="demo-pill"><span class="demo-dot"></span>Prototype mode</div>
+      <div id="uta-label" style="font-size:12px;color:var(--t2)"></div>
     </div>
 
     <!-- ═══ MEMBER VIEW ═══════════════════════════ -->
@@ -646,11 +721,21 @@
 
       </div>
 
+      <!-- Shop schedule & work orders — visible to all members -->
       <div class="sec-hd">
-        <div class="sec-title">Electrical Shop</div>
-        <div class="sec-sub">Tap a member to expand</div>
+        <div class="sec-title">Shop Schedule &amp; Work Orders</div>
+        <div class="sec-sub">May 2026 UTA</div>
       </div>
-      <div class="card" id="member-list"></div>
+      <div id="shop-events-list" style="margin-bottom:24px"></div>
+
+      <!-- Members section — supervisors and leadership only -->
+      <div id="shop-members-section">
+        <div class="sec-hd">
+          <div class="sec-title" id="shop-members-title">Structures Shop</div>
+          <div class="sec-sub">Tap a member to expand</div>
+        </div>
+        <div class="card" id="member-list"></div>
+      </div>
 
     </div>
 
@@ -781,378 +866,437 @@
 
 </div>
 <script>
-/* ── Gauge ─────────────────────────────────────── */
+/* ── State ─────────────────────────────────────── */
+let currentMember = null;
+let currentTasks  = [];
+let shopMembers   = [];
+
+/* ── Boot ──────────────────────────────────────── */
+async function init() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.ok) { currentMember = await res.json(); showApp(); }
+    else showLogin();
+  } catch { showLogin(); }
+}
+
+function showLogin() {
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('app').style.display = '';
+  applyRole();
+  populateUserUI();
+  loadTasks();
+  loadShopEvents();
+  if (['supervisor','leadership'].includes(currentMember.role)) loadShopMembers();
+}
+
+function populateUserUI() {
+  const m = currentMember;
+  const initials = m.first_name[0] + m.last_name[0];
+  const name     = m.last_name + ', ' + m.first_name[0] + '.';
+  document.getElementById('sb-av').textContent   = initials;
+  document.getElementById('sb-name').textContent = name;
+  document.getElementById('sb-role').textContent = m.rank + ' · ' + m.shop;
+  document.getElementById('mob-sub').textContent  = m.rank + ' ' + m.last_name + ' · ' + m.shop;
+  document.getElementById('uta-label').textContent = 'May 2026 UTA · JB MDL';
+  document.getElementById('shop-members-title').textContent = m.shop + ' Shop';
+  document.getElementById('mob-title').textContent  = 'May 2026 UTA';
+  document.getElementById('desk-title').textContent = 'May 2026 UTA';
+  document.getElementById('desk-sub').textContent   = m.rank + ' ' + m.last_name + ' · ' + m.shop;
+}
+
+function applyRole() {
+  const role = currentMember?.role;
+  if (role === 'member') {
+    document.querySelectorAll('[data-view="supervisor"]').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('[data-view="leadership"]').forEach(el => el.style.display = 'none');
+  } else if (role === 'supervisor') {
+    document.querySelectorAll('[data-view="leadership"]').forEach(el => el.style.display = 'none');
+  }
+  const sec = document.getElementById('shop-members-section');
+  if (sec) sec.style.display = ['supervisor','leadership'].includes(role) ? '' : 'none';
+}
+
+/* ── Login ──────────────────────────────────────── */
+async function doLogin() {
+  const slug = document.getElementById('login-slug').value.trim().toLowerCase();
+  const pwd  = document.getElementById('login-pwd').value;
+  const btn  = document.getElementById('login-btn');
+  const err  = document.getElementById('login-error');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const res  = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ slug, password: pwd }),
+    });
+    const data = await res.json();
+    if (res.ok) { currentMember = data; showApp(); }
+    else { err.textContent = data.error || 'Login failed'; err.style.display = ''; }
+  } catch { err.textContent = 'Connection error — try again'; err.style.display = ''; }
+  btn.disabled = false; btn.textContent = 'Sign In';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('login-pwd').addEventListener('keydown',  e => { if (e.key==='Enter') doLogin(); });
+  document.getElementById('login-slug').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('login-pwd').focus(); });
+  init();
+});
+
+/* ── Gauge ──────────────────────────────────────── */
 function gauge(id, pct) {
   const svg = document.getElementById(id);
   if (!svg) return;
   const cx=80,cy=90,ir=55,or=69,n=52;
-  const filled = Math.round(n * pct / 100);
+  const filled = Math.round(n*pct/100);
   svg.innerHTML = Array.from({length:n},(_,i)=>{
-    const rad=(180+180*i/(n-1))*Math.PI/180;
-    const c=Math.cos(rad), s=Math.sin(rad);
+    const rad=(180+180*i/(n-1))*Math.PI/180, c=Math.cos(rad), s=Math.sin(rad);
     return `<line x1="${(cx+ir*c).toFixed(2)}" y1="${(cy+ir*s).toFixed(2)}" x2="${(cx+or*c).toFixed(2)}" y2="${(cy+or*s).toFixed(2)}" stroke="${i<filled?'var(--gon)':'var(--goff)'}" stroke-width="${i<filled?'2.6':'2'}" stroke-linecap="round"/>`;
   }).join('');
 }
 
-/* ── Bar chart ─────────────────────────────────── */
-/* items: [{label, pct, hatch?}] — values render below bars at consistent y */
-function barChart(elId, items, opts={}) {
+/* ── Bar chart ──────────────────────────────────── */
+function barChart(elId, items) {
   const el = document.getElementById(elId);
   if (!el) return;
-  const showVal = opts.showVal !== false;
   el.innerHTML = items.map(d => {
     const cls = d.hatch ? 'bar-rect hatch' : 'bar-rect';
-    const h = Math.max(0, Math.min(100, d.pct));
-    return `<div class="bar-col">
-      <div class="bar-track">
-        <div class="${cls}" style="height:${h}%"></div>
-      </div>
-      <div class="bar-info">
-        ${showVal ? `<div class="bar-val">${d.pct}%</div>` : ''}
-        <div class="bar-x">${d.label}</div>
-      </div>
-    </div>`;
+    const h   = Math.max(0, Math.min(100, d.pct));
+    return `<div class="bar-col"><div class="bar-track"><div class="${cls}" style="height:${h}%"></div></div><div class="bar-info"><div class="bar-val">${d.pct}%</div><div class="bar-x">${d.label}</div></div></div>`;
   }).join('');
 }
 
-/* ── TASK DATA ─────────────────────────────────── */
-const GROUPS = [
-  { id:'cbt', label:'Computer Training (CBTs)', short:'CBT', tasks:[
-    {title:'Annual IA Training',         det:'Must complete by Sun 2359',         urg:'urgent',   badge:'This UTA', state:'none'},
-    {title:'Cyber Awareness Challenge',  det:'30 days overdue · complete ASAP',   urg:'urgent',   badge:'This UTA', state:'none'},
-    {title:'SAPR Training',              det:'Completed Apr 12, 2026',            urg:'done',     badge:'Done',     state:'done'},
-  ]},
-  { id:'med', label:'Medical / Dental', short:'MED', tasks:[
-    {title:'Dental Exam',                det:'Friday · 0900 · Bldg 2621',         urg:'urgent',   badge:'This UTA', state:'none'},
-  ]},
-  { id:'pt',  label:'Physical Training', short:'PT', tasks:[
-    {title:'PT Assessment',              det:'Completed Mar 2026',                urg:'done',     badge:'Done',     state:'done'},
-  ]},
-  { id:'epb', label:'Performance Review (EPB)', short:'EPB', tasks:[
-    {title:'EPB — Route to Supervisor',  det:'Due by end of UTA · see MSgt Brown',urg:'urgent',   badge:'This UTA', state:'none'},
-  ]},
-  { id:'upg', label:'Upgrade Training', short:'UPG', tasks:[
-    {title:'5-Level CDC Vol. 2',         det:'Signed off Apr 2026',               urg:'done',     badge:'Done',     state:'done'},
-    {title:'5-Level CDC Vol. 3',         det:'Target: Jun 2026 UTA',              urg:'upcoming', badge:'Jun UTA',  state:'none'},
-  ]},
-];
-
-function bclass(u){ return {urgent:'b-urgent', upcoming:'b-upcoming', done:'b-done', partial:'b-partial'}[u]||'b-upcoming'; }
-
-function buildTasks(){
-  let html='';
-  GROUPS.forEach((g,gi)=>{
-    html+=`<div class="task-group"><div class="grp-lbl">${g.label}</div>`;
-    g.tasks.forEach((t,ti)=>{
-      const id=`t-${gi}-${ti}`;
-      html+=`<div class="task-item" id="${id}" data-gi="${gi}" data-ti="${ti}" data-state="${t.state}" data-ob="${t.badge}" data-ou="${t.urg}" onclick="cycleTask(this,event)">
-        <div class="chk">
-          <svg class="ic ic-part" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M2.5 5h5" stroke="var(--warn)" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <svg class="ic ic-done" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.5 5 4 7.5 8.5 2.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <div class="task-body">
-          <div class="task-title">${t.title}</div>
-          <div class="task-det">${t.det}</div>
-          <button class="note-btn" onclick="toggleNote(event,'${id}')">
-            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="1" width="10" height="10" rx="2"/><path d="M3.5 4h5M3.5 6.5h5M3.5 9h3"/></svg>
-            Add note
-          </button>
-          <div class="note-area" id="note-${id}"><textarea class="note-input" rows="2" placeholder="Add a note for your supervisor…" onclick="event.stopPropagation()"></textarea></div>
-        </div>
-        <div class="badge ${bclass(t.urg)}" id="badge-${id}">${t.badge}</div>
-      </div>`;
-    });
-    html+='</div>';
-  });
-  document.getElementById('member-tasks').innerHTML=html;
+/* ── My Tasks ───────────────────────────────────── */
+async function loadTasks() {
+  const res = await fetch('/api/tasks');
+  if (!res.ok) return;
+  currentTasks = await res.json();
+  buildTasks();
   updateMemberStats();
 }
 
-function getMemberCatBars(){
-  return GROUPS.map((g,gi)=>{
-    const done = g.tasks.filter((t,ti)=>{
-      const el = document.getElementById(`t-${gi}-${ti}`);
-      return el ? el.dataset.state === 'done' : t.state === 'done';
-    }).length;
-    const pct = Math.round(done/g.tasks.length*100);
-    return { label: g.short, pct, hatch: pct < 100 && pct > 0, done, tot: g.tasks.length };
+function buildTasks() {
+  const groups = {}, order = [];
+  for (const t of currentTasks) {
+    if (!groups[t.category_code]) { groups[t.category_code] = {label:t.category_label,tasks:[]}; order.push(t.category_code); }
+    groups[t.category_code].tasks.push(t);
+  }
+  let html = '';
+  for (const code of order) {
+    if (code === 'upcoming') continue;
+    const checkable = groups[code].tasks.filter(t => !t.is_upcoming);
+    if (!checkable.length) continue;
+    html += `<div class="task-group"><div class="grp-lbl">${groups[code].label}</div>`;
+    for (const t of checkable) html += taskHTML(t);
+    html += '</div>';
+  }
+  const upcoming = currentTasks.filter(t => t.is_upcoming);
+  if (upcoming.length) {
+    html += '<div class="task-group"><div class="grp-lbl">Upcoming</div>';
+    for (const t of upcoming) html += upcomingHTML(t);
+    html += '</div>';
+  }
+  document.getElementById('member-tasks').innerHTML = html;
+}
+
+function badgeFor(urgency, state) {
+  if (state === 'done')       return {cls:'b-done',    text:'Done'};
+  if (state === 'partial')    return {cls:'b-partial',  text:'In Progress'};
+  if (urgency === 'overdue')  return {cls:'b-urgent',   text:'Overdue'};
+  if (urgency === 'this_uta') return {cls:'b-urgent',   text:'This UTA'};
+  if (urgency === 'next_uta') return {cls:'b-upcoming', text:'Next UTA'};
+  return {cls:'b-upcoming', text:'Upcoming'};
+}
+
+const NOTE_ICO = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="1" width="10" height="10" rx="2"/><path d="M3.5 4h5M3.5 6.5h5M3.5 9h3"/></svg>`;
+
+function taskHTML(t) {
+  const b    = badgeFor(t.urgency, t.state);
+  const orig = badgeFor(t.urgency, 'none');
+  const apptParts = [t.appt_day, t.appt_time, t.appt_location].filter(Boolean);
+  let det = apptParts.length ? apptParts.join(' · ') + (t.details ? ' · ' + t.details : '') : (t.details || '');
+  return `<div class="task-item" id="ti-${t.id}" data-id="${t.id}" data-state="${t.state}" data-ou="${t.urgency}" data-ob="${orig.text}" onclick="cycleTask(this,event)">
+    <div class="chk">
+      <svg class="ic ic-part" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M2.5 5h5" stroke="var(--warn)" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <svg class="ic ic-done" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.5 5 4 7.5 8.5 2.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="task-body">
+      <div class="task-title">${t.title}</div>
+      ${det ? `<div class="task-det">${det}</div>` : ''}
+      <button class="note-btn" onclick="toggleNote(event,'ti-${t.id}')">${NOTE_ICO}${t.note ? 'View note' : 'Add note'}</button>
+      <div class="note-area" id="note-ti-${t.id}">
+        <textarea class="note-input" rows="2" placeholder="Add a note for your supervisor…" onclick="event.stopPropagation()">${t.note || ''}</textarea>
+        <button class="note-save-btn" onclick="saveNote(event,${t.id},'ti-${t.id}')">Save</button>
+      </div>
+    </div>
+    <div class="badge ${b.cls}" id="badge-ti-${t.id}">${b.text}</div>
+  </div>`;
+}
+
+function upcomingHTML(t) {
+  return `<div class="task-item" style="opacity:.65;cursor:default">
+    <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
+    <div class="task-body">
+      <div class="task-title">${t.title}</div>
+      ${t.details ? `<div class="task-det">${t.details}</div>` : ''}
+    </div>
+    <div class="badge b-upcoming">Info</div>
+  </div>`;
+}
+
+function getMemberCatBars() {
+  const cats = {};
+  for (const t of currentTasks) {
+    if (t.is_upcoming) continue;
+    if (!cats[t.category_code]) cats[t.category_code] = {label:t.category_code.slice(0,3).toUpperCase(),done:0,tot:0};
+    cats[t.category_code].tot++;
+    if (t.state==='done') cats[t.category_code].done++;
+  }
+  return Object.values(cats).map(c => {
+    const pct = c.tot ? Math.round(c.done/c.tot*100) : 100;
+    return {label:c.label, pct, hatch:pct<100&&pct>0};
   });
 }
 
-function updateMemberStats(){
-  const items = document.querySelectorAll('#member-tasks .task-item');
-  const done  = Array.from(items).filter(el=>el.dataset.state==='done').length;
-  const total = items.length;
-  const pct   = Math.round(done/total*100);
-  document.getElementById('gp-member').textContent = pct+'%';
-  document.getElementById('gs-done').textContent   = done;
-  document.getElementById('gs-left').textContent   = total-done;
-  document.getElementById('member-chart-meta').textContent = `${done} / ${total}`;
+function updateMemberStats() {
+  const checkable = currentTasks.filter(t => !t.is_upcoming);
+  const done  = checkable.filter(t => t.state==='done').length;
+  const total = checkable.length;
+  const pct   = total ? Math.round(done/total*100) : 0;
+  document.getElementById('gp-member').textContent         = pct + '%';
+  document.getElementById('gs-done').textContent           = done;
+  document.getElementById('gs-left').textContent           = total - done;
+  document.getElementById('member-chart-meta').textContent = done + ' / ' + total;
   gauge('g-member', pct);
-  // Update bar chart
   barChart('member-bar-chart', getMemberCatBars());
 }
 
-function cycleTask(el, event){
+async function cycleTask(el, event) {
+  if (el.style.cursor==='default') return;
   if (event.target.closest('.note-btn,.note-area')) return;
-  const s=['none','partial','done'];
-  const next=s[(s.indexOf(el.dataset.state)+1)%3];
-  el.dataset.state=next;
-  const badge=document.getElementById('badge-'+el.id);
-  if(next==='partial'){ badge.className='badge b-partial'; badge.textContent='In Progress'; }
-  else if(next==='done'){ badge.className='badge b-done'; badge.textContent='Done'; }
-  else { badge.className='badge '+bclass(el.dataset.ou); badge.textContent=el.dataset.ob; }
+  const states = ['none','partial','done'];
+  const next   = states[(states.indexOf(el.dataset.state)+1)%3];
+  el.dataset.state = next;
+  const task = currentTasks.find(t => t.id===parseInt(el.dataset.id));
+  if (task) task.state = next;
+  const b = badgeFor(el.dataset.ou, next);
+  const badge = document.getElementById('badge-'+el.id);
+  badge.className = 'badge '+b.cls; badge.textContent = b.text;
   updateMemberStats();
+  try {
+    const note = el.querySelector('textarea')?.value || null;
+    await fetch('/api/tasks/'+el.dataset.id, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({state:next, note}),
+    });
+  } catch(e) { console.error('save failed',e); }
 }
 
-function toggleNote(event, id){
+function toggleNote(event, id) {
   event.stopPropagation();
-  const area=document.getElementById('note-'+id);
-  const open=area.classList.toggle('open');
-  const btn=event.currentTarget;
-  const ico=`<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="1" width="10" height="10" rx="2"/><path d="M3.5 4h5M3.5 6.5h5M3.5 9h3"/></svg>`;
-  btn.innerHTML = ico + (open?'Hide note':'Add note');
-  if(open) setTimeout(()=>area.querySelector('textarea').focus(), 50);
+  const area = document.getElementById('note-'+id);
+  const open = area.classList.toggle('open');
+  const btn  = event.currentTarget;
+  btn.innerHTML = NOTE_ICO + (open ? 'Hide note' : 'Add note');
+  if (open) setTimeout(() => area.querySelector('textarea').focus(), 50);
 }
 
-/* ── View switch ───────────────────────────────── */
-const viewMeta = {
-  member:     ['May 2026 UTA',    'SSgt Smith, J. · Electrical'],
-  supervisor: ['Electrical Shop', 'Supervisor View'],
-  leadership: ['108th CES',       'Leadership / Commander View'],
-};
-function switchView(btn){
-  const name = btn.dataset.view;
-  document.querySelectorAll('.sb-item, .mob-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll(`[data-view="${name}"]`).forEach(b => b.classList.add('active'));
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-'+name).classList.add('active');
-  const [t, s] = viewMeta[name];
-  document.getElementById('mob-title').textContent = t;
-  document.getElementById('mob-sub').textContent = s;
-  document.getElementById('desk-title').textContent = t;
-  document.getElementById('desk-sub').textContent = s;
+async function saveNote(event, taskId, elId) {
+  event.stopPropagation();
+  const note = document.querySelector('#note-'+elId+' textarea').value;
+  const el   = document.getElementById(elId);
+  const task = currentTasks.find(t => t.id===taskId);
+  if (task) task.note = note;
+  const noteBtn = el?.querySelector('.note-btn');
+  if (noteBtn) noteBtn.innerHTML = NOTE_ICO + (note ? 'View note' : 'Add note');
+  try {
+    await fetch('/api/tasks/'+taskId, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({state: el?.dataset.state||'none', note}),
+    });
+  } catch(e) { console.error('note save failed',e); }
 }
 
-/* ── Members in current shop ──────────────────── */
-const MEMBERS = [
-  {init:'SJ',name:'Smith, J.',  rank:'SSgt',cats:[{n:'CBT',d:1,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:0,t:1},{n:'UPG',d:1,t:2}]},
-  {init:'RJ',name:'Jones, R.',  rank:'SrA', cats:[{n:'CBT',d:3,t:3},{n:'MED',d:1,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:1,t:1}]},
-  {init:'TW',name:'Williams, T.',rank:'A1C',cats:[{n:'CBT',d:0,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:0,t:1},{n:'UPG',d:0,t:1}]},
-  {init:'MJ',name:'Johnson, M.',rank:'SrA', cats:[{n:'CBT',d:2,t:3},{n:'MED',d:1,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
-  {init:'CD',name:'Davis, C.',  rank:'A1C', cats:[{n:'CBT',d:0,t:3},{n:'MED',d:0,t:1},{n:'PT',d:0,t:1},{n:'EPB',d:0,t:1},{n:'UPG',d:0,t:1}]},
-  {init:'KB',name:'Brown, K.',  rank:'MSgt',cats:[{n:'CBT',d:3,t:3},{n:'MED',d:1,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
-  {init:'LM',name:'Martinez, L.',rank:'SrA',cats:[{n:'CBT',d:2,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
-  {init:'BT',name:'Taylor, B.', rank:'A1C', cats:[{n:'CBT',d:0,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
-];
+/* ── Shop events ────────────────────────────────── */
+async function loadShopEvents() {
+  const res = await fetch('/api/shop/events');
+  if (!res.ok) return;
+  buildShopEvents(await res.json());
+}
 
-function buildMembers(){
-  // Build member list with per-member expansion
-  document.getElementById('member-list').innerHTML = MEMBERS.map((m,mi)=>{
-    const done = m.cats.reduce((a,c)=>a+c.d,0);
-    const tot = m.cats.reduce((a,c)=>a+c.t,0);
-    const pct = Math.round(done/tot*100);
-    const dc = pct===100?'dot-ok':pct>=50?'dot-warn':'dot-bad';
-    // Mini cat chart for expanded
-    const mcc = m.cats.map(c=>{
-      const p = Math.round(c.d/c.t*100);
-      const cls = p===0 ? 'mcc-bar empty' : (p===100 ? 'mcc-bar' : 'mcc-bar hatch');
-      const h = p===0 ? 2 : Math.max(8, p*0.36);
-      return `<div class="mcc-col">
-        <div class="mcc-val">${c.d}/${c.t}</div>
-        <div class="mcc-bar-wrap"><div class="${cls}" style="height:${h}px"></div></div>
-        <div class="mcc-lbl">${c.n}</div>
+function buildShopEvents(events) {
+  const el = document.getElementById('shop-events-list');
+  if (!el) return;
+  const byDay = {};
+  for (const e of events) { if (!byDay[e.day]) byDay[e.day]=[]; byDay[e.day].push(e); }
+  const dayOrder = ['Friday','Friday/Saturday','Saturday','Sunday'];
+  let html = '';
+  for (const day of dayOrder) {
+    if (!byDay[day]) continue;
+    html += `<div class="task-group"><div class="grp-lbl">${day}</div>`;
+    for (const e of byDay[day]) {
+      const isWO  = e.event_type==='work_order';
+      const isEmp = e.event_type==='emphasis';
+      const time  = e.start_time ? e.start_time+(e.end_time?'–'+e.end_time:'') : '';
+      const det   = [time, e.details].filter(Boolean).join(' · ');
+      const bcls  = isWO ? 'b-upcoming' : isEmp ? 'b-urgent' : 'b-upcoming';
+      const blbl  = isWO ? 'WO' : isEmp ? 'Emphasis' : day.split('/')[0].slice(0,3);
+      html += `<div class="task-item" style="cursor:default">
+        <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
+        <div class="task-body">
+          <div class="task-title">${isWO ? e.wo_number+' — ' : ''}${e.title}</div>
+          ${det ? `<div class="task-det">${det}</div>` : ''}
+        </div>
+        <div class="badge ${bcls}">${blbl}</div>
       </div>`;
-    }).join('');
-    return `<div class="mem-item">
-      <div class="mem-row" onclick="toggleMem(this.parentElement)">
-        <div class="avatar">${m.init}</div>
-        <div class="mem-meta">
-          <div class="mem-name">${m.name}</div>
-          <div class="mem-rank">${m.rank}</div>
-        </div>
-        <div>
-          <div class="mem-frac">${done}/${tot}</div>
-          <div class="mem-frac-sub">${pct}%</div>
-        </div>
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html || '<p style="color:var(--t2);padding:12px 4px">No shop events for this UTA.</p>';
+}
+
+/* ── Shop members ───────────────────────────────── */
+async function loadShopMembers() {
+  const res = await fetch('/api/shop/members');
+  if (!res.ok) return;
+  shopMembers = await res.json();
+  buildMembers();
+}
+
+function buildMembers() {
+  const el = document.getElementById('member-list');
+  if (!el) return;
+  el.innerHTML = shopMembers.map(m => {
+    const done  = parseInt(m.done_tasks)||0;
+    const total = parseInt(m.total_tasks)||0;
+    const pct   = total ? Math.round(done/total*100) : 0;
+    const dc    = pct===100?'dot-ok':pct>=50?'dot-warn':'dot-bad';
+    const init  = m.first_name[0]+m.last_name[0];
+    return `<div class="mem-item" id="memitem-${m.id}">
+      <div class="mem-row" onclick="toggleMem(${m.id})">
+        <div class="avatar">${init}</div>
+        <div class="mem-meta"><div class="mem-name">${m.last_name}, ${m.first_name[0]}.</div><div class="mem-rank">${m.rank}</div></div>
+        <div><div class="mem-frac">${done}/${total}</div><div class="mem-frac-sub">${pct}%</div></div>
         <div class="dot ${dc}"></div>
         <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
       </div>
-      <div class="expand-panel">
-        <div class="mem-expand-inner">
-          <div class="mini-cat-chart">${mcc}</div>
+      <div class="expand-panel" id="expand-${m.id}">
+        <div class="mem-expand-inner" id="expand-inner-${m.id}">
+          <p style="color:var(--t2);font-size:13px">Loading…</p>
         </div>
       </div>
     </div>`;
   }).join('');
+  barChart('shop-bar-chart', shopMembers.map(m => {
+    const done=parseInt(m.done_tasks)||0, tot=parseInt(m.total_tasks)||0;
+    const pct=tot?Math.round(done/tot*100):0;
+    return {label:m.last_name.slice(0,5), pct, hatch:pct<100&&pct>0};
+  }));
+  updateShopStats();
+}
 
-  // Shop bar chart — one bar per member
-  const shopBars = MEMBERS.map(m=>{
-    const done = m.cats.reduce((a,c)=>a+c.d,0);
-    const tot = m.cats.reduce((a,c)=>a+c.t,0);
-    const pct = Math.round(done/tot*100);
-    return { label: m.init, pct, hatch: pct < 100 && pct > 0 };
+function updateShopStats() {
+  const total  = shopMembers.reduce((a,m)=>a+(parseInt(m.total_tasks)||0),0);
+  const done   = shopMembers.reduce((a,m)=>a+(parseInt(m.done_tasks)||0),0);
+  const pct    = total ? Math.round(done/total*100) : 0;
+  const behind = shopMembers.filter(m=>{
+    const t=parseInt(m.total_tasks)||0,d=parseInt(m.done_tasks)||0;
+    return t>0 && Math.round(d/t*100)<50;
+  }).length;
+  gauge('g-sup', pct);
+  const gpEl = document.querySelector('#view-supervisor .gauge-pct');
+  if (gpEl) gpEl.textContent = pct+'%';
+  const stats = document.querySelectorAll('#view-supervisor .stat-num');
+  if (stats[0]) stats[0].textContent = shopMembers.length - behind;
+  if (stats[1]) stats[1].textContent = behind;
+  const meta = document.querySelector('#view-supervisor .chart-meta');
+  if (meta) meta.textContent = shopMembers.length+' members';
+}
+
+async function toggleMem(memberId) {
+  const item  = document.getElementById('memitem-'+memberId);
+  const panel = document.getElementById('expand-'+memberId);
+  const inner = document.getElementById('expand-inner-'+memberId);
+  const isOpen = item.classList.toggle('expanded');
+  panel.classList.toggle('open', isOpen);
+  item.querySelector('.chevron').style.transform = isOpen ? 'rotate(90deg)' : '';
+  if (!isOpen || !inner.querySelector('p')) return;
+  try {
+    const res   = await fetch('/api/shop/members/'+memberId+'/tasks');
+    if (!res.ok) throw new Error();
+    const tasks = await res.json();
+    if (!tasks.length) { inner.innerHTML='<p style="color:var(--t2);font-size:13px">No tasks this UTA.</p>'; return; }
+    const cats = {};
+    for (const t of tasks) {
+      if (t.is_upcoming) continue;
+      if (!cats[t.category_code]) cats[t.category_code]={label:t.category_label,tasks:[]};
+      cats[t.category_code].tasks.push(t);
+    }
+    let html = '';
+    for (const [,cat] of Object.entries(cats)) {
+      const d = cat.tasks.filter(t=>t.state==='done').length;
+      html += `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:600;color:var(--t2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">${cat.label} · ${d}/${cat.tasks.length}</div>`;
+      for (const t of cat.tasks) {
+        const sc=t.state==='done'?'var(--ok)':t.state==='partial'?'var(--warn)':'var(--t3)';
+        const si=t.state==='done'?'✓':t.state==='partial'?'–':'○';
+        html += `<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="color:${sc};font-size:13px;flex-shrink:0;margin-top:1px">${si}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500">${t.title}</div>
+            ${t.details ? `<div style="font-size:12px;color:var(--t2)">${t.details}</div>` : ''}
+            ${t.note    ? `<div style="font-size:12px;color:var(--t2);font-style:italic">Note: ${t.note}</div>` : ''}
+          </div>
+          <button onclick="supToggle(event,${t.id},${memberId},'${t.state}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;color:var(--t2);white-space:nowrap;flex-shrink:0">
+            ${t.state==='done'?'Undo':'Mark Done'}
+          </button>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    inner.innerHTML = html;
+  } catch { inner.innerHTML='<p style="color:var(--urgent);font-size:13px">Failed to load.</p>'; }
+}
+
+async function supToggle(event, taskId, memberId, currentState) {
+  event.stopPropagation();
+  const newState = currentState==='done' ? 'none' : 'done';
+  await fetch('/api/tasks/'+taskId, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({state:newState}),
   });
-  barChart('shop-bar-chart', shopBars);
+  const inner = document.getElementById('expand-inner-'+memberId);
+  inner.innerHTML = '<p style="color:var(--t2);font-size:13px">Loading…</p>';
+  const item = document.getElementById('memitem-'+memberId);
+  item.classList.remove('expanded');
+  document.getElementById('expand-'+memberId).classList.remove('open');
+  await toggleMem(memberId);
+  await loadShopMembers();
 }
 
-function toggleMem(item){
-  const panel = item.querySelector('.expand-panel');
-  const row = item.querySelector('.mem-row');
-  const isOpen = panel.classList.contains('open');
-  document.querySelectorAll('#member-list .expand-panel').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('#member-list .mem-row').forEach(r=>r.classList.remove('expanded'));
-  if (!isOpen) { panel.classList.add('open'); row.classList.add('expanded'); }
+/* ── View switch ────────────────────────────────── */
+function switchView(btn) {
+  const name = btn.dataset.view;
+  document.querySelectorAll('.sb-item,.mob-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll(`[data-view="${name}"]`).forEach(b => b.classList.add('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  const m = currentMember;
+  const titles = {
+    member:     ['May 2026 UTA',       m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
+    supervisor: [(m?.shop||'')+' Shop', 'Supervisor View'],
+    leadership: ['108th CES',           'Leadership View'],
+  };
+  const [t, s] = titles[name] || ['',''];
+  document.getElementById('mob-title').textContent  = t;
+  document.getElementById('mob-sub').textContent    = s;
+  document.getElementById('desk-title').textContent = t;
+  document.getElementById('desk-sub').textContent   = s;
 }
-
-/* ── Shops ─────────────────────────────────────── */
-const SHOPS = [
-  {abbr:'STR',name:'Structures',    pct:78, members:[
-    {name:'Adams, K.',  rank:'TSgt', d:6,t:8},{name:'Baker, M.',   rank:'SrA', d:8,t:8},
-    {name:'Clark, R.',  rank:'A1C',  d:3,t:8},{name:'Dixon, P.',   rank:'SrA', d:7,t:8},
-    {name:'Evans, L.',  rank:'A1C',  d:5,t:8},{name:'Ford, T.',    rank:'MSgt',d:8,t:8},
-    {name:'Gray, N.',   rank:'A1C',  d:2,t:8},{name:'Hall, C.',    rank:'SrA', d:6,t:8},
-    {name:'Irwin, D.',  rank:'A1C',  d:7,t:8},
-  ]},
-  {abbr:'EA', name:'EA',            pct:60, members:[
-    {name:'Jones, A.',  rank:'TSgt', d:5,t:6},{name:'King, B.',    rank:'SrA', d:4,t:6},
-    {name:'Lee, C.',    rank:'A1C',  d:6,t:6},{name:'Moore, D.',   rank:'SrA', d:2,t:6},
-    {name:'Nash, E.',   rank:'A1C',  d:1,t:6},
-  ]},
-  {abbr:'OPS',name:'Operations',    pct:33, members:[
-    {name:'Owen, F.',   rank:'TSgt', d:2,t:6},{name:'Park, G.',    rank:'SrA', d:0,t:6},
-    {name:'Quinn, H.',  rank:'SrA',  d:4,t:6},
-  ]},
-  {abbr:'HVY',name:'Heavy Equip.',  pct:63, members:[
-    {name:'Reed, I.',   rank:'MSgt', d:5,t:7},{name:'Shaw, J.',    rank:'SrA', d:7,t:7},
-    {name:'Todd, K.',   rank:'A1C',  d:2,t:7},{name:'Upton, L.',   rank:'SrA', d:6,t:7},
-    {name:'Vance, M.',  rank:'A1C',  d:3,t:7},{name:'Wade, N.',    rank:'A1C', d:7,t:7},
-    {name:'Yates, P.',  rank:'SrA',  d:4,t:7},{name:'Zane, Q.',    rank:'A1C', d:1,t:7},
-  ]},
-  {abbr:'HVA',name:'HVAC',          pct:71, members:[
-    {name:'Allen, R.',  rank:'TSgt', d:6,t:8},{name:'Burns, S.',   rank:'SrA', d:8,t:8},
-    {name:'Chase, T.',  rank:'A1C',  d:5,t:8},{name:'Dean, U.',    rank:'SrA', d:7,t:8},
-    {name:'Ellis, V.',  rank:'A1C',  d:3,t:8},{name:'Flynn, W.',   rank:'MSgt',d:8,t:8},
-    {name:'Grant, X.',  rank:'A1C',  d:6,t:8},
-  ]},
-  {abbr:'ELE',name:'Electrical',    pct:63, members:[
-    {name:'Smith, J.',  rank:'SSgt', d:3,t:8},{name:'Jones, R.',   rank:'SrA', d:8,t:8},
-    {name:'Williams,T.',rank:'A1C',  d:1,t:8},{name:'Johnson,M.',  rank:'SrA', d:5,t:8},
-    {name:'Davis, C.',  rank:'A1C',  d:0,t:8},{name:'Brown, K.',   rank:'MSgt',d:7,t:8},
-    {name:'Martinez,L.',rank:'SrA',  d:4,t:8},{name:'Taylor, B.',  rank:'A1C', d:2,t:8},
-  ]},
-  {abbr:'PWR',name:'Power Pro',     pct:57, members:[
-    {name:'Harris, A.', rank:'TSgt', d:5,t:7},{name:'Martin, B.',  rank:'SrA', d:4,t:7},
-    {name:'Garcia, C.', rank:'A1C',  d:3,t:7},{name:'Miller, D.',  rank:'SrA', d:7,t:7},
-    {name:'Wilson, E.', rank:'A1C',  d:2,t:7},{name:'Moore, F.',   rank:'A1C', d:6,t:7},
-    {name:'Taylor, G.', rank:'SrA',  d:1,t:7},
-  ]},
-  {abbr:'WFS',name:'WFSM',          pct:75, members:[
-    {name:'Anderson,H.',rank:'MSgt', d:7,t:8},{name:'Thomas, I.',  rank:'SrA', d:6,t:8},
-    {name:'Jackson,J.', rank:'A1C',  d:8,t:8},{name:'White, K.',   rank:'SrA', d:5,t:8},
-    {name:'Harris, L.', rank:'A1C',  d:7,t:8},{name:'Lewis, M.',   rank:'TSgt',d:8,t:8},
-    {name:'Robinson,N.',rank:'A1C',  d:3,t:8},{name:'Walker, O.',  rank:'SrA', d:6,t:8},
-  ]},
-  {abbr:'EM', name:'EM',            pct:86, members:[
-    {name:'Hall, P.',   rank:'TSgt', d:7,t:7},{name:'Young, Q.',   rank:'SrA', d:7,t:7},
-    {name:'King, R.',   rank:'A1C',  d:6,t:7},{name:'Wright, S.',  rank:'SrA', d:7,t:7},
-    {name:'Scott, T.',  rank:'A1C',  d:5,t:7},{name:'Torres, U.',  rank:'MSgt',d:7,t:7},
-    {name:'Nelson, V.', rank:'A1C',  d:7,t:7},
-  ]},
-];
-
-const SQ_CATS = [
-  {label:'CBT',  done:42, tot:70},
-  {label:'MED',  done:38, tot:70},
-  {label:'PT',   done:61, tot:70},
-  {label:'EPB',  done:28, tot:70},
-  {label:'UPG',  done:35, tot:70},
-];
-
-function buildShops(){
-  // Squadron shop bar chart
-  barChart('squad-shop-chart', SHOPS.map(s=>({label:s.abbr, pct:s.pct, hatch: s.pct<70})));
-
-  // Squadron category bar chart
-  const catBars = SQ_CATS.map(c=>{
-    const pct = Math.round(c.done/c.tot*100);
-    return { label: c.label, pct, hatch: pct < 70 };
-  });
-  barChart('sq-cat-chart', catBars);
-
-  // Mini grid below cat chart
-  document.getElementById('sq-cat-mini').innerHTML = SQ_CATS.map(c=>{
-    return `<div class="mini-cell">
-      <div class="mini-num">${c.done}</div>
-      <div class="mini-lbl">${c.label}</div>
-      <div class="mini-frac">of ${c.tot}</div>
-    </div>`;
-  }).join('');
-
-  // Shop list (expandable)
-  document.getElementById('shop-list').innerHTML = SHOPS.map(s=>{
-    const membersHTML = s.members.map(m=>{
-      const pct = Math.round(m.d/m.t*100);
-      return `<div class="shop-mem-row">
-        <div class="shop-mem-rank-c">${m.rank}</div>
-        <div class="shop-mem-name-c">${m.name}</div>
-        <div class="shop-mem-bar-c"><div class="shop-mem-fill-c" style="width:${pct}%"></div></div>
-        <div class="shop-mem-pct-c">${pct}%</div>
-      </div>`;
-    }).join('');
-    return `<div class="shop-item">
-      <div class="shop-row" onclick="toggleShop(this.parentElement)">
-        <div class="shop-icon">${s.abbr}</div>
-        <div class="shop-meta-wrap">
-          <div class="shop-name">${s.name}</div>
-          <div class="shop-sub">${s.members.length} members</div>
-        </div>
-        <div>
-          <div class="shop-pct">${s.pct}%</div>
-          <div class="shop-pct-sub">complete</div>
-        </div>
-        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-      </div>
-      <div class="expand-panel">
-        <div class="shop-expand-inner">${membersHTML}</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // At-risk members list
-  const atRisk = SHOPS.flatMap(s=>s.members.map(m=>({...m, shop:s.name})))
-    .map(m=>({...m, pct: Math.round(m.d/m.t*100)}))
-    .filter(m=>m.pct<50)
-    .sort((a,b)=>a.pct-b.pct)
-    .slice(0,7);
-  document.getElementById('sq-alerts').innerHTML = atRisk.map(m=>{
-    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px dashed var(--border)">
-      <div style="font-size:11px;color:var(--t2);width:36px;flex-shrink:0">${m.rank}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:500">${m.name}</div>
-        <div style="font-size:11px;color:var(--t3);margin-top:1px">${m.shop}</div>
-      </div>
-      <div style="font-size:14px;font-weight:700;color:var(--urgent);letter-spacing:-.02em">${m.pct}%</div>
-    </div>`;
-  }).join('');
-}
-
-function toggleShop(item){
-  const panel = item.querySelector('.expand-panel');
-  const row = item.querySelector('.shop-row');
-  const isOpen = panel.classList.contains('open');
-  document.querySelectorAll('#shop-list .expand-panel').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('#shop-list .shop-row').forEach(r=>r.classList.remove('expanded'));
-  if (!isOpen) { panel.classList.add('open'); row.classList.add('expanded'); }
-}
-
-/* ── Init ──────────────────────────────────────── */
-gauge('g-member', 43);
-gauge('g-sup',    63);
-gauge('g-lead',   67);
-buildTasks();
-buildMembers();
-buildShops();
 </script>
 </body>
 </html>
