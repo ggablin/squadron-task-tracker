@@ -6,6 +6,7 @@ const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 const pool = new Pool({
@@ -68,14 +69,17 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.shopId   = member.shop_id;
     req.session.shopName = member.shop_name;
 
-    res.json({
-      id:         member.id,
-      first_name: member.first_name,
-      last_name:  member.last_name,
-      rank:       member.rank,
-      role:       member.role,
-      shop:       member.shop_name,
-      slug:       member.slug,
+    req.session.save(err => {
+      if (err) return res.status(500).json({ error: 'Session save failed' });
+      res.json({
+        id:         member.id,
+        first_name: member.first_name,
+        last_name:  member.last_name,
+        rank:       member.rank,
+        role:       member.role,
+        shop:       member.shop_name,
+        slug:       member.slug,
+      });
     });
   } catch (err) {
     console.error(err);
