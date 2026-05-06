@@ -255,6 +255,53 @@ app.get('/api/squadron', requireAuth, requireRole('leadership'), async (req, res
   }
 });
 
+app.get('/api/squadron/categories', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT cat.code, cat.label,
+             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                         AS total,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)  AS done
+      FROM task_categories cat
+      JOIN tasks t ON t.category_id = cat.id
+        AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      LEFT JOIN task_completions tc ON tc.task_id = t.id
+      GROUP BY cat.code, cat.label, cat.sort_order
+      HAVING COUNT(t.id) FILTER (WHERE NOT t.is_upcoming) > 0
+      ORDER BY cat.sort_order
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/squadron/members', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT m.id, m.last_name, m.first_name, m.rank, s.name AS shop,
+             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                         AS total_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)  AS done_tasks
+      FROM members m
+      JOIN shops s ON s.id = m.shop_id
+      LEFT JOIN tasks t ON t.member_id = m.id
+        AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      LEFT JOIN task_completions tc ON tc.task_id = t.id
+      WHERE m.active = true
+      GROUP BY m.id, m.last_name, m.first_name, m.rank, s.name
+      HAVING COUNT(t.id) FILTER (WHERE NOT t.is_upcoming) > 0
+      ORDER BY
+        (COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)::float
+          / NULLIF(COUNT(t.id) FILTER (WHERE NOT t.is_upcoming), 0)) ASC NULLS FIRST
+      LIMIT 10
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Static ────────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, 'public')));

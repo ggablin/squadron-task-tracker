@@ -1282,7 +1282,11 @@ async function supToggle(event, taskId, memberId, currentState) {
 /* ── Squadron (leadership) ──────────────────────── */
 async function loadSquadron() {
   try {
-    const shops = await fetch('/api/squadron').then(r => r.json());
+    const [shops, cats, members] = await Promise.all([
+      fetch('/api/squadron').then(r => r.json()),
+      fetch('/api/squadron/categories').then(r => r.json()),
+      fetch('/api/squadron/members').then(r => r.json()),
+    ]);
     if (!Array.isArray(shops)) return;
 
     const totalDone  = shops.reduce((s, r) => s + parseInt(r.done_tasks  || 0), 0);
@@ -1292,25 +1296,59 @@ async function loadSquadron() {
     const pct = totalTasks ? Math.round(totalDone / totalTasks * 100) : 0;
 
     gauge('g-lead', pct);
-    document.getElementById('sq-pct').textContent       = pct + '%';
-    document.getElementById('sq-done').textContent      = totalDone;
-    document.getElementById('sq-remaining').textContent = remaining;
-    document.getElementById('sq-critical').textContent  = remaining;
-    document.getElementById('sq-members').textContent   = totalMems;
+    document.getElementById('sq-pct').textContent          = pct + '%';
+    document.getElementById('sq-done').textContent         = totalDone;
+    document.getElementById('sq-remaining').textContent    = remaining;
+    document.getElementById('sq-critical').textContent     = remaining;
+    document.getElementById('sq-members').textContent      = totalMems;
     document.getElementById('sq-critical-mob').textContent = remaining;
     document.getElementById('sq-members-mob').textContent  = totalMems;
     document.getElementById('sq-shop-count').textContent   = shops.length + ' shop' + (shops.length !== 1 ? 's' : '');
     document.getElementById('sq-cat-meta').textContent     = 'All ' + totalMems + ' members';
 
-    // Shop bar chart
+    // Completion by shop bar chart
     barChart('squad-shop-chart', shops.map(s => ({
       label: s.shop,
       pct:   s.total_tasks ? Math.round(parseInt(s.done_tasks) / parseInt(s.total_tasks) * 100) : 0,
     })));
 
+    // Squadron by category bar chart
+    if (Array.isArray(cats) && cats.length) {
+      barChart('sq-cat-chart', cats.map(c => ({
+        label: c.label,
+        pct:   c.total ? Math.round(parseInt(c.done) / parseInt(c.total) * 100) : 0,
+      })));
+      document.getElementById('sq-cat-mini').innerHTML = cats.map(c => {
+        const p = c.total ? Math.round(parseInt(c.done) / parseInt(c.total) * 100) : 0;
+        return `<div class="mini-cell">
+          <div class="mini-num">${p}%</div>
+          <div class="mini-lbl">${c.label}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // Members most behind
+    const alerts = document.getElementById('sq-alerts');
+    if (Array.isArray(members) && members.length) {
+      alerts.innerHTML = members.map(m => {
+        const done  = parseInt(m.done_tasks  || 0);
+        const total = parseInt(m.total_tasks || 0);
+        const p     = total ? Math.round(done / total * 100) : 0;
+        const color = p >= 80 ? 'var(--done)' : p >= 40 ? 'var(--t1)' : 'var(--urgent)';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:13px;font-weight:600">${m.rank} ${m.last_name}</div>
+            <div style="font-size:11px;color:var(--t2)">${m.shop} · ${done}/${total} done</div>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:${color}">${p}%</div>
+        </div>`;
+      }).join('');
+    } else {
+      alerts.innerHTML = '<p style="color:var(--t2);font-size:13px">No data yet.</p>';
+    }
+
     // All Shops list
     const list = document.getElementById('shop-list');
-    if (!shops.length) { list.innerHTML = '<p style="padding:16px;color:var(--t2);font-size:13px">No shop data.</p>'; return; }
     list.innerHTML = shops.map(s => {
       const done  = parseInt(s.done_tasks  || 0);
       const total = parseInt(s.total_tasks || 0);
