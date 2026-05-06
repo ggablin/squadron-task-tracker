@@ -1347,6 +1347,10 @@ function switchView(btn) {
   document.getElementById('mob-sub').textContent    = s;
   document.getElementById('desk-title').textContent = t;
   document.getElementById('desk-sub').textContent   = s;
+
+  if (name === 'member') loadTasks();
+  if (name === 'supervisor') { loadShopEvents(); loadShopMembers(); }
+  if (name === 'leadership') loadSquadron();
 }
 </script>
 </body>
