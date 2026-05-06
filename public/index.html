@@ -750,19 +750,19 @@
             <div class="gauge-wrap">
               <svg id="g-lead" viewBox="0 0 160 92" width="138" height="80"></svg>
               <div class="gauge-center">
-                <div class="gauge-pct">67%</div>
+                <div class="gauge-pct" id="sq-pct">—</div>
                 <div class="gauge-lbl">Squadron</div>
               </div>
             </div>
             <div class="stat-row">
               <div class="stat">
-                <div class="stat-num">47</div>
-                <div class="stat-lbl">On Track</div>
+                <div class="stat-num" id="sq-done">—</div>
+                <div class="stat-lbl">Done</div>
               </div>
               <div class="stat-vr"></div>
               <div class="stat">
-                <div class="stat-num warn">23</div>
-                <div class="stat-lbl">Behind</div>
+                <div class="stat-num warn" id="sq-remaining">—</div>
+                <div class="stat-lbl">Remaining</div>
               </div>
             </div>
           </div>
@@ -772,7 +772,7 @@
           <div class="chart-section">
             <div class="chart-label-row">
               <div class="chart-label">Completion by Shop</div>
-              <div class="chart-meta">9 shops</div>
+              <div class="chart-meta" id="sq-shop-count">— shops</div>
             </div>
             <div class="bar-chart" id="squad-shop-chart"></div>
           </div>
@@ -781,16 +781,16 @@
         <div class="hero-section desk-only">
           <div style="display:flex; flex-direction:column; gap:24px; height:100%; justify-content:center;">
             <div class="stat has-arrow" style="padding:0">
-              <div class="stat-num warn">31</div>
+              <div class="stat-num warn" id="sq-critical">—</div>
               <div class="stat-lbl-arrow">
                 Critical this UTA
                 <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M6 3l3 3-3 3"/></svg>
               </div>
             </div>
             <div class="stat has-arrow" style="padding:0">
-              <div class="stat-num">8</div>
+              <div class="stat-num" id="sq-members">—</div>
               <div class="stat-lbl-arrow">
-                Members below 30%
+                Total Members
                 <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M6 3l3 3-3 3"/></svg>
               </div>
             </div>
@@ -803,12 +803,12 @@
       <div class="card mob-only card-pad" style="margin-bottom:18px">
         <div class="mini-grid" style="grid-template-columns:repeat(2,1fr); border-top:none; padding-top:0">
           <div class="mini-cell" style="text-align:left">
-            <div class="mini-num" style="color:var(--urgent)">31</div>
+            <div class="mini-num" style="color:var(--urgent)" id="sq-critical-mob">—</div>
             <div class="mini-lbl">Critical This UTA</div>
           </div>
           <div class="mini-cell" style="text-align:left">
-            <div class="mini-num">8</div>
-            <div class="mini-lbl">Below 30%</div>
+            <div class="mini-num" id="sq-members-mob">—</div>
+            <div class="mini-lbl">Total Members</div>
           </div>
         </div>
       </div>
@@ -819,7 +819,7 @@
         <div class="card card-pad">
           <div class="chart-label-row" style="margin-bottom:18px">
             <div class="chart-label">Squadron by Category</div>
-            <div class="chart-meta">All 70 members</div>
+            <div class="chart-meta" id="sq-cat-meta">All — members</div>
           </div>
           <div class="bar-chart" id="sq-cat-chart"></div>
           <div class="mini-grid" id="sq-cat-mini"></div>
@@ -893,6 +893,7 @@ function showApp() {
   loadTasks();
   loadShopEvents();
   if (['supervisor','leadership'].includes(currentMember.role)) loadShopMembers();
+  if (currentMember.role === 'leadership') loadSquadron();
 }
 
 function populateUserUI() {
@@ -1276,6 +1277,56 @@ async function supToggle(event, taskId, memberId, currentState) {
   document.getElementById('expand-'+memberId).classList.remove('open');
   await toggleMem(memberId);
   await loadShopMembers();
+}
+
+/* ── Squadron (leadership) ──────────────────────── */
+async function loadSquadron() {
+  try {
+    const shops = await fetch('/api/squadron').then(r => r.json());
+    if (!Array.isArray(shops)) return;
+
+    const totalDone  = shops.reduce((s, r) => s + parseInt(r.done_tasks  || 0), 0);
+    const totalTasks = shops.reduce((s, r) => s + parseInt(r.total_tasks || 0), 0);
+    const totalMems  = shops.reduce((s, r) => s + parseInt(r.member_count || 0), 0);
+    const remaining  = totalTasks - totalDone;
+    const pct = totalTasks ? Math.round(totalDone / totalTasks * 100) : 0;
+
+    gauge('g-lead', pct);
+    document.getElementById('sq-pct').textContent       = pct + '%';
+    document.getElementById('sq-done').textContent      = totalDone;
+    document.getElementById('sq-remaining').textContent = remaining;
+    document.getElementById('sq-critical').textContent  = remaining;
+    document.getElementById('sq-members').textContent   = totalMems;
+    document.getElementById('sq-critical-mob').textContent = remaining;
+    document.getElementById('sq-members-mob').textContent  = totalMems;
+    document.getElementById('sq-shop-count').textContent   = shops.length + ' shop' + (shops.length !== 1 ? 's' : '');
+    document.getElementById('sq-cat-meta').textContent     = 'All ' + totalMems + ' members';
+
+    // Shop bar chart
+    barChart('squad-shop-chart', shops.map(s => ({
+      label: s.shop,
+      pct:   s.total_tasks ? Math.round(parseInt(s.done_tasks) / parseInt(s.total_tasks) * 100) : 0,
+    })));
+
+    // All Shops list
+    const list = document.getElementById('shop-list');
+    if (!shops.length) { list.innerHTML = '<p style="padding:16px;color:var(--t2);font-size:13px">No shop data.</p>'; return; }
+    list.innerHTML = shops.map(s => {
+      const done  = parseInt(s.done_tasks  || 0);
+      const total = parseInt(s.total_tasks || 0);
+      const mems  = parseInt(s.member_count || 0);
+      const p     = total ? Math.round(done / total * 100) : 0;
+      const color = p >= 80 ? 'var(--done)' : p >= 40 ? 'var(--t1)' : 'var(--urgent)';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-weight:600;font-size:14px">${s.shop}</div>
+          <div style="font-size:12px;color:var(--t2);margin-top:2px">${mems} member${mems !== 1 ? 's' : ''} · ${done}/${total} tasks done</div>
+        </div>
+        <div style="font-size:20px;font-weight:700;color:${color}">${p}%</div>
+      </div>`;
+    }).join('') + '<div style="height:1px"></div>';
+
+  } catch(e) { console.error('loadSquadron', e); }
 }
 
 /* ── View switch ────────────────────────────────── */
