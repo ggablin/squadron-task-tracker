@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>108th CES UTA Tracker</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+
+    :root {
+      --cream:    #f6f7ed;
+      --bg:       #ffffff;
+      --s2:       #f4f4f4;
+      --border:   #f4f4f4;   /* 2px borders use this */
+      --bm:       #e8e9e0;   /* slightly darker for dividers */
+      --text:     #1f1f1f;
+      --t2:       #86877c;
+      --t3:       #b8b9b0;
+
+      --urgent:   #b5614a;  --urg-bg:  #f5ece9;
+      --warn:     #c9954a;  --wrn-bg:  #f5eedf;
+      --ok:       #5f7a5a;  --ok-bg:   #edf2eb;
+
+      --gon:  #1f1f1f;  --goff: #ddddd5;
+
+      --r:  14px;
+      --rs: 10px;
+    }
+
+    body {
+      font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ── Shell ─────────────────────────────────── */
+    #app { display: flex; flex-direction: column; min-height: 100svh; }
+
+    /* ── Sidebar (white) ────────────────────────── */
+    .sidebar {
+      display: none;
+      width: 240px; flex-shrink: 0;
+      background: var(--bg);
+      border-right: 2px solid var(--border);
+      flex-direction: column;
+      position: sticky; top: 0; height: 100vh;
+    }
+    .sb-top { flex: 1; padding: 28px 16px 20px; display: flex; flex-direction: column; }
+    .sb-brand { padding: 0 8px; margin-bottom: 32px; }
+    .sb-brand-name { font-size: 16px; font-weight: 700; letter-spacing: -.015em; }
+    .sb-brand-uta { font-size: 11.5px; color: var(--t2); margin-top: 3px; letter-spacing: .01em; }
+
+    .sb-sec-lbl {
+      font-size: 10px; font-weight: 600; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--t3);
+      padding: 0 12px; margin-bottom: 6px;
+    }
+    .sb-item {
+      display: flex; align-items: center; gap: 11px;
+      width: 100%; padding: 10px 12px; border-radius: 10px;
+      border: none; background: none; font-family: inherit;
+      font-size: 14px; font-weight: 500; color: var(--t2);
+      cursor: pointer; text-align: left;
+      transition: background .15s, color .15s;
+      margin-bottom: 2px;
+    }
+    .sb-item:hover { background: var(--cream); color: var(--text); }
+    .sb-item.active { background: var(--text); color: #fff; }
+    .sb-item svg { width: 17px; height: 17px; flex-shrink: 0; }
+    .sb-badge {
+      margin-left: auto;
+      background: var(--urgent); color: #fff;
+      font-size: 10px; font-weight: 700;
+      padding: 1px 7px; border-radius: 10px;
+    }
+    .sb-item.active .sb-badge { background: rgba(255,255,255,.22); }
+    .sb-spacer { flex: 1; }
+    .sb-user {
+      padding: 16px 18px;
+      border-top: 2px solid var(--border);
+      display: flex; align-items: center; gap: 11px;
+    }
+    .sb-av {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--text); color: #fff;
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sb-name { font-size: 13px; font-weight: 600; }
+    .sb-role { font-size: 11px; color: var(--t2); margin-top: 1px; }
+
+    /* ── Mobile header ──────────────────────────── */
+    .mob-hdr {
+      background: var(--cream);
+      padding: 20px 20px 8px;
+      flex-shrink: 0;
+    }
+    .mob-eye { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); margin-bottom: 4px; }
+    .mob-ttl { font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
+    .mob-sub { font-size: 13px; color: var(--t2); margin-top: 3px; }
+    .demo-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(31,31,31,.05);
+      border: 1px solid var(--bm);
+      border-radius: 20px; padding: 4px 10px;
+      font-size: 10px; font-weight: 500; color: var(--t2);
+      margin-top: 10px; letter-spacing: .03em;
+    }
+    .demo-dot { width: 6px; height: 6px; border-radius: 50%; background: #6fcf97; }
+
+    /* ── Desktop topbar — cream, flows into hero ── */
+    .desk-top {
+      display: none;
+      align-items: center; justify-content: space-between;
+      padding: 24px 40px 8px;
+      background: var(--cream);
+      flex-shrink: 0;
+    }
+    .desk-ttl { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+    .desk-sub { font-size: 13px; color: var(--t2); margin-top: 2px; }
+
+    /* ── Main ───────────────────────────────────── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+    .view { display: none; flex: 1; padding: 16px; padding-bottom: 90px; overflow-y: auto; }
+    .view.active { display: block; }
+
+    /* ── Card ───────────────────────────────────── */
+    .card {
+      background: var(--bg);
+      border-radius: var(--r);
+      border: 2px solid var(--border);
+      overflow: hidden;
+    }
+    .card-cream { background: var(--cream); }
+    .card-pad { padding: 22px 24px; }
+
+    /* ── Section headers ────────────────────────── */
+    .sec-hd { display: flex; align-items: baseline; justify-content: space-between; padding: 4px 4px 12px; }
+    .sec-title { font-size: 16px; font-weight: 600; letter-spacing: -.005em; }
+    .sec-sub { font-size: 12px; color: var(--t2); }
+    .group-spacing > * + * { margin-top: 18px; }
+
+    /* ──────────────────────────────────────────────
+       HERO STRIP (BizLink-style)
+       Seamless cream zone, no border — flows from header
+    ────────────────────────────────────────────── */
+    .hero {
+      background: var(--cream);
+      padding: 8px 16px 26px;
+      margin: -16px -16px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* Hero gauge block */
+    .hero-gauge { display: flex; align-items: center; gap: 22px; }
+    .gauge-wrap { position: relative; flex-shrink: 0; }
+    .gauge-center { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; pointer-events: none; }
+    .gauge-pct { font-size: 22px; font-weight: 700; letter-spacing: -.025em; line-height: 1; }
+    .gauge-lbl { font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); margin-top: 2px; }
+
+    /* Stats group beside gauge */
+    .stat-row {
+      display: inline-flex;
+      align-items: center;
+    }
+    .stat { padding: 0 18px; }
+    .stat:first-child { padding-left: 0; }
+    .stat:last-child { padding-right: 0; }
+    .stat-vr { width: 1px; height: 36px; background: var(--bm); flex-shrink: 0; }
+    .stat-num { font-size: 30px; font-weight: 700; letter-spacing: -.035em; line-height: 1; }
+    .stat-num.warn { color: var(--urgent); }
+    .stat-lbl { font-size: 11px; color: var(--t2); margin-top: 4px; line-height: 1.25; }
+    .stat.has-arrow { cursor: pointer; transition: opacity .15s; position: relative; }
+    .stat.has-arrow:hover { opacity: .65; }
+    .stat-lbl-arrow {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--t2); margin-top: 4px;
+    }
+    .stat-lbl-arrow svg { width: 9px; height: 9px; }
+
+    /* ──────────────────────────────────────────────
+       BAR CHART (vertical) — values BELOW bars, consistent y
+    ────────────────────────────────────────────── */
+    .chart-section { padding-top: 4px; }
+    .chart-label-row {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 18px;
+      gap: 16px;
+    }
+    .chart-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); white-space: nowrap; }
+    .chart-meta { font-size: 11px; color: var(--t3); white-space: nowrap; }
+
+    .bar-chart {
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+      height: 150px;
+    }
+    .bar-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .bar-track {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--bm);
+      padding-bottom: 0;
+    }
+    .bar-rect {
+      width: 100%;
+      max-width: 30px;
+      background: var(--text);
+      border-radius: 1px 1px 0 0;
+      min-height: 2px;
+      transition: height .3s;
+    }
+    .bar-rect.hatch {
+      background: transparent;
+      background-image: repeating-linear-gradient(45deg, var(--text) 0, var(--text) 0.5px, transparent 0.5px, transparent 4px);
+    }
+    .bar-info { text-align: center; }
+    .bar-val { font-size: 11.5px; font-weight: 600; color: var(--text); line-height: 1; }
+    .bar-x { font-size: 10px; color: var(--t2); margin-top: 4px; letter-spacing: .04em; line-height: 1; }
+
+    /* ──────────────────────────────────────────────
+       Compact mini-stats grid
+    ────────────────────────────────────────────── */
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0;
+      border-top: 1px solid var(--bm);
+      padding-top: 18px;
+    }
+    .mini-cell {
+      padding: 0 14px;
+      border-right: 1px solid var(--bm);
+      text-align: center;
+    }
+    .mini-cell:last-child { border-right: none; }
+    .mini-cell:first-child { padding-left: 0; }
+    .mini-cell:last-child { padding-right: 0; }
+    .mini-num { font-size: 22px; font-weight: 700; letter-spacing: -.025em; line-height: 1; }
+    .mini-lbl { font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--t2); margin-top: 6px; }
+    .mini-frac { font-size: 10.5px; color: var(--t3); margin-top: 3px; }
+
+    /* ──────────────────────────────────────────────
+       Tasks
+    ────────────────────────────────────────────── */
+    .task-group { margin-bottom: 18px; }
+    .grp-lbl { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text); padding: 0 4px 9px; }
+
+    .task-item {
+      background: var(--bg);
+      border: 2px solid var(--border);
+      border-radius: var(--rs);
+      padding: 13px 14px;
+      margin-bottom: 6px;
+      display: flex; align-items: flex-start; gap: 12px;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+      transition: opacity .15s, border-color .12s;
+    }
+    .task-item:hover { border-color: var(--bm); }
+    .task-item[data-state="done"] { opacity: .5; }
+    .task-item[data-state="done"] .task-title { text-decoration: line-through; }
+
+    .chk {
+      width: 20px; height: 20px; border-radius: 6px;
+      border: 2px solid var(--bm);
+      flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      margin-top: 1px; background: var(--bg);
+      transition: all .15s;
+    }
+    .task-item[data-state="partial"] .chk { border-color: var(--warn); background: var(--wrn-bg); }
+    .task-item[data-state="done"] .chk { border-color: var(--ok); background: var(--ok); }
+    .chk .ic { display: none; }
+    .task-item[data-state="partial"] .chk .ic-part { display: block; }
+    .task-item[data-state="done"] .chk .ic-done { display: block; }
+
+    .task-body { flex: 1; min-width: 0; }
+    .task-title { font-size: 14px; font-weight: 500; line-height: 1.3; }
+    .task-det { font-size: 12px; color: var(--t2); margin-top: 2px; line-height: 1.35; }
+
+    .note-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; color: var(--t3);
+      background: none; border: none; font-family: inherit;
+      cursor: pointer; padding: 0; margin-top: 7px;
+      -webkit-tap-highlight-color: transparent;
+      transition: color .12s;
+    }
+    .note-btn:hover { color: var(--t2); }
+    .note-btn svg { width: 11px; height: 11px; }
+    .note-area { display: none; margin-top: 7px; }
+    .note-area.open { display: block; }
+    .note-input {
+      width: 100%; padding: 9px 11px;
+      border: 1px solid var(--bm); border-radius: 7px;
+      font-family: inherit; font-size: 12.5px; color: var(--text);
+      background: var(--cream); resize: none; line-height: 1.4;
+      min-height: 56px; outline: none;
+    }
+    .note-input:focus { border-color: var(--text); background: var(--bg); }
+    .note-input::placeholder { color: var(--t3); }
+
+    .badge {
+      font-size: 10.5px; font-weight: 600;
+      padding: 3px 9px; border-radius: 20px;
+      flex-shrink: 0; margin-top: 1px;
+      letter-spacing: .02em; white-space: nowrap;
+    }
+    .b-urgent { background: var(--urg-bg); color: var(--urgent); }
+    .b-upcoming { background: var(--wrn-bg); color: var(--warn); }
+    .b-partial { background: var(--wrn-bg); color: var(--warn); }
+    .b-done { background: var(--ok-bg); color: var(--ok); }
+
+    /* ──────────────────────────────────────────────
+       Expandable rows (members, shops)
+    ────────────────────────────────────────────── */
+    .expand-panel { max-height: 0; overflow: hidden; transition: max-height .28s ease; }
+    .expand-panel.open { max-height: 800px; }
+    .chevron { width: 16px; height: 16px; flex-shrink: 0; color: var(--t3); transition: transform .2s; }
+    .expanded .chevron { transform: rotate(90deg); }
+
+    .mem-item { border-bottom: 1px solid var(--border); }
+    .mem-item:last-child { border-bottom: none; }
+    .mem-row {
+      padding: 14px 18px;
+      display: flex; align-items: center; gap: 14px;
+      cursor: pointer; transition: background .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mem-row:hover { background: var(--cream); }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--text); color: #fff;
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .mem-meta { flex: 1; min-width: 0; }
+    .mem-name { font-size: 14px; font-weight: 600; }
+    .mem-rank { font-size: 12px; color: var(--t2); margin-top: 1px; }
+
+    .mem-frac { font-size: 13px; font-weight: 600; color: var(--text); }
+    .mem-frac-sub { font-size: 10.5px; color: var(--t3); margin-top: 1px; text-align: right; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-ok { background: var(--ok); }
+    .dot-warn { background: var(--warn); }
+    .dot-bad { background: var(--urgent); }
+
+    /* Member expanded — show category mini bar chart */
+    .mem-expand-inner { padding: 4px 18px 18px 68px; }
+    .mini-cat-chart {
+      display: flex; gap: 14px;
+      align-items: flex-end;
+      height: 64px;
+      padding: 8px 0 0;
+    }
+    .mcc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; height: 100%; justify-content: flex-end; }
+    .mcc-bar-wrap { width: 100%; max-width: 22px; height: 36px; position: relative; display: flex; align-items: flex-end; }
+    .mcc-bar { width: 100%; background: var(--text); border-radius: 1px; }
+    .mcc-bar.hatch { background: transparent; background-image: repeating-linear-gradient(45deg, var(--text) 0, var(--text) 0.5px, transparent 0.5px, transparent 3.5px); }
+    .mcc-bar.empty { background: var(--bm); height: 2px !important; }
+    .mcc-lbl { font-size: 9.5px; font-weight: 500; color: var(--t2); letter-spacing: .03em; text-align: center; line-height: 1.2; }
+    .mcc-val { font-size: 10px; font-weight: 600; color: var(--text); }
+
+    /* ──────────────────────────────────────────────
+       Shops list (leadership)
+    ────────────────────────────────────────────── */
+    .shop-item { border-bottom: 1px solid var(--border); }
+    .shop-item:last-child { border-bottom: none; }
+    .shop-row {
+      padding: 16px 18px;
+      display: flex; align-items: center; gap: 14px;
+      cursor: pointer; transition: background .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .shop-row:hover { background: var(--cream); }
+    .shop-icon {
+      width: 38px; height: 38px; border-radius: 8px;
+      background: var(--cream);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 11px; font-weight: 700; color: var(--text);
+      letter-spacing: .03em;
+    }
+    .shop-meta-wrap { flex: 1; min-width: 0; }
+    .shop-name { font-size: 14px; font-weight: 600; }
+    .shop-sub { font-size: 12px; color: var(--t2); margin-top: 1px; }
+    .shop-pct { font-size: 22px; font-weight: 700; letter-spacing: -.025em; line-height: 1; }
+    .shop-pct-sub { font-size: 10.5px; color: var(--t3); margin-top: 2px; text-align: right; }
+
+    /* Shop expansion — list of members with mini bars */
+    .shop-expand-inner { padding: 4px 18px 18px 70px; }
+    .shop-mem-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 6px 0;
+      font-size: 12.5px;
+    }
+    .shop-mem-row + .shop-mem-row { border-top: 1px dashed var(--border); }
+    .shop-mem-name-c { font-weight: 500; flex: 1; min-width: 0; }
+    .shop-mem-rank-c { color: var(--t2); width: 36px; flex-shrink: 0; font-size: 11px; }
+    .shop-mem-bar-c { width: 70px; height: 4px; background: var(--bm); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+    .shop-mem-fill-c { height: 100%; background: var(--text); border-radius: 2px; }
+    .shop-mem-pct-c { width: 32px; text-align: right; font-size: 11px; color: var(--t2); flex-shrink: 0; }
+
+    /* ──────────────────────────────────────────────
+       Mobile bottom nav
+    ────────────────────────────────────────────── */
+    .mob-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--bg); border-top: 2px solid var(--border);
+      display: flex;
+      padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+      z-index: 200;
+    }
+    .mob-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 6px 8px; background: none; border: none;
+      font-family: inherit; font-size: 10px; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase;
+      color: var(--t3); cursor: pointer;
+      -webkit-tap-highlight-color: transparent; transition: color .15s;
+    }
+    .mob-btn.active { color: var(--text); }
+    .mob-btn svg { width: 22px; height: 22px; }
+    .mob-badge-wrap { position: relative; }
+    .mob-badge {
+      position: absolute; top: -2px; right: -4px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--urgent); border: 2px solid var(--bg);
+    }
+
+    /* ══ DESKTOP ════════════════════════════════ */
+    @media (min-width: 768px) {
+      #app { flex-direction: row; height: 100vh; }
+      .sidebar { display: flex; }
+      .mob-hdr, .mob-nav { display: none; }
+      .main { flex: 1; height: 100vh; overflow: hidden; }
+      .desk-top { display: flex; }
+      .view {
+        padding: 32px 40px;
+        padding-bottom: 40px;
+        height: calc(100vh - 67px);
+        overflow-y: auto;
+      }
+
+      /* Hero strip on desktop: horizontal layout, full-bleed cream */
+      .hero {
+        flex-direction: row;
+        align-items: stretch;
+        gap: 0;
+        padding: 14px 40px 36px;
+        margin: -32px -40px 28px;
+      }
+      .hero-section {
+        flex: 1;
+        padding: 0 28px;
+        border-right: 1px solid var(--bm);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .hero-section:first-child { padding-left: 0; }
+      .hero-section:last-child { padding-right: 0; border-right: none; }
+
+      .hero-section .chart-section { border-top: none; padding-top: 0; }
+
+      /* In hero, gauge + stats inline on desktop */
+      .hero-gauge { gap: 24px; }
+
+      /* Squadron grid for additional cards */
+      .sq-bottom-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+    }
+
+    /* Mobile: hero sections stack inside cream zone */
+    @media (max-width: 767px) {
+      .hero { padding: 8px 20px 26px; margin: -16px -16px 22px; }
+      .hero-section { padding: 0; }
+      .hero-section + .hero-section { border-top: 1px solid var(--bm); padding-top: 22px; }
+      .stat-vr { height: 30px; }
+      .stat { padding: 0 14px; }
+      .stat-num { font-size: 26px; }
+    }
+
+    .sq-bottom-grid > * { margin: 0; }
+
+    /* Desktop-only / mobile-only utility */
+    .desk-only { display: none; }
+    @media (min-width: 768px) {
+      .desk-only { display: block; }
+      .hero-section.desk-only { display: flex; }
+      .mob-only { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══ SIDEBAR (white) ════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sb-top">
+      <div class="sb-brand">
+        <div class="sb-brand-name">108th CES</div>
+        <div class="sb-brand-uta">May 2026 UTA · JB MDL</div>
+      </div>
+      <div class="sb-sec-lbl">Navigation</div>
+      <button class="sb-item active" data-view="member" onclick="switchView(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        My Tasks
+      </button>
+      <button class="sb-item" data-view="supervisor" onclick="switchView(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M2 20c0-3 2.7-5.5 7-5.5"/><path d="M13 20c0-3.3 2.5-5.5 6-5.5"/></svg>
+        My Shop
+        <span class="sb-badge">3</span>
+      </button>
+      <button class="sb-item" data-view="leadership" onclick="switchView(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+        Squadron
+      </button>
+      <div class="sb-spacer"></div>
+    </div>
+    <div class="sb-user">
+      <div class="sb-av">SJ</div>
+      <div><div class="sb-name">Smith, J.</div><div class="sb-role">SSgt · Electrical</div></div>
+    </div>
+  </aside>
+
+  <!-- ═══ MOBILE HEADER ═════════════════════════ -->
+  <header class="mob-hdr">
+    <div class="mob-eye">108th CES UTA Tracker</div>
+    <div class="mob-ttl" id="mob-title">May 2026 UTA</div>
+    <div class="mob-sub" id="mob-sub">SSgt Smith, J. · Electrical</div>
+    <div class="demo-pill"><span class="demo-dot"></span>Prototype — use nav to switch views</div>
+  </header>
+
+  <!-- ═══ MAIN ════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- DESKTOP TOPBAR -->
+    <div class="desk-top">
+      <div>
+        <div class="desk-ttl" id="desk-title">May 2026 UTA</div>
+        <div class="desk-sub" id="desk-sub">SSgt Smith, J. · Electrical</div>
+      </div>
+      <div class="demo-pill"><span class="demo-dot"></span>Prototype mode</div>
+    </div>
+
+    <!-- ═══ MEMBER VIEW ═══════════════════════════ -->
+    <div id="view-member" class="view active">
+
+      <!-- HERO STRIP -->
+      <div class="hero">
+
+        <div class="hero-section">
+          <div class="hero-gauge">
+            <div class="gauge-wrap">
+              <svg id="g-member" viewBox="0 0 160 92" width="138" height="80"></svg>
+              <div class="gauge-center">
+                <div class="gauge-pct" id="gp-member">43%</div>
+                <div class="gauge-lbl">Complete</div>
+              </div>
+            </div>
+            <div class="stat-row">
+              <div class="stat">
+                <div class="stat-num" id="gs-done">3</div>
+                <div class="stat-lbl">Done</div>
+              </div>
+              <div class="stat-vr"></div>
+              <div class="stat">
+                <div class="stat-num warn" id="gs-left">5</div>
+                <div class="stat-lbl">Remaining</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-section">
+          <div class="chart-section">
+            <div class="chart-label-row">
+              <div class="chart-label">Progress by Category</div>
+              <div class="chart-meta" id="member-chart-meta">3 / 8</div>
+            </div>
+            <div class="bar-chart" id="member-bar-chart"></div>
+          </div>
+        </div>
+
+      </div><!-- /hero -->
+
+      <div id="member-tasks"></div>
+
+    </div>
+
+    <!-- ═══ SUPERVISOR VIEW ═══════════════════════ -->
+    <div id="view-supervisor" class="view">
+
+      <div class="hero">
+
+        <div class="hero-section">
+          <div class="hero-gauge">
+            <div class="gauge-wrap">
+              <svg id="g-sup" viewBox="0 0 160 92" width="138" height="80"></svg>
+              <div class="gauge-center">
+                <div class="gauge-pct">63%</div>
+                <div class="gauge-lbl">Shop</div>
+              </div>
+            </div>
+            <div class="stat-row">
+              <div class="stat">
+                <div class="stat-num">5</div>
+                <div class="stat-lbl">On Track</div>
+              </div>
+              <div class="stat-vr"></div>
+              <div class="stat">
+                <div class="stat-num warn">3</div>
+                <div class="stat-lbl">Behind</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-section">
+          <div class="chart-section">
+            <div class="chart-label-row">
+              <div class="chart-label">Member Progress</div>
+              <div class="chart-meta">8 members</div>
+            </div>
+            <div class="bar-chart" id="shop-bar-chart"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="sec-hd">
+        <div class="sec-title">Electrical Shop</div>
+        <div class="sec-sub">Tap a member to expand</div>
+      </div>
+      <div class="card" id="member-list"></div>
+
+    </div>
+
+    <!-- ═══ LEADERSHIP VIEW ═══════════════════════ -->
+    <div id="view-leadership" class="view">
+
+      <!-- HERO: gauge + bar chart + 2 stat blocks with arrows -->
+      <div class="hero">
+
+        <div class="hero-section">
+          <div class="hero-gauge">
+            <div class="gauge-wrap">
+              <svg id="g-lead" viewBox="0 0 160 92" width="138" height="80"></svg>
+              <div class="gauge-center">
+                <div class="gauge-pct">67%</div>
+                <div class="gauge-lbl">Squadron</div>
+              </div>
+            </div>
+            <div class="stat-row">
+              <div class="stat">
+                <div class="stat-num">47</div>
+                <div class="stat-lbl">On Track</div>
+              </div>
+              <div class="stat-vr"></div>
+              <div class="stat">
+                <div class="stat-num warn">23</div>
+                <div class="stat-lbl">Behind</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-section">
+          <div class="chart-section">
+            <div class="chart-label-row">
+              <div class="chart-label">Completion by Shop</div>
+              <div class="chart-meta">9 shops</div>
+            </div>
+            <div class="bar-chart" id="squad-shop-chart"></div>
+          </div>
+        </div>
+
+        <div class="hero-section desk-only">
+          <div style="display:flex; flex-direction:column; gap:24px; height:100%; justify-content:center;">
+            <div class="stat has-arrow" style="padding:0">
+              <div class="stat-num warn">31</div>
+              <div class="stat-lbl-arrow">
+                Critical this UTA
+                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M6 3l3 3-3 3"/></svg>
+              </div>
+            </div>
+            <div class="stat has-arrow" style="padding:0">
+              <div class="stat-num">8</div>
+              <div class="stat-lbl-arrow">
+                Members below 30%
+                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M6 3l3 3-3 3"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /hero -->
+
+      <!-- Mobile-only quick-stats (since the desk-only stats don't show on mobile) -->
+      <div class="card mob-only card-pad" style="margin-bottom:18px">
+        <div class="mini-grid" style="grid-template-columns:repeat(2,1fr); border-top:none; padding-top:0">
+          <div class="mini-cell" style="text-align:left">
+            <div class="mini-num" style="color:var(--urgent)">31</div>
+            <div class="mini-lbl">Critical This UTA</div>
+          </div>
+          <div class="mini-cell" style="text-align:left">
+            <div class="mini-num">8</div>
+            <div class="mini-lbl">Below 30%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Squadron breakdown grid -->
+      <div class="sq-bottom-grid" style="margin-bottom:20px">
+
+        <div class="card card-pad">
+          <div class="chart-label-row" style="margin-bottom:18px">
+            <div class="chart-label">Squadron by Category</div>
+            <div class="chart-meta">All 70 members</div>
+          </div>
+          <div class="bar-chart" id="sq-cat-chart"></div>
+          <div class="mini-grid" id="sq-cat-mini"></div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="chart-label-row" style="margin-bottom:18px">
+            <div class="chart-label">Members Most Behind</div>
+            <div class="chart-meta">Sorted by completion</div>
+          </div>
+          <div id="sq-alerts"></div>
+        </div>
+
+      </div>
+
+      <div class="sec-hd">
+        <div class="sec-title">All Shops</div>
+        <div class="sec-sub">Tap a shop to expand</div>
+      </div>
+      <div class="card" id="shop-list"></div>
+
+    </div>
+
+  </main>
+
+  <!-- ═══ MOBILE NAV ══════════════════════════════ -->
+  <nav class="mob-nav">
+    <button class="mob-btn active" data-view="member" onclick="switchView(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      My Tasks
+    </button>
+    <button class="mob-btn" data-view="supervisor" onclick="switchView(this)">
+      <div class="mob-badge-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M2 20c0-3 2.7-5.5 7-5.5"/><path d="M13 20c0-3.3 2.5-5.5 6-5.5"/></svg>
+        <span class="mob-badge"></span>
+      </div>
+      My Shop
+    </button>
+    <button class="mob-btn" data-view="leadership" onclick="switchView(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+      Squadron
+    </button>
+  </nav>
+
+</div>
+<script>
+/* ── Gauge ─────────────────────────────────────── */
+function gauge(id, pct) {
+  const svg = document.getElementById(id);
+  if (!svg) return;
+  const cx=80,cy=90,ir=55,or=69,n=52;
+  const filled = Math.round(n * pct / 100);
+  svg.innerHTML = Array.from({length:n},(_,i)=>{
+    const rad=(180+180*i/(n-1))*Math.PI/180;
+    const c=Math.cos(rad), s=Math.sin(rad);
+    return `<line x1="${(cx+ir*c).toFixed(2)}" y1="${(cy+ir*s).toFixed(2)}" x2="${(cx+or*c).toFixed(2)}" y2="${(cy+or*s).toFixed(2)}" stroke="${i<filled?'var(--gon)':'var(--goff)'}" stroke-width="${i<filled?'2.6':'2'}" stroke-linecap="round"/>`;
+  }).join('');
+}
+
+/* ── Bar chart ─────────────────────────────────── */
+/* items: [{label, pct, hatch?}] — values render below bars at consistent y */
+function barChart(elId, items, opts={}) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const showVal = opts.showVal !== false;
+  el.innerHTML = items.map(d => {
+    const cls = d.hatch ? 'bar-rect hatch' : 'bar-rect';
+    const h = Math.max(0, Math.min(100, d.pct));
+    return `<div class="bar-col">
+      <div class="bar-track">
+        <div class="${cls}" style="height:${h}%"></div>
+      </div>
+      <div class="bar-info">
+        ${showVal ? `<div class="bar-val">${d.pct}%</div>` : ''}
+        <div class="bar-x">${d.label}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── TASK DATA ─────────────────────────────────── */
+const GROUPS = [
+  { id:'cbt', label:'Computer Training (CBTs)', short:'CBT', tasks:[
+    {title:'Annual IA Training',         det:'Must complete by Sun 2359',         urg:'urgent',   badge:'This UTA', state:'none'},
+    {title:'Cyber Awareness Challenge',  det:'30 days overdue · complete ASAP',   urg:'urgent',   badge:'This UTA', state:'none'},
+    {title:'SAPR Training',              det:'Completed Apr 12, 2026',            urg:'done',     badge:'Done',     state:'done'},
+  ]},
+  { id:'med', label:'Medical / Dental', short:'MED', tasks:[
+    {title:'Dental Exam',                det:'Friday · 0900 · Bldg 2621',         urg:'urgent',   badge:'This UTA', state:'none'},
+  ]},
+  { id:'pt',  label:'Physical Training', short:'PT', tasks:[
+    {title:'PT Assessment',              det:'Completed Mar 2026',                urg:'done',     badge:'Done',     state:'done'},
+  ]},
+  { id:'epb', label:'Performance Review (EPB)', short:'EPB', tasks:[
+    {title:'EPB — Route to Supervisor',  det:'Due by end of UTA · see MSgt Brown',urg:'urgent',   badge:'This UTA', state:'none'},
+  ]},
+  { id:'upg', label:'Upgrade Training', short:'UPG', tasks:[
+    {title:'5-Level CDC Vol. 2',         det:'Signed off Apr 2026',               urg:'done',     badge:'Done',     state:'done'},
+    {title:'5-Level CDC Vol. 3',         det:'Target: Jun 2026 UTA',              urg:'upcoming', badge:'Jun UTA',  state:'none'},
+  ]},
+];
+
+function bclass(u){ return {urgent:'b-urgent', upcoming:'b-upcoming', done:'b-done', partial:'b-partial'}[u]||'b-upcoming'; }
+
+function buildTasks(){
+  let html='';
+  GROUPS.forEach((g,gi)=>{
+    html+=`<div class="task-group"><div class="grp-lbl">${g.label}</div>`;
+    g.tasks.forEach((t,ti)=>{
+      const id=`t-${gi}-${ti}`;
+      html+=`<div class="task-item" id="${id}" data-gi="${gi}" data-ti="${ti}" data-state="${t.state}" data-ob="${t.badge}" data-ou="${t.urg}" onclick="cycleTask(this,event)">
+        <div class="chk">
+          <svg class="ic ic-part" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M2.5 5h5" stroke="var(--warn)" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <svg class="ic ic-done" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.5 5 4 7.5 8.5 2.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="task-body">
+          <div class="task-title">${t.title}</div>
+          <div class="task-det">${t.det}</div>
+          <button class="note-btn" onclick="toggleNote(event,'${id}')">
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="1" width="10" height="10" rx="2"/><path d="M3.5 4h5M3.5 6.5h5M3.5 9h3"/></svg>
+            Add note
+          </button>
+          <div class="note-area" id="note-${id}"><textarea class="note-input" rows="2" placeholder="Add a note for your supervisor…" onclick="event.stopPropagation()"></textarea></div>
+        </div>
+        <div class="badge ${bclass(t.urg)}" id="badge-${id}">${t.badge}</div>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  document.getElementById('member-tasks').innerHTML=html;
+  updateMemberStats();
+}
+
+function getMemberCatBars(){
+  return GROUPS.map((g,gi)=>{
+    const done = g.tasks.filter((t,ti)=>{
+      const el = document.getElementById(`t-${gi}-${ti}`);
+      return el ? el.dataset.state === 'done' : t.state === 'done';
+    }).length;
+    const pct = Math.round(done/g.tasks.length*100);
+    return { label: g.short, pct, hatch: pct < 100 && pct > 0, done, tot: g.tasks.length };
+  });
+}
+
+function updateMemberStats(){
+  const items = document.querySelectorAll('#member-tasks .task-item');
+  const done  = Array.from(items).filter(el=>el.dataset.state==='done').length;
+  const total = items.length;
+  const pct   = Math.round(done/total*100);
+  document.getElementById('gp-member').textContent = pct+'%';
+  document.getElementById('gs-done').textContent   = done;
+  document.getElementById('gs-left').textContent   = total-done;
+  document.getElementById('member-chart-meta').textContent = `${done} / ${total}`;
+  gauge('g-member', pct);
+  // Update bar chart
+  barChart('member-bar-chart', getMemberCatBars());
+}
+
+function cycleTask(el, event){
+  if (event.target.closest('.note-btn,.note-area')) return;
+  const s=['none','partial','done'];
+  const next=s[(s.indexOf(el.dataset.state)+1)%3];
+  el.dataset.state=next;
+  const badge=document.getElementById('badge-'+el.id);
+  if(next==='partial'){ badge.className='badge b-partial'; badge.textContent='In Progress'; }
+  else if(next==='done'){ badge.className='badge b-done'; badge.textContent='Done'; }
+  else { badge.className='badge '+bclass(el.dataset.ou); badge.textContent=el.dataset.ob; }
+  updateMemberStats();
+}
+
+function toggleNote(event, id){
+  event.stopPropagation();
+  const area=document.getElementById('note-'+id);
+  const open=area.classList.toggle('open');
+  const btn=event.currentTarget;
+  const ico=`<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="1" width="10" height="10" rx="2"/><path d="M3.5 4h5M3.5 6.5h5M3.5 9h3"/></svg>`;
+  btn.innerHTML = ico + (open?'Hide note':'Add note');
+  if(open) setTimeout(()=>area.querySelector('textarea').focus(), 50);
+}
+
+/* ── View switch ───────────────────────────────── */
+const viewMeta = {
+  member:     ['May 2026 UTA',    'SSgt Smith, J. · Electrical'],
+  supervisor: ['Electrical Shop', 'Supervisor View'],
+  leadership: ['108th CES',       'Leadership / Commander View'],
+};
+function switchView(btn){
+  const name = btn.dataset.view;
+  document.querySelectorAll('.sb-item, .mob-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll(`[data-view="${name}"]`).forEach(b => b.classList.add('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  const [t, s] = viewMeta[name];
+  document.getElementById('mob-title').textContent = t;
+  document.getElementById('mob-sub').textContent = s;
+  document.getElementById('desk-title').textContent = t;
+  document.getElementById('desk-sub').textContent = s;
+}
+
+/* ── Members in current shop ──────────────────── */
+const MEMBERS = [
+  {init:'SJ',name:'Smith, J.',  rank:'SSgt',cats:[{n:'CBT',d:1,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:0,t:1},{n:'UPG',d:1,t:2}]},
+  {init:'RJ',name:'Jones, R.',  rank:'SrA', cats:[{n:'CBT',d:3,t:3},{n:'MED',d:1,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:1,t:1}]},
+  {init:'TW',name:'Williams, T.',rank:'A1C',cats:[{n:'CBT',d:0,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:0,t:1},{n:'UPG',d:0,t:1}]},
+  {init:'MJ',name:'Johnson, M.',rank:'SrA', cats:[{n:'CBT',d:2,t:3},{n:'MED',d:1,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
+  {init:'CD',name:'Davis, C.',  rank:'A1C', cats:[{n:'CBT',d:0,t:3},{n:'MED',d:0,t:1},{n:'PT',d:0,t:1},{n:'EPB',d:0,t:1},{n:'UPG',d:0,t:1}]},
+  {init:'KB',name:'Brown, K.',  rank:'MSgt',cats:[{n:'CBT',d:3,t:3},{n:'MED',d:1,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
+  {init:'LM',name:'Martinez, L.',rank:'SrA',cats:[{n:'CBT',d:2,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
+  {init:'BT',name:'Taylor, B.', rank:'A1C', cats:[{n:'CBT',d:0,t:3},{n:'MED',d:0,t:1},{n:'PT',d:1,t:1},{n:'EPB',d:1,t:1},{n:'UPG',d:0,t:1}]},
+];
+
+function buildMembers(){
+  // Build member list with per-member expansion
+  document.getElementById('member-list').innerHTML = MEMBERS.map((m,mi)=>{
+    const done = m.cats.reduce((a,c)=>a+c.d,0);
+    const tot = m.cats.reduce((a,c)=>a+c.t,0);
+    const pct = Math.round(done/tot*100);
+    const dc = pct===100?'dot-ok':pct>=50?'dot-warn':'dot-bad';
+    // Mini cat chart for expanded
+    const mcc = m.cats.map(c=>{
+      const p = Math.round(c.d/c.t*100);
+      const cls = p===0 ? 'mcc-bar empty' : (p===100 ? 'mcc-bar' : 'mcc-bar hatch');
+      const h = p===0 ? 2 : Math.max(8, p*0.36);
+      return `<div class="mcc-col">
+        <div class="mcc-val">${c.d}/${c.t}</div>
+        <div class="mcc-bar-wrap"><div class="${cls}" style="height:${h}px"></div></div>
+        <div class="mcc-lbl">${c.n}</div>
+      </div>`;
+    }).join('');
+    return `<div class="mem-item">
+      <div class="mem-row" onclick="toggleMem(this.parentElement)">
+        <div class="avatar">${m.init}</div>
+        <div class="mem-meta">
+          <div class="mem-name">${m.name}</div>
+          <div class="mem-rank">${m.rank}</div>
+        </div>
+        <div>
+          <div class="mem-frac">${done}/${tot}</div>
+          <div class="mem-frac-sub">${pct}%</div>
+        </div>
+        <div class="dot ${dc}"></div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="expand-panel">
+        <div class="mem-expand-inner">
+          <div class="mini-cat-chart">${mcc}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Shop bar chart — one bar per member
+  const shopBars = MEMBERS.map(m=>{
+    const done = m.cats.reduce((a,c)=>a+c.d,0);
+    const tot = m.cats.reduce((a,c)=>a+c.t,0);
+    const pct = Math.round(done/tot*100);
+    return { label: m.init, pct, hatch: pct < 100 && pct > 0 };
+  });
+  barChart('shop-bar-chart', shopBars);
+}
+
+function toggleMem(item){
+  const panel = item.querySelector('.expand-panel');
+  const row = item.querySelector('.mem-row');
+  const isOpen = panel.classList.contains('open');
+  document.querySelectorAll('#member-list .expand-panel').forEach(p=>p.classList.remove('open'));
+  document.querySelectorAll('#member-list .mem-row').forEach(r=>r.classList.remove('expanded'));
+  if (!isOpen) { panel.classList.add('open'); row.classList.add('expanded'); }
+}
+
+/* ── Shops ─────────────────────────────────────── */
+const SHOPS = [
+  {abbr:'STR',name:'Structures',    pct:78, members:[
+    {name:'Adams, K.',  rank:'TSgt', d:6,t:8},{name:'Baker, M.',   rank:'SrA', d:8,t:8},
+    {name:'Clark, R.',  rank:'A1C',  d:3,t:8},{name:'Dixon, P.',   rank:'SrA', d:7,t:8},
+    {name:'Evans, L.',  rank:'A1C',  d:5,t:8},{name:'Ford, T.',    rank:'MSgt',d:8,t:8},
+    {name:'Gray, N.',   rank:'A1C',  d:2,t:8},{name:'Hall, C.',    rank:'SrA', d:6,t:8},
+    {name:'Irwin, D.',  rank:'A1C',  d:7,t:8},
+  ]},
+  {abbr:'EA', name:'EA',            pct:60, members:[
+    {name:'Jones, A.',  rank:'TSgt', d:5,t:6},{name:'King, B.',    rank:'SrA', d:4,t:6},
+    {name:'Lee, C.',    rank:'A1C',  d:6,t:6},{name:'Moore, D.',   rank:'SrA', d:2,t:6},
+    {name:'Nash, E.',   rank:'A1C',  d:1,t:6},
+  ]},
+  {abbr:'OPS',name:'Operations',    pct:33, members:[
+    {name:'Owen, F.',   rank:'TSgt', d:2,t:6},{name:'Park, G.',    rank:'SrA', d:0,t:6},
+    {name:'Quinn, H.',  rank:'SrA',  d:4,t:6},
+  ]},
+  {abbr:'HVY',name:'Heavy Equip.',  pct:63, members:[
+    {name:'Reed, I.',   rank:'MSgt', d:5,t:7},{name:'Shaw, J.',    rank:'SrA', d:7,t:7},
+    {name:'Todd, K.',   rank:'A1C',  d:2,t:7},{name:'Upton, L.',   rank:'SrA', d:6,t:7},
+    {name:'Vance, M.',  rank:'A1C',  d:3,t:7},{name:'Wade, N.',    rank:'A1C', d:7,t:7},
+    {name:'Yates, P.',  rank:'SrA',  d:4,t:7},{name:'Zane, Q.',    rank:'A1C', d:1,t:7},
+  ]},
+  {abbr:'HVA',name:'HVAC',          pct:71, members:[
+    {name:'Allen, R.',  rank:'TSgt', d:6,t:8},{name:'Burns, S.',   rank:'SrA', d:8,t:8},
+    {name:'Chase, T.',  rank:'A1C',  d:5,t:8},{name:'Dean, U.',    rank:'SrA', d:7,t:8},
+    {name:'Ellis, V.',  rank:'A1C',  d:3,t:8},{name:'Flynn, W.',   rank:'MSgt',d:8,t:8},
+    {name:'Grant, X.',  rank:'A1C',  d:6,t:8},
+  ]},
+  {abbr:'ELE',name:'Electrical',    pct:63, members:[
+    {name:'Smith, J.',  rank:'SSgt', d:3,t:8},{name:'Jones, R.',   rank:'SrA', d:8,t:8},
+    {name:'Williams,T.',rank:'A1C',  d:1,t:8},{name:'Johnson,M.',  rank:'SrA', d:5,t:8},
+    {name:'Davis, C.',  rank:'A1C',  d:0,t:8},{name:'Brown, K.',   rank:'MSgt',d:7,t:8},
+    {name:'Martinez,L.',rank:'SrA',  d:4,t:8},{name:'Taylor, B.',  rank:'A1C', d:2,t:8},
+  ]},
+  {abbr:'PWR',name:'Power Pro',     pct:57, members:[
+    {name:'Harris, A.', rank:'TSgt', d:5,t:7},{name:'Martin, B.',  rank:'SrA', d:4,t:7},
+    {name:'Garcia, C.', rank:'A1C',  d:3,t:7},{name:'Miller, D.',  rank:'SrA', d:7,t:7},
+    {name:'Wilson, E.', rank:'A1C',  d:2,t:7},{name:'Moore, F.',   rank:'A1C', d:6,t:7},
+    {name:'Taylor, G.', rank:'SrA',  d:1,t:7},
+  ]},
+  {abbr:'WFS',name:'WFSM',          pct:75, members:[
+    {name:'Anderson,H.',rank:'MSgt', d:7,t:8},{name:'Thomas, I.',  rank:'SrA', d:6,t:8},
+    {name:'Jackson,J.', rank:'A1C',  d:8,t:8},{name:'White, K.',   rank:'SrA', d:5,t:8},
+    {name:'Harris, L.', rank:'A1C',  d:7,t:8},{name:'Lewis, M.',   rank:'TSgt',d:8,t:8},
+    {name:'Robinson,N.',rank:'A1C',  d:3,t:8},{name:'Walker, O.',  rank:'SrA', d:6,t:8},
+  ]},
+  {abbr:'EM', name:'EM',            pct:86, members:[
+    {name:'Hall, P.',   rank:'TSgt', d:7,t:7},{name:'Young, Q.',   rank:'SrA', d:7,t:7},
+    {name:'King, R.',   rank:'A1C',  d:6,t:7},{name:'Wright, S.',  rank:'SrA', d:7,t:7},
+    {name:'Scott, T.',  rank:'A1C',  d:5,t:7},{name:'Torres, U.',  rank:'MSgt',d:7,t:7},
+    {name:'Nelson, V.', rank:'A1C',  d:7,t:7},
+  ]},
+];
+
+const SQ_CATS = [
+  {label:'CBT',  done:42, tot:70},
+  {label:'MED',  done:38, tot:70},
+  {label:'PT',   done:61, tot:70},
+  {label:'EPB',  done:28, tot:70},
+  {label:'UPG',  done:35, tot:70},
+];
+
+function buildShops(){
+  // Squadron shop bar chart
+  barChart('squad-shop-chart', SHOPS.map(s=>({label:s.abbr, pct:s.pct, hatch: s.pct<70})));
+
+  // Squadron category bar chart
+  const catBars = SQ_CATS.map(c=>{
+    const pct = Math.round(c.done/c.tot*100);
+    return { label: c.label, pct, hatch: pct < 70 };
+  });
+  barChart('sq-cat-chart', catBars);
+
+  // Mini grid below cat chart
+  document.getElementById('sq-cat-mini').innerHTML = SQ_CATS.map(c=>{
+    return `<div class="mini-cell">
+      <div class="mini-num">${c.done}</div>
+      <div class="mini-lbl">${c.label}</div>
+      <div class="mini-frac">of ${c.tot}</div>
+    </div>`;
+  }).join('');
+
+  // Shop list (expandable)
+  document.getElementById('shop-list').innerHTML = SHOPS.map(s=>{
+    const membersHTML = s.members.map(m=>{
+      const pct = Math.round(m.d/m.t*100);
+      return `<div class="shop-mem-row">
+        <div class="shop-mem-rank-c">${m.rank}</div>
+        <div class="shop-mem-name-c">${m.name}</div>
+        <div class="shop-mem-bar-c"><div class="shop-mem-fill-c" style="width:${pct}%"></div></div>
+        <div class="shop-mem-pct-c">${pct}%</div>
+      </div>`;
+    }).join('');
+    return `<div class="shop-item">
+      <div class="shop-row" onclick="toggleShop(this.parentElement)">
+        <div class="shop-icon">${s.abbr}</div>
+        <div class="shop-meta-wrap">
+          <div class="shop-name">${s.name}</div>
+          <div class="shop-sub">${s.members.length} members</div>
+        </div>
+        <div>
+          <div class="shop-pct">${s.pct}%</div>
+          <div class="shop-pct-sub">complete</div>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="expand-panel">
+        <div class="shop-expand-inner">${membersHTML}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // At-risk members list
+  const atRisk = SHOPS.flatMap(s=>s.members.map(m=>({...m, shop:s.name})))
+    .map(m=>({...m, pct: Math.round(m.d/m.t*100)}))
+    .filter(m=>m.pct<50)
+    .sort((a,b)=>a.pct-b.pct)
+    .slice(0,7);
+  document.getElementById('sq-alerts').innerHTML = atRisk.map(m=>{
+    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px dashed var(--border)">
+      <div style="font-size:11px;color:var(--t2);width:36px;flex-shrink:0">${m.rank}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${m.name}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:1px">${m.shop}</div>
+      </div>
+      <div style="font-size:14px;font-weight:700;color:var(--urgent);letter-spacing:-.02em">${m.pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleShop(item){
+  const panel = item.querySelector('.expand-panel');
+  const row = item.querySelector('.shop-row');
+  const isOpen = panel.classList.contains('open');
+  document.querySelectorAll('#shop-list .expand-panel').forEach(p=>p.classList.remove('open'));
+  document.querySelectorAll('#shop-list .shop-row').forEach(r=>r.classList.remove('expanded'));
+  if (!isOpen) { panel.classList.add('open'); row.classList.add('expanded'); }
+}
+
+/* ── Init ──────────────────────────────────────── */
+gauge('g-member', 43);
+gauge('g-sup',    63);
+gauge('g-lead',   67);
+buildTasks();
+buildMembers();
+buildShops();
+</script>
+</body>
+</html>

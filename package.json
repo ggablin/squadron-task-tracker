@@ -1,0 +1,12 @@
+{
+  "name": "squadron-task-tracker",
+  "version": "0.1.0",
+  "description": "108th CES UTA task tracker prototype",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
