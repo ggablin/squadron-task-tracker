@@ -24,6 +24,7 @@ const MEMBERS = [
   { last_name:'Gradaille', first_name:'Isabella', rank:'AB',    role:'member',     slug:'gradaille' },
   { last_name:'Mesa',      first_name:'Richard',  rank:'SrA',   role:'member',     slug:'mesa'      },
   { last_name:'Uzoma',     first_name:'Spencer',  rank:'SSgt',  role:'supervisor', slug:'uzoma'     },
+  { last_name:'McNaughton',first_name:'Cody',     rank:'MSgt',  role:'leadership', slug:'mcnaughton'},
 ];
 
 // ── Tasks by member slug ───────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ const TASKS = {
     { cat:'upcoming',title:'Out-Processing Date',                       details:'2 May 2026 (this UTA)',                              urgency:'overdue',  is_upcoming:true },
     { cat:'upcoming',title:'BMT & Technical School',                    details:'12 May 2026 – 24 Nov 2026',                          urgency:'info', is_upcoming:true },
   ],
+  mcnaughton: [],
 };
 
 // ── Shop events (shop-wide, visible to all Structures members) ────────────────
