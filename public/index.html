@@ -1295,6 +1295,32 @@ async function loadShopMembers() {
   buildMembers();
 }
 
+async function refreshShopMembers() {
+  const res = await fetch('/api/shop/members');
+  if (!res.ok) return;
+  shopMembers = await res.json();
+  for (const m of shopMembers) {
+    const item = document.getElementById('memitem-'+m.id);
+    if (!item) continue;
+    const done  = parseInt(m.done_tasks)||0;
+    const total = parseInt(m.total_tasks)||0;
+    const pct   = total ? Math.round(done/total*100) : 0;
+    const dc    = pct===100?'dot-ok':pct>=50?'dot-warn':'dot-bad';
+    const frac    = item.querySelector('.mem-frac');
+    const fracSub = item.querySelector('.mem-frac-sub');
+    const dot     = item.querySelector('.dot');
+    if (frac)    frac.textContent    = `${done}/${total}`;
+    if (fracSub) fracSub.textContent = `${pct}%`;
+    if (dot)     dot.className       = 'dot ' + dc;
+  }
+  barChart('shop-bar-chart', shopMembers.map(m => {
+    const done = parseInt(m.done_tasks)||0, tot = parseInt(m.total_tasks)||0;
+    const pct  = tot ? Math.round(done/tot*100) : 0;
+    return { label: m.last_name.slice(0,5), pct, hatch: pct<100 && pct>0 };
+  }));
+  updateShopStats();
+}
+
 function buildMembers() {
   const el = document.getElementById('member-list');
   if (!el) return;
@@ -1352,21 +1378,26 @@ async function toggleMem(memberId) {
   const isOpen = item.classList.toggle('expanded');
   panel.classList.toggle('open', isOpen);
   item.querySelector('.chevron').style.transform = isOpen ? 'rotate(90deg)' : '';
-  if (!isOpen || !inner.querySelector('p')) return;
+  if (isOpen && inner.querySelector('p')) await renderMemberTasks(memberId);
+}
+
+async function renderMemberTasks(memberId) {
+  const inner = document.getElementById('expand-inner-'+memberId);
+  if (!inner) return;
   try {
-    const res   = await fetch('/api/shop/members/'+memberId+'/tasks');
+    const res = await fetch('/api/shop/members/'+memberId+'/tasks');
     if (!res.ok) throw new Error();
     const tasks = await res.json();
-    if (!tasks.length) { inner.innerHTML='<p style="color:var(--t2);font-size:13px">No tasks this UTA.</p>'; return; }
+    if (!tasks.length) { inner.innerHTML = '<p style="color:var(--t2);font-size:13px">No tasks this UTA.</p>'; return; }
     const cats = {};
     for (const t of tasks) {
       if (t.is_upcoming) continue;
-      if (!cats[t.category_code]) cats[t.category_code]={label:t.category_label,tasks:[]};
+      if (!cats[t.category_code]) cats[t.category_code] = { label: t.category_label, tasks: [] };
       cats[t.category_code].tasks.push(t);
     }
     let html = '';
     for (const [,cat] of Object.entries(cats)) {
-      const d = cat.tasks.filter(t=>t.state==='done').length;
+      const d = cat.tasks.filter(t => t.state === 'done').length;
       html += `<div class="mem-task-group">
         <div class="mem-task-cat">${cat.label} · ${d}/${cat.tasks.length}</div>`;
       for (const t of cat.tasks) {
@@ -1388,23 +1419,23 @@ async function toggleMem(memberId) {
       html += '</div>';
     }
     inner.innerHTML = html;
-  } catch { inner.innerHTML='<p style="color:var(--urgent);font-size:13px">Failed to load.</p>'; }
+  } catch {
+    inner.innerHTML = '<p style="color:var(--urgent);font-size:13px">Failed to load.</p>';
+  }
 }
 
 async function supToggle(event, taskId, memberId, currentState) {
   event.stopPropagation();
-  const newState = currentState==='done' ? 'none' : 'done';
+  const newState = currentState === 'done' ? 'none' : 'done';
   await fetch('/api/tasks/'+taskId, {
-    method:'PUT', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({state:newState}),
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: newState }),
   });
-  const inner = document.getElementById('expand-inner-'+memberId);
-  inner.innerHTML = '<p style="color:var(--t2);font-size:13px">Loading…</p>';
-  const item = document.getElementById('memitem-'+memberId);
-  item.classList.remove('expanded');
-  document.getElementById('expand-'+memberId).classList.remove('open');
-  await toggleMem(memberId);
-  await loadShopMembers();
+  await Promise.all([
+    renderMemberTasks(memberId),
+    refreshShopMembers(),
+  ]);
 }
 
 /* ── Squadron (leadership) ──────────────────────── */
