@@ -665,6 +665,129 @@
       font-family: inherit; font-size: 12px; font-weight: 600;
       cursor: pointer;
     }
+
+    /* ── Modal/Sheet ──────────────────────────── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 9000;
+      display: none; align-items: flex-end; justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    @media (min-width: 768px) {
+      .modal-backdrop { align-items: center; }
+    }
+    .modal-sheet {
+      background: var(--bg);
+      border-radius: 18px 18px 0 0;
+      width: 100%; max-width: 500px;
+      max-height: 85vh; overflow-y: auto;
+      padding: 28px 24px 36px;
+      animation: slideUp .2s ease;
+    }
+    @media (min-width: 768px) {
+      .modal-sheet { border-radius: 18px; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
+    .modal-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+    .modal-close {
+      width: 32px; height: 32px; border-radius: 8px;
+      border: none; background: var(--cream);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text);
+    }
+    .modal-close:hover { background: var(--bm); }
+    .modal-field { margin-bottom: 16px; }
+    .modal-field label {
+      display: block; font-size: 11px; font-weight: 600;
+      color: var(--t2); margin-bottom: 6px;
+      letter-spacing: .06em; text-transform: uppercase;
+    }
+    .modal-field input,
+    .modal-field textarea,
+    .modal-field select {
+      width: 100%; padding: 11px 14px;
+      border: 2px solid var(--border); border-radius: 10px;
+      font-family: inherit; font-size: 14px; color: var(--text);
+      background: var(--bg); outline: none;
+      transition: border-color .15s;
+    }
+    .modal-field input:focus,
+    .modal-field textarea:focus,
+    .modal-field select:focus { border-color: var(--text); }
+    .modal-field textarea { resize: none; min-height: 60px; }
+    .modal-submit {
+      width: 100%; padding: 13px;
+      background: var(--text); color: #fff;
+      border: none; border-radius: 10px;
+      font-family: inherit; font-size: 15px; font-weight: 600;
+      cursor: pointer; margin-top: 8px;
+      transition: opacity .15s;
+    }
+    .modal-submit:hover { opacity: .85; }
+    .modal-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Inline action buttons (delete, flag) ──── */
+    .task-actions {
+      display: flex; gap: 4px; align-items: center;
+      flex-shrink: 0; margin-left: 4px;
+    }
+    .act-btn {
+      width: 28px; height: 28px; border-radius: 6px;
+      border: none; background: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--t3); transition: background .12s, color .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .act-btn:hover { background: var(--cream); color: var(--text); }
+    .act-btn svg { width: 14px; height: 14px; }
+    .act-btn.flagged { color: var(--warn); }
+    .act-btn.flagged:hover { color: var(--warn); background: var(--wrn-bg); }
+    .act-btn.del:hover { color: var(--urgent); background: var(--urg-bg); }
+
+    /* ── Flagged task indicator ─────────────────── */
+    .task-item.flagged { border-left: 3px solid var(--warn); }
+    .flag-star {
+      color: var(--warn); font-size: 11px;
+      margin-right: 4px; vertical-align: middle;
+    }
+
+    /* ── Add button (+ circle) ─────────────────── */
+    .add-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg); color: var(--t2);
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .add-btn:hover { background: var(--cream); color: var(--text); border-color: var(--bm); }
+    .add-btn svg { width: 14px; height: 14px; }
+
+    /* ── Confirm delete inline ─────────────────── */
+    .confirm-delete {
+      display: none; align-items: center; gap: 8px;
+      padding: 8px 12px;
+      background: var(--urg-bg); border-radius: 8px;
+      font-size: 12px; color: var(--urgent);
+      margin-top: 8px;
+    }
+    .confirm-delete.open { display: flex; }
+    .confirm-delete button {
+      padding: 4px 12px; border-radius: 6px;
+      border: none; font-family: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer;
+    }
+    .confirm-delete .cd-yes { background: var(--urgent); color: #fff; }
+    .confirm-delete .cd-no { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -977,6 +1100,100 @@
     </button>
   </nav>
 
+<!-- ═══ ADD TASK MODAL ══════════════════════════ -->
+<div class="modal-backdrop" id="add-task-modal" onclick="if(event.target===this)closeModal('add-task-modal')">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <div class="modal-title">Add Task</div>
+      <button class="modal-close" onclick="closeModal('add-task-modal')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="modal-field">
+      <label>Member</label>
+      <select id="at-member"></select>
+    </div>
+    <div class="modal-field">
+      <label>Category</label>
+      <select id="at-category"></select>
+    </div>
+    <div class="modal-field">
+      <label>Title</label>
+      <input type="text" id="at-title" placeholder="e.g. Complete Cyber Awareness CBT">
+    </div>
+    <div class="modal-field">
+      <label>Details (optional)</label>
+      <textarea id="at-details" rows="2" placeholder="Additional context, due dates, etc."></textarea>
+    </div>
+    <div class="modal-field">
+      <label>Urgency</label>
+      <select id="at-urgency">
+        <option value="this_uta">This UTA</option>
+        <option value="overdue">Overdue</option>
+        <option value="next_uta">Next UTA</option>
+        <option value="future">Future</option>
+        <option value="info">Info Only</option>
+      </select>
+    </div>
+    <div id="at-error" class="login-error" style="display:none"></div>
+    <button class="modal-submit" id="at-submit" onclick="submitAddTask()">Add Task</button>
+  </div>
+</div>
+
+<!-- ═══ ADD SHOP EVENT MODAL ═══════════════════ -->
+<div class="modal-backdrop" id="add-event-modal" onclick="if(event.target===this)closeModal('add-event-modal')">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <div class="modal-title">Add Shop Item</div>
+      <button class="modal-close" onclick="closeModal('add-event-modal')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="modal-field">
+      <label>Type</label>
+      <select id="ae-type">
+        <option value="schedule">Schedule</option>
+        <option value="work_order">Work Order</option>
+        <option value="emphasis">Emphasis</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Title</label>
+      <input type="text" id="ae-title" placeholder="e.g. Building Cleanup">
+    </div>
+    <div class="modal-field">
+      <label>Day</label>
+      <select id="ae-day">
+        <option value="">— Select —</option>
+        <option value="Friday">Friday</option>
+        <option value="Friday/Saturday">Friday/Saturday</option>
+        <option value="Saturday">Saturday</option>
+        <option value="Sunday">Sunday</option>
+      </select>
+    </div>
+    <div class="modal-field" style="display:flex;gap:12px">
+      <div style="flex:1">
+        <label>Start Time</label>
+        <input type="text" id="ae-start" placeholder="0830">
+      </div>
+      <div style="flex:1">
+        <label>End Time</label>
+        <input type="text" id="ae-end" placeholder="1000">
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Details (optional)</label>
+      <textarea id="ae-details" rows="2" placeholder="POC, location, notes"></textarea>
+    </div>
+    <div class="modal-field" id="ae-wo-field">
+      <label>WO Number (optional)</label>
+      <input type="text" id="ae-wo" placeholder="WO# 202600000">
+    </div>
+    <div id="ae-error" class="login-error" style="display:none"></div>
+    <button class="modal-submit" onclick="submitAddEvent()">Add Item</button>
+  </div>
+</div>
+
 </div>
 <script>
 /* ── State ─────────────────────────────────────── */
@@ -1149,13 +1366,15 @@ function taskHTML(t) {
   const orig = badgeFor(t.urgency, 'none');
   const apptParts = [t.appt_day, t.appt_time, t.appt_location].filter(Boolean);
   let det = apptParts.length ? apptParts.join(' · ') + (t.details ? ' · ' + t.details : '') : (t.details || '');
-  return `<div class="task-item" id="ti-${t.id}" data-id="${t.id}" data-state="${t.state}" data-ou="${t.urgency}" data-ob="${orig.text}" onclick="cycleTask(this,event)">
+  const flagCls = t.is_flagged ? ' flagged' : '';
+  const flagStar = t.is_flagged ? '<span class="flag-star">★</span>' : '';
+  return `<div class="task-item${flagCls}" id="ti-${t.id}" data-id="${t.id}" data-state="${t.state}" data-ou="${t.urgency}" data-ob="${orig.text}" onclick="cycleTask(this,event)">
     <div class="chk">
       <svg class="ic ic-part" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M2.5 5h5" stroke="var(--warn)" stroke-width="1.8" stroke-linecap="round"/></svg>
       <svg class="ic ic-done" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.5 5 4 7.5 8.5 2.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <div class="task-body">
-      <div class="task-title">${t.title}</div>
+      <div class="task-title">${flagStar}${t.title}</div>
       ${det ? `<div class="task-det">${det}</div>` : ''}
       <button class="note-btn" onclick="toggleNote(event,'ti-${t.id}')">${NOTE_ICO}${t.note ? 'View note' : 'Add note'}</button>
       <div class="note-area" id="note-ti-${t.id}">
@@ -1261,10 +1480,19 @@ async function loadShopEvents() {
 function buildShopEvents(events) {
   const el = document.getElementById('shop-events-list');
   if (!el) return;
+  const isSup = ['supervisor','leadership'].includes(currentMember?.role);
   const byDay = {};
   for (const e of events) { if (!byDay[e.day]) byDay[e.day]=[]; byDay[e.day].push(e); }
   const dayOrder = ['Friday','Friday/Saturday','Saturday','Sunday'];
   let html = '';
+  if (isSup) {
+    html += `<div style="margin-bottom:14px">
+      <button class="add-btn" onclick="openAddEvent()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+        Add Item
+      </button>
+    </div>`;
+  }
   for (const day of dayOrder) {
     if (!byDay[day]) continue;
     html += `<div class="task-group"><div class="grp-lbl">${day}</div>`;
@@ -1282,11 +1510,16 @@ function buildShopEvents(events) {
           ${det ? `<div class="task-det">${det}</div>` : ''}
         </div>
         <div class="badge ${bcls}">${blbl}</div>
+        ${isSup ? `<button class="act-btn del" title="Delete item" style="margin-left:6px" onclick="event.stopPropagation();deleteEvent(${e.id})">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4"/></svg>
+        </button>` : ''}
       </div>`;
     }
     html += '</div>';
   }
-  el.innerHTML = html || '<p style="color:var(--t2);padding:12px 4px">No shop events for this UTA.</p>';
+  if (!events.length && !isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events for this UTA.</p>';
+  if (!events.length && isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events yet. Use the button above to add one.</p>';
+  el.innerHTML = html;
 }
 
 /* ── Shop members ───────────────────────────────── */
@@ -1390,14 +1623,27 @@ async function renderMemberTasks(memberId) {
     const res = await fetch('/api/shop/members/'+memberId+'/tasks');
     if (!res.ok) throw new Error();
     const tasks = await res.json();
-    if (!tasks.length) { inner.innerHTML = '<p style="color:var(--t2);font-size:13px">No tasks this UTA.</p>'; return; }
+    const isSup = ['supervisor','leadership'].includes(currentMember?.role);
+
+    // Add Task button at top
+    let html = '';
+    if (isSup) {
+      html += `<div style="margin-bottom:14px">
+        <button class="add-btn" onclick="event.stopPropagation();openAddTask(${memberId})">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+          Add Task
+        </button>
+      </div>`;
+    }
+
+    if (!tasks.length && !isSup) { inner.innerHTML = '<p style="color:var(--t2);font-size:13px">No tasks this UTA.</p>'; return; }
+
     const cats = {};
     for (const t of tasks) {
       if (t.is_upcoming) continue;
       if (!cats[t.category_code]) cats[t.category_code] = { label: t.category_label, tasks: [] };
       cats[t.category_code].tasks.push(t);
     }
-    let html = '';
     for (const [,cat] of Object.entries(cats)) {
       const d = cat.tasks.filter(t => t.state === 'done').length;
       html += `<div class="mem-task-group">
@@ -1406,13 +1652,23 @@ async function renderMemberTasks(memberId) {
         const sc = t.state==='done'?'var(--ok)':t.state==='partial'?'var(--warn)':'var(--t3)';
         const si = t.state==='done'?'✓':t.state==='partial'?'–':'○';
         const isDone = t.state === 'done';
+        const flagCls = t.is_flagged ? ' flagged' : '';
+        const flagStar = t.is_flagged ? '<span class="flag-star">★</span>' : '';
         html += `<div class="mem-task">
           <span class="mem-task-icon" style="color:${sc}">${si}</span>
           <div class="mem-task-body">
-            <div class="mem-task-title">${t.title}</div>
+            <div class="mem-task-title">${flagStar}${t.title}</div>
             ${t.details ? `<div class="mem-task-sub">${t.details}</div>` : ''}
             ${t.note    ? `<div class="mem-task-sub note">Note: ${t.note}</div>` : ''}
           </div>
+          ${isSup ? `<div class="task-actions">
+            <button class="act-btn${t.is_flagged?' flagged':''}" title="${t.is_flagged?'Unflag':'Flag as important'}" onclick="event.stopPropagation();flagTask(${t.id},${memberId},${!!t.is_flagged})">
+              <svg viewBox="0 0 16 16" fill="${t.is_flagged?'currentColor':'none'}" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l1.8 3.7 4 .6-2.9 2.8.7 4L8 10.7l-3.6 1.9.7-4-2.9-2.8 4-.6L8 1.5z"/></svg>
+            </button>
+            <button class="act-btn del" title="Delete task" onclick="event.stopPropagation();deleteTask(${t.id},${memberId})">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4"/></svg>
+            </button>
+          </div>` : ''}
           <button class="mem-task-done${isDone?' is-done':''}" onclick="supToggle(event,${t.id},${memberId},'${t.state}')">
             ${isDone ? 'Undo' : 'Mark Done'}
           </button>
@@ -1420,6 +1676,11 @@ async function renderMemberTasks(memberId) {
       }
       html += '</div>';
     }
+
+    if (!Object.keys(cats).length && isSup) {
+      html += '<p style="color:var(--t2);font-size:13px">No tasks yet. Use the button above to add one.</p>';
+    }
+
     inner.innerHTML = html;
   } catch {
     inner.innerHTML = '<p style="color:var(--urgent);font-size:13px">Failed to load.</p>';
@@ -1597,6 +1858,146 @@ function switchView(btn) {
   if (name === 'member') loadTasks();
   if (name === 'supervisor') { loadShopEvents(); loadShopMembers(); }
   if (name === 'leadership') loadSquadron();
+}
+
+/* ── Modal helpers ──────────────────────────────── */
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+
+let cachedCategories = null;
+async function getCategories() {
+  if (cachedCategories) return cachedCategories;
+  const res = await fetch('/api/categories');
+  if (res.ok) cachedCategories = await res.json();
+  return cachedCategories || [];
+}
+
+/* ── Add Task ──────────────────────────────────── */
+async function openAddTask(memberId) {
+  const cats = await getCategories();
+  const catSel = document.getElementById('at-category');
+  catSel.innerHTML = cats.filter(c => c.code !== 'upcoming').map(c =>
+    `<option value="${c.code}">${c.label}</option>`
+  ).join('');
+
+  const memSel = document.getElementById('at-member');
+  memSel.innerHTML = shopMembers.map(m =>
+    `<option value="${m.id}" ${m.id===memberId?'selected':''}>${m.rank} ${m.last_name}, ${m.first_name}</option>`
+  ).join('');
+
+  document.getElementById('at-title').value = '';
+  document.getElementById('at-details').value = '';
+  document.getElementById('at-urgency').value = 'this_uta';
+  document.getElementById('at-error').style.display = 'none';
+  openModal('add-task-modal');
+  setTimeout(() => document.getElementById('at-title').focus(), 100);
+}
+
+async function submitAddTask() {
+  const btn = document.getElementById('at-submit');
+  const err = document.getElementById('at-error');
+  err.style.display = 'none';
+  const title = document.getElementById('at-title').value.trim();
+  if (!title) { err.textContent = 'Title is required'; err.style.display = ''; return; }
+  btn.disabled = true; btn.textContent = 'Adding…';
+  try {
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        member_id: parseInt(document.getElementById('at-member').value),
+        category_code: document.getElementById('at-category').value,
+        title,
+        details: document.getElementById('at-details').value.trim() || null,
+        urgency: document.getElementById('at-urgency').value,
+      }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    closeModal('add-task-modal');
+    const expandedMember = document.querySelector('.mem-item.expanded');
+    if (expandedMember) {
+      const mid = parseInt(expandedMember.id.replace('memitem-',''));
+      await renderMemberTasks(mid);
+    }
+    await refreshShopMembers();
+  } catch (e) {
+    err.textContent = e.message || 'Failed to add task'; err.style.display = '';
+  }
+  btn.disabled = false; btn.textContent = 'Add Task';
+}
+
+/* ── Delete Task ───────────────────────────────── */
+async function deleteTask(taskId, memberId) {
+  if (!confirm('Delete this task?')) return;
+  try {
+    await fetch('/api/tasks/' + taskId, { method: 'DELETE' });
+    await renderMemberTasks(memberId);
+    await refreshShopMembers();
+  } catch (e) { console.error('delete failed', e); }
+}
+
+/* ── Flag Task ─────────────────────────────────── */
+async function flagTask(taskId, memberId, currentlyFlagged) {
+  try {
+    await fetch('/api/tasks/' + taskId + '/flag', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_flagged: !currentlyFlagged }),
+    });
+    await renderMemberTasks(memberId);
+    // Also refresh member's own view if they're the same person
+    if (memberId === currentMember?.id) await loadTasks();
+  } catch (e) { console.error('flag failed', e); }
+}
+
+/* ── Add Shop Event ────────────────────────────── */
+function openAddEvent() {
+  document.getElementById('ae-title').value = '';
+  document.getElementById('ae-details').value = '';
+  document.getElementById('ae-day').value = '';
+  document.getElementById('ae-start').value = '';
+  document.getElementById('ae-end').value = '';
+  document.getElementById('ae-wo').value = '';
+  document.getElementById('ae-type').value = 'schedule';
+  document.getElementById('ae-error').style.display = 'none';
+  openModal('add-event-modal');
+  setTimeout(() => document.getElementById('ae-title').focus(), 100);
+}
+
+async function submitAddEvent() {
+  const err = document.getElementById('ae-error');
+  err.style.display = 'none';
+  const title = document.getElementById('ae-title').value.trim();
+  if (!title) { err.textContent = 'Title is required'; err.style.display = ''; return; }
+  try {
+    const res = await fetch('/api/shop/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_type: document.getElementById('ae-type').value,
+        title,
+        day: document.getElementById('ae-day').value || null,
+        start_time: document.getElementById('ae-start').value.trim() || null,
+        end_time: document.getElementById('ae-end').value.trim() || null,
+        details: document.getElementById('ae-details').value.trim() || null,
+        wo_number: document.getElementById('ae-wo').value.trim() || null,
+      }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    closeModal('add-event-modal');
+    await loadShopEvents();
+  } catch (e) {
+    err.textContent = e.message || 'Failed to add item'; err.style.display = '';
+  }
+}
+
+/* ── Delete Shop Event ─────────────────────────── */
+async function deleteEvent(eventId) {
+  if (!confirm('Delete this shop item?')) return;
+  try {
+    await fetch('/api/shop/events/' + eventId, { method: 'DELETE' });
+    await loadShopEvents();
+  } catch (e) { console.error('delete event failed', e); }
 }
 </script>
 </body>

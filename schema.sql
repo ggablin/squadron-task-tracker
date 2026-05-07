@@ -36,20 +36,23 @@ CREATE TABLE IF NOT EXISTS members (
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
-  id           SERIAL PRIMARY KEY,
-  uta_cycle_id INTEGER REFERENCES uta_cycles(id),
-  member_id    INTEGER REFERENCES members(id),
-  category_id  INTEGER REFERENCES task_categories(id),
-  title        VARCHAR(255) NOT NULL,
-  details      TEXT,
-  urgency      VARCHAR(20) DEFAULT 'this_uta'
-                 CHECK (urgency IN ('overdue','this_uta','next_uta','future','info')),
-  appt_day     VARCHAR(20),
-  appt_time    VARCHAR(20),
-  appt_location VARCHAR(100),
-  is_upcoming  BOOLEAN DEFAULT false,
-  sort_order   INTEGER DEFAULT 99,
-  created_at   TIMESTAMP DEFAULT NOW()
+  id             SERIAL PRIMARY KEY,
+  uta_cycle_id   INTEGER REFERENCES uta_cycles(id),
+  member_id      INTEGER REFERENCES members(id),
+  category_id    INTEGER REFERENCES task_categories(id),
+  title          VARCHAR(255) NOT NULL,
+  details        TEXT,
+  urgency        VARCHAR(20) DEFAULT 'this_uta'
+                   CHECK (urgency IN ('overdue','this_uta','next_uta','future','info')),
+  appt_day       VARCHAR(20),
+  appt_time      VARCHAR(20),
+  appt_location  VARCHAR(100),
+  is_upcoming    BOOLEAN DEFAULT false,
+  is_flagged     BOOLEAN DEFAULT false,
+  flagged_by_id  INTEGER REFERENCES members(id),
+  created_by_id  INTEGER REFERENCES members(id),
+  sort_order     INTEGER DEFAULT 99,
+  created_at     TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS task_completions (
@@ -63,19 +66,29 @@ CREATE TABLE IF NOT EXISTS task_completions (
 );
 
 CREATE TABLE IF NOT EXISTS shop_events (
-  id           SERIAL PRIMARY KEY,
-  uta_cycle_id INTEGER REFERENCES uta_cycles(id),
-  shop_id      INTEGER REFERENCES shops(id),
-  event_type   VARCHAR(20) CHECK (event_type IN ('schedule','work_order','emphasis')),
-  day          VARCHAR(20),
-  start_time   VARCHAR(10),
-  end_time     VARCHAR(10),
-  title        VARCHAR(255) NOT NULL,
-  details      TEXT,
-  wo_number    VARCHAR(50),
-  sort_order   INTEGER DEFAULT 99,
-  created_at   TIMESTAMP DEFAULT NOW()
+  id            SERIAL PRIMARY KEY,
+  uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
+  shop_id       INTEGER REFERENCES shops(id),
+  event_type    VARCHAR(20) CHECK (event_type IN ('schedule','work_order','emphasis')),
+  day           VARCHAR(20),
+  start_time    VARCHAR(10),
+  end_time      VARCHAR(10),
+  title         VARCHAR(255) NOT NULL,
+  details       TEXT,
+  wo_number     VARCHAR(50),
+  created_by_id INTEGER REFERENCES members(id),
+  sort_order    INTEGER DEFAULT 99,
+  created_at    TIMESTAMP DEFAULT NOW()
 );
+
+-- Migration: add columns to existing tables (safe to run multiple times)
+DO $$ BEGIN
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+  ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+EXCEPTION WHEN others THEN NULL;
+END $$;
 
 -- Session storage for connect-pg-simple
 CREATE TABLE IF NOT EXISTS session (

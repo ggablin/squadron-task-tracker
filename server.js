@@ -114,6 +114,7 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT t.id, t.title, t.details, t.urgency,
              t.appt_day, t.appt_time, t.appt_location, t.is_upcoming,
+             t.is_flagged,
              cat.code  AS category_code,
              cat.label AS category_label,
              COALESCE(tc.state, 'none') AS state,
@@ -123,7 +124,7 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE t.member_id = $1
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
-      ORDER BY cat.sort_order, t.sort_order, t.id
+      ORDER BY cat.sort_order, t.is_flagged DESC NULLS LAST, t.sort_order, t.id
     `, [req.session.memberId]);
     res.json(rows);
   } catch (err) {
@@ -162,17 +163,176 @@ app.put('/api/tasks/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ── Create Task (supervisor: own shop, leadership: any) ─────────────────────
+
+app.post('/api/tasks', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const { member_id, category_code, title, details, urgency, appt_day, appt_time, appt_location, is_upcoming } = req.body;
+    if (!member_id || !category_code || !title) {
+      return res.status(400).json({ error: 'member_id, category_code, and title are required' });
+    }
+
+    // Check target member exists and is in caller's shop (unless leadership)
+    const { rows: mr } = await pool.query(
+      'SELECT shop_id FROM members WHERE id = $1 AND active = true', [member_id]
+    );
+    if (!mr.length) return res.status(404).json({ error: 'Member not found' });
+    if (req.session.role === 'supervisor' && mr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot add tasks for members outside your shop' });
+    }
+
+    // Resolve category
+    const { rows: catRows } = await pool.query(
+      'SELECT id FROM task_categories WHERE code = $1', [category_code]
+    );
+    if (!catRows.length) return res.status(400).json({ error: 'Invalid category_code' });
+
+    const { rows: [task] } = await pool.query(`
+      INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, details, urgency,
+                         appt_day, appt_time, appt_location, is_upcoming, created_by_id, sort_order)
+      VALUES ((SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1),
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 99)
+      RETURNING *
+    `, [member_id, catRows[0].id, title, details || null, urgency || 'this_uta',
+        appt_day || null, appt_time || null, appt_location || null,
+        is_upcoming || false, req.session.memberId]);
+
+    res.json(task);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Delete Task (supervisor: own shop, leadership: any) ─────────────────────
+
+app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+
+    // Check task exists and caller has permission
+    const { rows: tr } = await pool.query(`
+      SELECT t.member_id, m.shop_id FROM tasks t
+      JOIN members m ON m.id = t.member_id
+      WHERE t.id = $1
+    `, [taskId]);
+    if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+    if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot delete tasks outside your shop' });
+    }
+
+    await pool.query('DELETE FROM task_completions WHERE task_id = $1', [taskId]);
+    await pool.query('DELETE FROM tasks WHERE id = $1', [taskId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Flag Task (supervisor: own shop, leadership: any) ───────────────────────
+
+app.put('/api/tasks/:id/flag', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+    const { is_flagged } = req.body;
+
+    const { rows: tr } = await pool.query(`
+      SELECT t.member_id, m.shop_id FROM tasks t
+      JOIN members m ON m.id = t.member_id
+      WHERE t.id = $1
+    `, [taskId]);
+    if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+    if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    await pool.query(
+      'UPDATE tasks SET is_flagged = $1, flagged_by_id = $2 WHERE id = $3',
+      [!!is_flagged, req.session.memberId, taskId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Get Task Categories (for add-task form) ─────────────────────────────────
+
+app.get('/api/categories', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT code, label FROM task_categories ORDER BY sort_order'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── My Shop ───────────────────────────────────────────────────────────────────
 
 app.get('/api/shop/events', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT * FROM shop_events
+      SELECT id, event_type, day, start_time, end_time, title, details, wo_number, sort_order FROM shop_events
       WHERE shop_id = $1
         AND uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       ORDER BY sort_order
     `, [req.session.shopId]);
     res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Create Shop Event (supervisor: own shop, leadership: any) ────────────────
+
+app.post('/api/shop/events', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const { event_type, day, start_time, end_time, title, details, wo_number, shop_id } = req.body;
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    if (!event_type || !['schedule','work_order','emphasis'].includes(event_type)) {
+      return res.status(400).json({ error: 'event_type must be schedule, work_order, or emphasis' });
+    }
+
+    const targetShopId = req.session.role === 'leadership' && shop_id ? shop_id : req.session.shopId;
+    if (req.session.role === 'supervisor' && shop_id && shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot add events to other shops' });
+    }
+
+    const { rows: [event] } = await pool.query(`
+      INSERT INTO shop_events (uta_cycle_id, shop_id, event_type, day, start_time, end_time,
+                               title, details, wo_number, created_by_id, sort_order)
+      VALUES ((SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1),
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, 99)
+      RETURNING *
+    `, [targetShopId, event_type, day || null, start_time || null, end_time || null,
+        title, details || null, wo_number || null, req.session.memberId]);
+
+    res.json(event);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Delete Shop Event (supervisor: own shop, leadership: any) ────────────────
+
+app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id);
+    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    if (!er.length) return res.status(404).json({ error: 'Event not found' });
+    if (req.session.role === 'supervisor' && er[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot delete events from other shops' });
+    }
+
+    await pool.query('DELETE FROM shop_events WHERE id = $1', [eventId]);
+    res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -212,7 +372,7 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
     }
 
     const { rows } = await pool.query(`
-      SELECT t.id, t.title, t.details, t.urgency, t.is_upcoming,
+      SELECT t.id, t.title, t.details, t.urgency, t.is_upcoming, t.is_flagged,
              cat.code  AS category_code,
              cat.label AS category_label,
              COALESCE(tc.state, 'none') AS state,
@@ -222,7 +382,7 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE t.member_id = $1
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
-      ORDER BY cat.sort_order, t.sort_order, t.id
+      ORDER BY cat.sort_order, t.is_flagged DESC NULLS LAST, t.sort_order, t.id
     `, [memberId]);
     res.json(rows);
   } catch (err) {
