@@ -753,7 +753,18 @@
     .act-btn.del:hover { color: var(--urgent); background: var(--urg-bg); }
 
     /* ── Flagged task indicator ─────────────────── */
-    .task-item.flagged { border-left: 3px solid var(--warn); }
+    .task-item.flagged {
+      border-left: 3px solid var(--warn);
+      background: var(--wrn-bg);
+    }
+    .mem-task.flagged {
+      border-left: 3px solid var(--warn);
+      background: var(--wrn-bg);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-left: -10px;
+      margin-right: -4px;
+    }
     .flag-star {
       color: var(--warn); font-size: 11px;
       margin-right: 4px; vertical-align: middle;
@@ -1493,30 +1504,54 @@ function buildShopEvents(events) {
       </button>
     </div>`;
   }
+  // Separate work orders from schedule/emphasis items
+  const workOrders = events.filter(e => e.event_type === 'work_order');
+  const schedItems = events.filter(e => e.event_type !== 'work_order');
+
+  // Helper to render a single event row
+  function eventRow(e) {
+    const isWO  = e.event_type==='work_order';
+    const isEmp = e.event_type==='emphasis';
+    const time  = e.start_time ? e.start_time+(e.end_time?'–'+e.end_time:'') : '';
+    const det   = [time, e.details].filter(Boolean).join(' · ');
+    const bcls  = isWO ? 'b-upcoming' : isEmp ? 'b-urgent' : 'b-upcoming';
+    const blbl  = isWO ? 'WO' : isEmp ? 'Emphasis' : (e.day||'').split('/')[0].slice(0,3);
+    return `<div class="task-item" style="cursor:default">
+      <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
+      <div class="task-body">
+        <div class="task-title">${isWO ? (e.wo_number ? e.wo_number+' — ' : '') : ''}${e.title}</div>
+        ${det ? `<div class="task-det">${det}</div>` : ''}
+      </div>
+      <div class="badge ${bcls}">${blbl}</div>
+      ${isSup ? `<button class="act-btn del" title="Delete item" style="margin-left:6px" onclick="event.stopPropagation();deleteEvent(${e.id})">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4"/></svg>
+      </button>` : ''}
+    </div>`;
+  }
+
+  // Schedule & emphasis items grouped by day
+  const schedByDay = {};
+  for (const e of schedItems) { const d = e.day||'Unscheduled'; if (!schedByDay[d]) schedByDay[d]=[]; schedByDay[d].push(e); }
   for (const day of dayOrder) {
-    if (!byDay[day]) continue;
+    if (!schedByDay[day]) continue;
     html += `<div class="task-group"><div class="grp-lbl">${day}</div>`;
-    for (const e of byDay[day]) {
-      const isWO  = e.event_type==='work_order';
-      const isEmp = e.event_type==='emphasis';
-      const time  = e.start_time ? e.start_time+(e.end_time?'–'+e.end_time:'') : '';
-      const det   = [time, e.details].filter(Boolean).join(' · ');
-      const bcls  = isWO ? 'b-upcoming' : isEmp ? 'b-urgent' : 'b-upcoming';
-      const blbl  = isWO ? 'WO' : isEmp ? 'Emphasis' : day.split('/')[0].slice(0,3);
-      html += `<div class="task-item" style="cursor:default">
-        <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
-        <div class="task-body">
-          <div class="task-title">${isWO ? e.wo_number+' — ' : ''}${e.title}</div>
-          ${det ? `<div class="task-det">${det}</div>` : ''}
-        </div>
-        <div class="badge ${bcls}">${blbl}</div>
-        ${isSup ? `<button class="act-btn del" title="Delete item" style="margin-left:6px" onclick="event.stopPropagation();deleteEvent(${e.id})">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4"/></svg>
-        </button>` : ''}
-      </div>`;
-    }
+    for (const e of schedByDay[day]) html += eventRow(e);
     html += '</div>';
   }
+  // Catch any unscheduled non-WO items
+  if (schedByDay['Unscheduled']) {
+    html += `<div class="task-group"><div class="grp-lbl">Unscheduled</div>`;
+    for (const e of schedByDay['Unscheduled']) html += eventRow(e);
+    html += '</div>';
+  }
+
+  // Work orders in their own section
+  if (workOrders.length) {
+    html += `<div class="task-group"><div class="grp-lbl">Work Orders</div>`;
+    for (const e of workOrders) html += eventRow(e);
+    html += '</div>';
+  }
+
   if (!events.length && !isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events for this UTA.</p>';
   if (!events.length && isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events yet. Use the button above to add one.</p>';
   el.innerHTML = html;
@@ -1654,7 +1689,7 @@ async function renderMemberTasks(memberId) {
         const isDone = t.state === 'done';
         const flagCls = t.is_flagged ? ' flagged' : '';
         const flagStar = t.is_flagged ? '<span class="flag-star">★</span>' : '';
-        html += `<div class="mem-task">
+        html += `<div class="mem-task${flagCls}">
           <span class="mem-task-icon" style="color:${sc}">${si}</span>
           <div class="mem-task-body">
             <div class="mem-task-title">${flagStar}${t.title}</div>
