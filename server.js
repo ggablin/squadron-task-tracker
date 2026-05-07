@@ -30,6 +30,21 @@ app.use(session({
   },
 }));
 
+// ── Auto-migration (runs once on startup) ──────────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+      ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+    `);
+    console.log('Migration check complete');
+  } catch (e) {
+    console.error('Migration warning:', e.message);
+  }
+})();
+
 // ── Middleware ───────────────────────────────────────────────────────────────
 
 function requireAuth(req, res, next) {
