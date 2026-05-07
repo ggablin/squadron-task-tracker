@@ -302,6 +302,27 @@ app.get('/api/squadron/members', requireAuth, requireRole('leadership'), async (
   }
 });
 
+app.get('/api/squadron/shops/:shopId/members', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT m.id, m.last_name, m.first_name, m.rank,
+             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                         AS total_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)  AS done_tasks
+      FROM members m
+      LEFT JOIN tasks t ON t.member_id = m.id
+        AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      LEFT JOIN task_completions tc ON tc.task_id = t.id
+      WHERE m.active = true AND m.shop_id = $1
+      GROUP BY m.id, m.last_name, m.first_name, m.rank
+      ORDER BY m.last_name, m.first_name
+    `, [req.params.shopId]);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Static ────────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, 'public')));

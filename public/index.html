@@ -1426,6 +1426,43 @@ async function renderMemberTasks(memberId) {
   }
 }
 
+async function toggleShop(shopId) {
+  const item  = document.getElementById('shopitem-'+shopId);
+  const panel = document.getElementById('shop-expand-'+shopId);
+  const inner = document.getElementById('shop-expand-inner-'+shopId);
+  const isOpen = item.classList.toggle('expanded');
+  panel.classList.toggle('open', isOpen);
+  item.querySelector('.chevron').style.transform = isOpen ? 'rotate(90deg)' : '';
+  if (isOpen && inner.querySelector('p')) await renderShopMembers(shopId);
+}
+
+async function renderShopMembers(shopId) {
+  const inner = document.getElementById('shop-expand-inner-'+shopId);
+  if (!inner) return;
+  try {
+    const res = await fetch('/api/squadron/shops/'+shopId+'/members');
+    if (!res.ok) throw new Error();
+    const members = await res.json();
+    if (!members.length) {
+      inner.innerHTML = '<p style="color:var(--t2);font-size:13px">No active members.</p>';
+      return;
+    }
+    inner.innerHTML = members.map(m => {
+      const done  = parseInt(m.done_tasks)||0;
+      const total = parseInt(m.total_tasks)||0;
+      const pct   = total ? Math.round(done/total*100) : 0;
+      return `<div class="shop-mem-row">
+        <div class="shop-mem-rank-c">${m.rank}</div>
+        <div class="shop-mem-name-c">${m.last_name}, ${m.first_name[0]}.</div>
+        <div class="shop-mem-bar-c"><div class="shop-mem-fill-c" style="width:${pct}%"></div></div>
+        <div class="shop-mem-pct-c">${pct}%</div>
+      </div>`;
+    }).join('');
+  } catch {
+    inner.innerHTML = '<p style="color:var(--urgent);font-size:13px">Failed to load.</p>';
+  }
+}
+
 async function supToggle(event, taskId, memberId, currentState) {
   event.stopPropagation();
   const newState = currentState === 'done' ? 'none' : 'done';
@@ -1516,14 +1553,24 @@ async function loadSquadron() {
       const mems  = parseInt(s.member_count || 0);
       const p     = total ? Math.round(done / total * 100) : 0;
       const color = p >= 80 ? 'var(--done)' : p >= 40 ? 'var(--t1)' : 'var(--urgent)';
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-weight:600;font-size:14px">${s.shop}</div>
-          <div style="font-size:12px;color:var(--t2);margin-top:2px">${mems} member${mems !== 1 ? 's' : ''} · ${done}/${total} tasks done</div>
+      const initials = s.shop.split(/\s+/).map(w => w[0]).join('').slice(0,3).toUpperCase();
+      return `<div class="shop-item" id="shopitem-${s.id}">
+        <div class="shop-row" onclick="toggleShop(${s.id})">
+          <div class="shop-icon">${initials}</div>
+          <div class="shop-meta-wrap">
+            <div class="shop-name">${s.shop}</div>
+            <div class="shop-sub">${mems} member${mems !== 1 ? 's' : ''} · ${done}/${total} tasks done</div>
+          </div>
+          <div><div class="shop-pct" style="color:${color}">${p}%</div></div>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
         </div>
-        <div style="font-size:20px;font-weight:700;color:${color}">${p}%</div>
+        <div class="expand-panel" id="shop-expand-${s.id}">
+          <div class="shop-expand-inner" id="shop-expand-inner-${s.id}">
+            <p style="color:var(--t2);font-size:13px">Loading…</p>
+          </div>
+        </div>
       </div>`;
-    }).join('') + '<div style="height:1px"></div>';
+    }).join('');
 
   } catch(e) { console.error('loadSquadron', e); }
 }
