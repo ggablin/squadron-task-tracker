@@ -81,6 +81,24 @@ CREATE TABLE IF NOT EXISTS shop_events (
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS squadron_events (
+  id            SERIAL PRIMARY KEY,
+  uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
+  day           VARCHAR(20),
+  start_time    VARCHAR(10),
+  end_time      VARCHAR(10),
+  title         VARCHAR(255) NOT NULL,
+  details       TEXT,
+  kind          VARCHAR(20) CHECK (kind IN
+                  ('formation','training','meeting','briefing','medical','work','admin','lunch')),
+  is_concurrent BOOLEAN DEFAULT false,
+  emphasis      TEXT,
+  attendees     JSONB,
+  created_by_id INTEGER REFERENCES members(id),
+  sort_order    INTEGER DEFAULT 99,
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+
 -- Migration: add columns to existing tables (safe to run multiple times)
 DO $$ BEGIN
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
