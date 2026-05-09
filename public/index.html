@@ -407,6 +407,8 @@
       -webkit-tap-highlight-color: transparent;
     }
     .mem-row:hover { background: var(--cream); }
+    .mem-row.readonly { cursor: default; }
+    .mem-row.readonly:hover { background: transparent; }
     .avatar {
       width: 36px; height: 36px; border-radius: 50%;
       background: var(--text); color: #fff;
@@ -600,6 +602,68 @@
     }
 
     .sq-bottom-grid > * { margin: 0; }
+
+    /* ── Org chart ──────────────────────────────── */
+    #sq-orgchart { margin-bottom: 24px; }
+    .org-leader-row {
+      padding: 16px 18px; margin-bottom: 16px;
+      display: flex; flex-wrap: wrap; gap: 14px;
+    }
+    .org-leader-row:empty { display: none; }
+    .org-shops-grid {
+      display: grid; grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    @media (min-width: 760px) {
+      .org-shops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .org-shop-card {
+      background: var(--bg);
+      border-radius: var(--r);
+      border: 2px solid var(--border);
+      padding: 16px 18px;
+    }
+    .org-shop-name {
+      font-size: 13px; font-weight: 700; letter-spacing: -.01em;
+      margin-bottom: 12px;
+    }
+    .org-section-lbl {
+      font-size: 9.5px; font-weight: 600; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--t3);
+      margin: 10px 0 8px;
+    }
+    .org-section-lbl:first-child { margin-top: 0; }
+    .org-people {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+    }
+    .org-people.supervisors { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+    .org-person {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 10px;
+      background: var(--cream);
+      min-width: 0;
+    }
+    .org-person.supervisor {
+      background: var(--bg);
+      border: 1.5px solid var(--bm);
+    }
+    .org-person.leader {
+      background: var(--text); color: var(--bg);
+    }
+    [data-theme="dark"] .org-person.leader { background: var(--text); color: var(--bg); }
+    .org-av {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--text); color: var(--bg);
+      font-size: 11px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .org-person.leader .org-av { background: var(--bg); color: var(--text); }
+    .org-meta { min-width: 0; }
+    .org-name { font-size: 13px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-rank { font-size: 11px; color: var(--t2); margin-top: 1px; }
+    .org-person.leader .org-rank { color: var(--t3); }
+    .org-empty { font-size: 12px; color: var(--t2); padding: 4px 0; }
 
     /* Desktop-only / mobile-only utility */
     .desk-only { display: none; }
@@ -1227,6 +1291,19 @@
     <!-- ═══ LEADERSHIP VIEW ═══════════════════════ -->
     <div id="view-leadership" class="view">
 
+      <!-- Org chart (visible to all members) -->
+      <div id="sq-orgchart">
+        <div class="sec-hd">
+          <div class="sec-title">Squadron Org Chart</div>
+          <div class="sec-sub">Active members, grouped by shop</div>
+        </div>
+        <div id="org-leadership-row" class="card org-leader-row"></div>
+        <div id="org-shops-grid" class="org-shops-grid"></div>
+      </div>
+
+      <!-- Leadership-only rollups -->
+      <div id="sq-rollups">
+
       <!-- HERO: gauge + bar chart + 2 stat blocks with arrows -->
       <div class="hero">
 
@@ -1325,6 +1402,8 @@
         <div class="sec-sub">Tap a shop to expand</div>
       </div>
       <div class="card" id="shop-list"></div>
+
+      </div><!-- /#sq-rollups -->
 
     </div>
 
@@ -1486,7 +1565,7 @@ function showApp() {
   populateUserUI();
   loadTasks();
   loadShopEvents();
-  if (['supervisor','leadership'].includes(currentMember.role)) loadShopMembers();
+  loadShopMembers();
   if (currentMember.role === 'leadership') loadSquadron();
 }
 
@@ -1507,14 +1586,10 @@ function populateUserUI() {
 
 function applyRole() {
   const role = currentMember?.role;
-  if (role === 'member') {
-    document.querySelectorAll('[data-view="supervisor"]').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('[data-view="leadership"]').forEach(el => el.style.display = 'none');
-  } else if (role === 'supervisor') {
-    document.querySelectorAll('[data-view="leadership"]').forEach(el => el.style.display = 'none');
-  }
-  const sec = document.getElementById('shop-members-section');
-  if (sec) sec.style.display = ['supervisor','leadership'].includes(role) ? '' : 'none';
+  // All 3 tabs are visible to every authenticated member; per-section
+  // gating below hides leadership-only rollups and supervisor-only edit affordances.
+  const rollups = document.getElementById('sq-rollups');
+  if (rollups) rollups.style.display = role === 'leadership' ? '' : 'none';
 }
 
 /* ── Login ──────────────────────────────────────── */
@@ -1832,25 +1907,33 @@ async function refreshShopMembers() {
 function buildMembers() {
   const el = document.getElementById('member-list');
   if (!el) return;
+  const isSup = ['supervisor','leadership'].includes(currentMember?.role);
   el.innerHTML = shopMembers.map(m => {
     const done  = parseInt(m.done_tasks)||0;
     const total = parseInt(m.total_tasks)||0;
     const pct   = total ? Math.round(done/total*100) : 0;
     const dc    = pct===100?'dot-ok':pct>=50?'dot-warn':'dot-bad';
     const init  = m.first_name[0]+m.last_name[0];
+    const rowAttrs = isSup ? `class="mem-row" onclick="toggleMem(${m.id})"` : `class="mem-row readonly"`;
+    const chevron = isSup
+      ? `<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`
+      : '';
+    const expand = isSup
+      ? `<div class="expand-panel" id="expand-${m.id}">
+        <div class="mem-expand-inner" id="expand-inner-${m.id}">
+          <p style="color:var(--t2);font-size:13px">Loading…</p>
+        </div>
+      </div>`
+      : '';
     return `<div class="mem-item" id="memitem-${m.id}">
-      <div class="mem-row" onclick="toggleMem(${m.id})">
+      <div ${rowAttrs}>
         <div class="avatar">${init}</div>
         <div class="mem-meta"><div class="mem-name">${m.last_name}, ${m.first_name[0]}.</div><div class="mem-rank">${m.rank}</div></div>
         <div><div class="mem-frac">${done}/${total}</div><div class="mem-frac-sub">${pct}%</div></div>
         <div class="dot ${dc}"></div>
-        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        ${chevron}
       </div>
-      <div class="expand-panel" id="expand-${m.id}">
-        <div class="mem-expand-inner" id="expand-inner-${m.id}">
-          <p style="color:var(--t2);font-size:13px">Loading…</p>
-        </div>
-      </div>
+      ${expand}
     </div>`;
   }).join('');
   barChart('shop-bar-chart', shopMembers.map(m => {
@@ -2011,6 +2094,48 @@ async function supToggle(event, taskId, memberId, currentState) {
   ]);
 }
 
+/* ── Squadron Org Chart (visible to all members) ──── */
+function orgInitials(p) {
+  return ((p.first_name?.[0] || '') + (p.last_name?.[0] || '')).toUpperCase();
+}
+function orgPersonHtml(p, variant) {
+  const cls = variant ? 'org-person ' + variant : 'org-person';
+  const fullName = `${p.last_name}, ${p.first_name?.[0] || ''}.`;
+  const sub = variant === 'leader' && p.shop ? `${p.rank} · ${p.shop}` : p.rank;
+  return `<div class="${cls}">
+    <div class="org-av">${orgInitials(p)}</div>
+    <div class="org-meta">
+      <div class="org-name">${fullName}</div>
+      <div class="org-rank">${sub}</div>
+    </div>
+  </div>`;
+}
+async function loadOrgChart() {
+  try {
+    const res = await fetch('/api/squadron/org-chart');
+    if (!res.ok) return;
+    const { leadership = [], shops = [] } = await res.json();
+
+    document.getElementById('org-leadership-row').innerHTML =
+      leadership.map(p => orgPersonHtml(p, 'leader')).join('');
+
+    document.getElementById('org-shops-grid').innerHTML = shops.map(s => {
+      const sup = s.supervisors.length
+        ? `<div class="org-section-lbl">Supervisors</div>
+           <div class="org-people supervisors">${s.supervisors.map(p => orgPersonHtml(p, 'supervisor')).join('')}</div>`
+        : '';
+      const mem = s.members.length
+        ? `<div class="org-section-lbl">Members</div>
+           <div class="org-people">${s.members.map(p => orgPersonHtml(p)).join('')}</div>`
+        : (s.supervisors.length ? '' : `<div class="org-empty">No members.</div>`);
+      return `<div class="org-shop-card">
+        <div class="org-shop-name">${s.name}</div>
+        ${sup}${mem}
+      </div>`;
+    }).join('');
+  } catch(e) { console.error('loadOrgChart', e); }
+}
+
 /* ── Squadron (leadership) ──────────────────────── */
 async function loadSquadron() {
   try {
@@ -2130,7 +2255,10 @@ function switchView(btn) {
 
   if (name === 'member') { switchMtPane('tasks'); loadTasks(); }
   if (name === 'supervisor') { loadShopEvents(); loadShopMembers(); }
-  if (name === 'leadership') loadSquadron();
+  if (name === 'leadership') {
+    loadOrgChart();
+    if (currentMember?.role === 'leadership') loadSquadron();
+  }
 }
 
 /* ── Modal helpers ──────────────────────────────── */
