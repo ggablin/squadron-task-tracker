@@ -799,6 +799,230 @@
     }
     .confirm-delete .cd-yes { background: var(--urgent); color: #fff; }
     .confirm-delete .cd-no { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+
+    /* ── My Tasks sub-tabs (My Tasks | Timeline) ── */
+    .mt-tabs {
+      display: flex; gap: 4px;
+      background: var(--cream);
+      border-radius: 12px; padding: 4px;
+      border: 1px solid var(--border);
+      margin: 0 0 16px;
+    }
+    .mt-tab {
+      flex: 1; background: transparent; border: 0;
+      padding: 9px 10px; border-radius: 9px;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      color: var(--t2); cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .mt-tab:hover { color: var(--text); }
+    .mt-tab.active { background: var(--text); color: var(--bg); }
+    .mt-pane { display: none; }
+    .mt-pane.active { display: block; }
+
+    /* ── Timeline pane ─────────────────────────── */
+    #mt-pane-timeline {
+      --tl-amber-bg: #f2e2a8; --tl-amber-ink: #6b5712;
+      --tl-peach-bg: #f5ddd5; --tl-peach-ink: #8b3d24;
+      --tl-sage-bg:  #dde5d2; --tl-sage-ink:  #455239;
+      --tl-slate-bg: #dce2e8; --tl-slate-ink: #3d4953;
+      --tl-mauve-bg: #e5d8dd; --tl-mauve-ink: #5a3f4a;
+      --tl-rail-w:   1.5px;
+      --tl-time-col: 62px;
+    }
+    [data-theme="dark"] #mt-pane-timeline {
+      --tl-amber-bg: #3a2f17; --tl-amber-ink: #e8c97a;
+      --tl-peach-bg: #3a201a; --tl-peach-ink: #e8a890;
+      --tl-sage-bg:  #1f2a1c; --tl-sage-ink:  #a8c0a0;
+      --tl-slate-bg: #232a32; --tl-slate-ink: #a8b4c0;
+      --tl-mauve-bg: #2e2027; --tl-mauve-ink: #c8a8b4;
+    }
+
+    .tl-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .tl-head h2 {
+      font-size: 22px; font-weight: 700; letter-spacing: -.015em;
+    }
+    .tl-meta {
+      font-size: 11px; font-weight: 600; color: var(--t2);
+      letter-spacing: .04em; text-transform: uppercase;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tl-seg {
+      display: flex; gap: 4px;
+      background: var(--bg); border-radius: 14px;
+      padding: 4px; border: 1px solid var(--border);
+      margin-bottom: 18px;
+    }
+    .tl-seg-btn {
+      flex: 1; background: transparent; border: 0;
+      padding: 9px 8px 7px; border-radius: 10px;
+      font-family: inherit; color: var(--t2); cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 1px;
+      transition: background .15s, color .15s;
+    }
+    .tl-seg-btn:hover { color: var(--text); }
+    .tl-seg-btn.active { background: var(--text); color: var(--bg); }
+    .tl-day-name { font-size: 13px; font-weight: 700; letter-spacing: -.005em; }
+    .tl-day-date { font-size: 10px; font-weight: 500; opacity: .7; font-variant-numeric: tabular-nums; }
+
+    .timeline { position: relative; padding-left: 0; }
+    .timeline::before {
+      content: ''; position: absolute;
+      left: calc(var(--tl-time-col) - 4px);
+      top: 14px; bottom: 14px;
+      width: var(--tl-rail-w);
+      background: var(--text);
+    }
+    .tl-row {
+      display: grid; grid-template-columns: var(--tl-time-col) 1fr;
+      gap: 18px; margin-bottom: 18px; position: relative;
+    }
+    .tl-row:last-child { margin-bottom: 0; }
+    .tl-time-label {
+      font-size: 14px; font-weight: 700;
+      font-variant-numeric: tabular-nums; letter-spacing: -.005em;
+      text-align: right; padding-top: 8px; padding-right: 12px;
+      color: var(--text); background: var(--bg);
+      position: relative; z-index: 2;
+    }
+    .tl-row::before {
+      content: ''; position: absolute;
+      left: calc(var(--tl-time-col) - 8px); top: 12px;
+      width: 9px; height: 9px;
+      background: var(--text); border-radius: 50%;
+      border: 3px solid var(--bg);
+      box-sizing: content-box; z-index: 3;
+    }
+    .tl-events { display: flex; flex-direction: column; gap: 8px; }
+
+    .tl-event {
+      border: var(--tl-rail-w) dashed var(--text);
+      background: var(--bg);
+      padding: 11px 14px;
+      position: relative;
+    }
+    .tl-event-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 10px; margin-bottom: 4px;
+    }
+    .tl-event-time {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+      color: var(--t2); text-transform: uppercase;
+      font-variant-numeric: tabular-nums; line-height: 1.4;
+    }
+    .tl-event-title {
+      font-size: 14.5px; font-weight: 700; letter-spacing: -.01em;
+      line-height: 1.25; margin-bottom: 3px;
+    }
+    .tl-event-sub { font-size: 12.5px; color: var(--t2); line-height: 1.4; }
+
+    .tl-pill {
+      font-size: 9.5px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; padding: 2px 8px; border-radius: 99px;
+      flex-shrink: 0; white-space: nowrap;
+    }
+    .tl-pill-amber { background: var(--tl-amber-bg); color: var(--tl-amber-ink); }
+    .tl-pill-peach { background: var(--tl-peach-bg); color: var(--tl-peach-ink); }
+    .tl-pill-sage  { background: var(--tl-sage-bg);  color: var(--tl-sage-ink); }
+    .tl-pill-slate { background: var(--tl-slate-bg); color: var(--tl-slate-ink); }
+    .tl-pill-mauve { background: var(--tl-mauve-bg); color: var(--tl-mauve-ink); }
+
+    .tl-event-spine {
+      background: var(--text); border-color: var(--text);
+    }
+    .tl-event-spine .tl-event-time  { color: rgba(255,255,255,.55); }
+    .tl-event-spine .tl-event-title { color: var(--bg); }
+    .tl-event-spine .tl-event-sub   { color: rgba(255,255,255,.72); }
+    [data-theme="dark"] .tl-event-spine .tl-event-time  { color: rgba(0,0,0,.5); }
+    [data-theme="dark"] .tl-event-spine .tl-event-sub   { color: rgba(0,0,0,.7); }
+
+    .tl-event-training {
+      background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0,0,0,.06) 0,
+        rgba(0,0,0,.06) 1px,
+        transparent 1px,
+        transparent 6px
+      );
+    }
+    [data-theme="dark"] .tl-event-training {
+      background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255,255,255,.06) 0,
+        rgba(255,255,255,.06) 1px,
+        transparent 1px,
+        transparent 6px
+      );
+    }
+
+    .tl-event-lunch {
+      border: 0; background: transparent;
+      padding: 6px 0; text-align: center;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .tl-event-lunch::before, .tl-event-lunch::after {
+      content: ''; flex: 1; height: 0;
+      border-top: var(--tl-rail-w) dotted var(--t2);
+      opacity: .5;
+    }
+    .tl-event-lunch .tl-event-title {
+      font-size: 11px; font-weight: 700; letter-spacing: .18em;
+      text-transform: uppercase; color: var(--t2); margin: 0;
+    }
+
+    .tl-event-also {
+      background: transparent;
+      border-color: var(--t2);
+      opacity: .95;
+    }
+    .tl-also-tag {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 9px; font-weight: 700; letter-spacing: .14em;
+      color: var(--t2); text-transform: uppercase; margin-bottom: 6px;
+    }
+    .tl-also-tag::after {
+      content: ''; flex: 1; height: 1px; background: var(--bm);
+    }
+
+    .tl-emphasis {
+      margin-top: 8px;
+      background: var(--urg-bg); color: var(--urgent);
+      font-size: 11px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; padding: 7px 10px; border-radius: 8px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tl-emphasis::before {
+      content: ''; width: 5px; height: 5px;
+      background: var(--urgent); border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .tl-members {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      margin-top: 10px; padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .tl-members-label {
+      width: 100%;
+      font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
+      color: var(--t2); text-transform: uppercase; margin-bottom: 2px;
+    }
+    .tl-chip {
+      font-size: 11.5px; font-weight: 600;
+      padding: 3px 8px; background: var(--cream);
+      border: 1px solid var(--bm); border-radius: 6px;
+      color: var(--text);
+    }
+    .tl-chip .tl-rank { color: var(--t2); font-weight: 500; margin-right: 3px; }
+
+    .tl-day-panel { display: none; }
+    .tl-day-panel.active { display: block; }
+
+    .tl-empty { color: var(--t2); font-size: 13px; padding: 12px 0; }
   </style>
 </head>
 <body>
@@ -886,45 +1110,58 @@
     <!-- ═══ MEMBER VIEW ═══════════════════════════ -->
     <div id="view-member" class="view active">
 
-      <!-- HERO STRIP -->
-      <div class="hero">
+      <div class="mt-tabs" role="tablist">
+        <button class="mt-tab active" data-mt="tasks" onclick="switchMtPane('tasks')">My Tasks</button>
+        <button class="mt-tab" data-mt="timeline" onclick="switchMtPane('timeline')">Timeline</button>
+      </div>
 
-        <div class="hero-section">
-          <div class="hero-gauge">
-            <div class="gauge-wrap">
-              <svg id="g-member" viewBox="0 0 160 92" width="138" height="80"></svg>
-              <div class="gauge-center">
-                <div class="gauge-pct" id="gp-member">43%</div>
-                <div class="gauge-lbl">Complete</div>
+      <div id="mt-pane-tasks" class="mt-pane active">
+
+        <!-- HERO STRIP -->
+        <div class="hero">
+
+          <div class="hero-section">
+            <div class="hero-gauge">
+              <div class="gauge-wrap">
+                <svg id="g-member" viewBox="0 0 160 92" width="138" height="80"></svg>
+                <div class="gauge-center">
+                  <div class="gauge-pct" id="gp-member">43%</div>
+                  <div class="gauge-lbl">Complete</div>
+                </div>
               </div>
-            </div>
-            <div class="stat-row">
-              <div class="stat">
-                <div class="stat-num" id="gs-done">3</div>
-                <div class="stat-lbl">Done</div>
-              </div>
-              <div class="stat-vr"></div>
-              <div class="stat">
-                <div class="stat-num warn" id="gs-left">5</div>
-                <div class="stat-lbl">Remaining</div>
+              <div class="stat-row">
+                <div class="stat">
+                  <div class="stat-num" id="gs-done">3</div>
+                  <div class="stat-lbl">Done</div>
+                </div>
+                <div class="stat-vr"></div>
+                <div class="stat">
+                  <div class="stat-num warn" id="gs-left">5</div>
+                  <div class="stat-lbl">Remaining</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="hero-section">
-          <div class="chart-section">
-            <div class="chart-label-row">
-              <div class="chart-label">Progress by Category</div>
-              <div class="chart-meta" id="member-chart-meta">3 / 8</div>
+          <div class="hero-section">
+            <div class="chart-section">
+              <div class="chart-label-row">
+                <div class="chart-label">Progress by Category</div>
+                <div class="chart-meta" id="member-chart-meta">3 / 8</div>
+              </div>
+              <div class="bar-chart" id="member-bar-chart"></div>
             </div>
-            <div class="bar-chart" id="member-bar-chart"></div>
           </div>
-        </div>
 
-      </div><!-- /hero -->
+        </div><!-- /hero -->
 
-      <div id="member-tasks"></div>
+        <div id="member-tasks"></div>
+
+      </div><!-- /mt-pane-tasks -->
+
+      <div id="mt-pane-timeline" class="mt-pane">
+        <div id="tl-host"><div class="tl-empty">Loading timeline…</div></div>
+      </div>
 
     </div>
 
@@ -1890,7 +2127,7 @@ function switchView(btn) {
   document.getElementById('desk-title').textContent = t;
   document.getElementById('desk-sub').textContent   = s;
 
-  if (name === 'member') loadTasks();
+  if (name === 'member') { switchMtPane('tasks'); loadTasks(); }
   if (name === 'supervisor') { loadShopEvents(); loadShopMembers(); }
   if (name === 'leadership') loadSquadron();
 }
@@ -2033,6 +2270,175 @@ async function deleteEvent(eventId) {
     await fetch('/api/shop/events/' + eventId, { method: 'DELETE' });
     await loadShopEvents();
   } catch (e) { console.error('delete event failed', e); }
+}
+
+/* ── My Tasks sub-tabs ─────────────────────────── */
+function switchMtPane(name) {
+  document.querySelectorAll('.mt-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.mt === name));
+  document.querySelectorAll('.mt-pane').forEach(p =>
+    p.classList.toggle('active', p.id === 'mt-pane-' + name));
+  if (name === 'timeline') loadTimeline();
+}
+
+/* ── Squadron Timeline ─────────────────────────── */
+const TL_DAY_ORDER  = ['Friday', 'Saturday', 'Sunday'];
+const TL_DAY_KEY    = { Friday: 'fri', Saturday: 'sat', Sunday: 'sun' };
+const TL_KIND_PILL  = {
+  training: { text: 'Training', cls: 'tl-pill-amber' },
+  meeting:  { text: 'Meeting',  cls: 'tl-pill-slate' },
+  briefing: { text: 'Briefing', cls: 'tl-pill-slate' },
+  medical:  { text: 'Medical',  cls: 'tl-pill-mauve' },
+  work:     { text: 'Work',     cls: 'tl-pill-sage'  },
+  admin:    { text: 'Admin',    cls: 'tl-pill-slate' },
+};
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function tlEsc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function tlFmtTime(start, end) {
+  if (!start) return '';
+  return end ? `${tlEsc(start)} – ${tlEsc(end)}` : tlEsc(start);
+}
+
+function tlDayDate(startDateStr, dayName) {
+  if (!startDateStr) return '';
+  const d = new Date(startDateStr + 'T00:00:00');
+  const offset = TL_DAY_ORDER.indexOf(dayName);
+  if (offset < 0) return '';
+  d.setDate(d.getDate() + offset);
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+}
+
+function tlEventCard(ev) {
+  if (ev.kind === 'lunch') {
+    return `<div class="tl-event tl-event-lunch"><div class="tl-event-title">${tlEsc(ev.title)}</div></div>`;
+  }
+
+  const cls = ['tl-event'];
+  if (ev.kind === 'formation') cls.push('tl-event-spine');
+  if (ev.kind === 'training')  cls.push('tl-event-training');
+  if (ev.is_concurrent)        cls.push('tl-event-also');
+
+  const pillSpec = TL_KIND_PILL[ev.kind];
+  const pillHtml = pillSpec
+    ? `<span class="tl-pill ${pillSpec.cls}">${pillSpec.text}</span>`
+    : '';
+
+  const headHtml = `
+    <div class="tl-event-head">
+      <div class="tl-event-time">${tlFmtTime(ev.start_time, ev.end_time)}</div>
+      ${pillHtml}
+    </div>`;
+
+  const subHtml = ev.details
+    ? `<div class="tl-event-sub">${tlEsc(ev.details)}</div>`
+    : '';
+
+  const emphasisHtml = ev.emphasis
+    ? `<div class="tl-emphasis">${tlEsc(ev.emphasis)}</div>`
+    : '';
+
+  const attendees = Array.isArray(ev.attendees) ? ev.attendees : [];
+  const membersHtml = attendees.length
+    ? `<div class="tl-members">
+         <div class="tl-members-label">Attending</div>
+         ${attendees.map(m =>
+           `<span class="tl-chip"><span class="tl-rank">${tlEsc(m.rank)}</span>${tlEsc(m.last)}</span>`
+         ).join('')}
+       </div>`
+    : '';
+
+  const alsoTagHtml = ev.is_concurrent ? `<div class="tl-also-tag">Also Running</div>` : '';
+
+  return `<div class="${cls.join(' ')}">
+    ${alsoTagHtml}
+    ${headHtml}
+    <div class="tl-event-title">${tlEsc(ev.title)}</div>
+    ${subHtml}
+    ${emphasisHtml}
+    ${membersHtml}
+  </div>`;
+}
+
+function tlRenderDay(dayName, dayDate, events) {
+  // Group by start_time to form rows.
+  const byTime = new Map();
+  for (const ev of events) {
+    const key = ev.start_time || '';
+    if (!byTime.has(key)) byTime.set(key, []);
+    byTime.get(key).push(ev);
+  }
+  const rows = [...byTime.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const rowsHtml = rows.map(([time, evs]) => `
+    <div class="tl-row">
+      <div class="tl-time-label">${tlEsc(time)}</div>
+      <div class="tl-events">
+        ${evs.map(tlEventCard).join('')}
+      </div>
+    </div>`).join('');
+
+  const empty = events.length ? '' : '<div class="tl-empty">No events scheduled.</div>';
+
+  return `
+    <section class="tl-day-panel" data-tl-day="${TL_DAY_KEY[dayName]}">
+      <div class="tl-head">
+        <h2>${tlEsc(dayName)}</h2>
+        <div class="tl-meta">${tlEsc(dayDate)}</div>
+      </div>
+      ${empty || `<div class="timeline">${rowsHtml}</div>`}
+    </section>`;
+}
+
+function tlSwitchDay(key) {
+  document.querySelectorAll('.tl-seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tlDay === key));
+  document.querySelectorAll('.tl-day-panel').forEach(p =>
+    p.classList.toggle('active', p.dataset.tlDay === key));
+}
+
+async function loadTimeline() {
+  const host = document.getElementById('tl-host');
+  if (!host) return;
+  try {
+    const res = await fetch('/api/squadron/timeline');
+    if (!res.ok) throw new Error('Failed to load timeline');
+    const { uta, events } = await res.json();
+    const startDate = uta?.start_date ? uta.start_date.slice(0, 10) : null;
+
+    const byDay = { Friday: [], Saturday: [], Sunday: [] };
+    for (const ev of events) {
+      if (byDay[ev.day]) byDay[ev.day].push(ev);
+    }
+
+    const segHtml = `
+      <div class="tl-seg" role="tablist">
+        ${TL_DAY_ORDER.map((d, i) => `
+          <button class="tl-seg-btn ${i === 0 ? 'active' : ''}"
+                  data-tl-day="${TL_DAY_KEY[d]}"
+                  onclick="tlSwitchDay('${TL_DAY_KEY[d]}')">
+            <span class="tl-day-name">${d}</span>
+            <span class="tl-day-date">${tlEsc(tlDayDate(startDate, d))}</span>
+          </button>`).join('')}
+      </div>`;
+
+    const panelsHtml = TL_DAY_ORDER.map(d =>
+      tlRenderDay(d, tlDayDate(startDate, d), byDay[d])
+    ).join('');
+
+    host.innerHTML = segHtml + panelsHtml;
+    const firstPanel = host.querySelector(`.tl-day-panel[data-tl-day="${TL_DAY_KEY[TL_DAY_ORDER[0]]}"]`);
+    if (firstPanel) firstPanel.classList.add('active');
+  } catch (e) {
+    console.error('loadTimeline', e);
+    host.innerHTML = '<div class="tl-empty">Could not load timeline.</div>';
+  }
 }
 </script>
 </body>

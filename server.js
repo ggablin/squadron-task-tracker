@@ -38,6 +38,23 @@ app.use(session({
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
       ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+      CREATE TABLE IF NOT EXISTS squadron_events (
+        id            SERIAL PRIMARY KEY,
+        uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
+        day           VARCHAR(20),
+        start_time    VARCHAR(10),
+        end_time      VARCHAR(10),
+        title         VARCHAR(255) NOT NULL,
+        details       TEXT,
+        kind          VARCHAR(20) CHECK (kind IN
+                        ('formation','training','meeting','briefing','medical','work','admin','lunch')),
+        is_concurrent BOOLEAN DEFAULT false,
+        emphasis      TEXT,
+        attendees     JSONB,
+        created_by_id INTEGER REFERENCES members(id),
+        sort_order    INTEGER DEFAULT 99,
+        created_at    TIMESTAMP DEFAULT NOW()
+      );
     `);
     console.log('Migration check complete');
   } catch (e) {
@@ -400,6 +417,34 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
       ORDER BY cat.sort_order, t.is_flagged DESC NULLS LAST, t.sort_order, t.id
     `, [memberId]);
     res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Squadron Timeline (all members) ──────────────────────────────────────────
+
+app.get('/api/squadron/timeline', requireAuth, async (req, res) => {
+  try {
+    const { rows: utaRows } = await pool.query(
+      `SELECT id, name, start_date, end_date FROM uta_cycles WHERE is_current = true LIMIT 1`
+    );
+    const uta = utaRows[0] || null;
+
+    const { rows: events } = await pool.query(`
+      SELECT id, day, start_time, end_time, title, details, kind,
+             is_concurrent, emphasis, attendees, sort_order
+      FROM squadron_events
+      WHERE uta_cycle_id = $1
+      ORDER BY
+        CASE day WHEN 'Friday' THEN 1 WHEN 'Saturday' THEN 2 WHEN 'Sunday' THEN 3 ELSE 4 END,
+        start_time NULLS LAST,
+        is_concurrent ASC,
+        sort_order
+    `, [uta ? uta.id : null]);
+
+    res.json({ uta, events });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
