@@ -399,7 +399,7 @@ app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async
   }
 });
 
-app.get('/api/shop/members', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.get('/api/shop/members', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT m.id, m.last_name, m.first_name, m.rank, m.role,
@@ -565,6 +565,41 @@ app.get('/api/squadron/shops/:shopId/members', requireAuth, requireRole('leaders
       ORDER BY m.last_name, m.first_name
     `, [req.params.shopId]);
     res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Squadron org chart (visible to all authenticated members) ────────────────
+
+app.get('/api/squadron/org-chart', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT m.id, m.rank, m.first_name, m.last_name, m.role,
+             m.shop_id, s.name AS shop_name
+      FROM members m
+      LEFT JOIN shops s ON s.id = m.shop_id
+      WHERE m.active = true
+      ORDER BY s.name, m.last_name, m.first_name
+    `);
+
+    const leadership = [];
+    const shopMap = new Map();
+    for (const r of rows) {
+      const person = { id: r.id, rank: r.rank, first_name: r.first_name, last_name: r.last_name, shop: r.shop_name };
+      if (r.role === 'leadership') {
+        leadership.push(person);
+      } else {
+        if (!shopMap.has(r.shop_id)) {
+          shopMap.set(r.shop_id, { id: r.shop_id, name: r.shop_name, supervisors: [], members: [] });
+        }
+        const bucket = shopMap.get(r.shop_id);
+        if (r.role === 'supervisor') bucket.supervisors.push(person);
+        else bucket.members.push(person);
+      }
+    }
+    res.json({ leadership, shops: Array.from(shopMap.values()) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
