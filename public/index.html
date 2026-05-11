@@ -1083,6 +1083,12 @@
       color: var(--text);
     }
     .tl-chip .tl-rank { color: var(--t2); font-weight: 500; margin-right: 3px; }
+    .tl-chip-shop {
+      font-size: 11.5px; font-weight: 600;
+      padding: 3px 8px; background: #e8f0fe;
+      border: 1px solid #b6d4fe; border-radius: 6px;
+      color: var(--text);
+    }
 
     .tl-day-panel { display: none; }
     .tl-day-panel.active { display: block; }
@@ -2474,11 +2480,14 @@ function tlEventCard(ev) {
     : '';
 
   const attendees = Array.isArray(ev.attendees) ? ev.attendees : [];
+  const hasShops = attendees.some(a => a.shop);
+  const label = hasShops ? 'Shops' : 'Attending';
   const membersHtml = attendees.length
     ? `<div class="tl-members">
-         <div class="tl-members-label">Attending</div>
-         ${attendees.map(m =>
-           `<span class="tl-chip"><span class="tl-rank">${tlEsc(m.rank)}</span>${tlEsc(m.last)}</span>`
+         <div class="tl-members-label">${label}</div>
+         ${attendees.map(a => a.shop
+           ? `<span class="tl-chip-shop">${tlEsc(a.shop)}</span>`
+           : `<span class="tl-chip"><span class="tl-rank">${tlEsc(a.rank)}</span>${tlEsc(a.last)}</span>`
          ).join('')}
        </div>`
     : '';

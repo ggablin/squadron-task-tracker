@@ -4,8 +4,6 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
-const SQUADRON_EVENTS = require('./data/squadron-events');
-
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -58,33 +56,6 @@ app.use(session({
       );
     `);
     console.log('Migration check complete');
-
-    // Self-healing bootstrap: if squadron_events is empty for the current UTA,
-    // seed it from the shared canonical list. Safe to re-run (no-op when populated).
-    const { rows: ucRows } = await pool.query(
-      `SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1`
-    );
-    if (ucRows.length) {
-      const utaId = ucRows[0].id;
-      const { rows: cnt } = await pool.query(
-        'SELECT COUNT(*)::int AS n FROM squadron_events WHERE uta_cycle_id = $1',
-        [utaId]
-      );
-      if (cnt[0].n === 0) {
-        for (const e of SQUADRON_EVENTS) {
-          await pool.query(`
-            INSERT INTO squadron_events
-              (uta_cycle_id, day, start_time, end_time, title, details,
-               kind, is_concurrent, emphasis, attendees, sort_order)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-          `, [utaId, e.day, e.start_time, e.end_time, e.title, e.details,
-              e.kind, e.is_concurrent, e.emphasis,
-              e.attendees ? JSON.stringify(e.attendees) : null,
-              e.sort_order]);
-        }
-        console.log(`Squadron events bootstrapped: ${SQUADRON_EVENTS.length} rows`);
-      }
-    }
   } catch (e) {
     console.error('Migration warning:', e.message);
   }
