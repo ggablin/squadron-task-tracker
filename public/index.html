@@ -1184,6 +1184,7 @@
       <div class="mt-tabs" role="tablist">
         <button class="mt-tab active" data-mt="tasks" onclick="switchMtPane('tasks')">My Tasks</button>
         <button class="mt-tab" data-mt="timeline" onclick="switchMtPane('timeline')">Timeline</button>
+        <button class="mt-tab" data-mt="workorders" onclick="switchMtPane('workorders')">Work Orders</button>
       </div>
 
       <div id="mt-pane-tasks" class="mt-pane active">
@@ -1234,6 +1235,10 @@
         <div id="tl-host"><div class="tl-empty">Loading timeline…</div></div>
       </div>
 
+      <div id="mt-pane-workorders" class="mt-pane">
+        <div id="wo-host"></div>
+      </div>
+
     </div>
 
     <!-- ═══ SUPERVISOR VIEW ═══════════════════════ -->
@@ -1276,9 +1281,9 @@
 
       </div>
 
-      <!-- Shop schedule & work orders — visible to all members -->
+      <!-- Shop schedule — visible to all members -->
       <div class="sec-hd">
-        <div class="sec-title">Shop Schedule &amp; Work Orders</div>
+        <div class="sec-title">Shop Schedule</div>
         <div class="sec-sub">May 2026 UTA</div>
       </div>
       <div id="shop-events-list" style="margin-bottom:24px"></div>
@@ -1804,15 +1809,40 @@ async function saveNote(event, taskId, elId) {
 async function loadShopEvents() {
   const res = await fetch('/api/shop/events');
   if (!res.ok) return;
-  buildShopEvents(await res.json());
+  const events = await res.json();
+  buildShopEvents(events);
+  buildWorkOrders(events);
+}
+
+async function loadWorkOrders() {
+  // Single fetch path lives in loadShopEvents; reuse it so both panes stay in sync.
+  return loadShopEvents();
+}
+
+function shopEventRow(e, isSup) {
+  const isWO  = e.event_type==='work_order';
+  const isEmp = e.event_type==='emphasis';
+  const time  = e.start_time ? e.start_time+(e.end_time?'–'+e.end_time:'') : '';
+  const det   = [time, e.details].filter(Boolean).join(' · ');
+  const bcls  = isWO ? 'b-upcoming' : isEmp ? 'b-urgent' : 'b-upcoming';
+  const blbl  = isWO ? 'WO' : isEmp ? 'Emphasis' : (e.day||'').split('/')[0].slice(0,3);
+  return `<div class="task-item" style="cursor:default">
+    <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
+    <div class="task-body">
+      <div class="task-title">${isWO ? (e.wo_number ? e.wo_number+' — ' : '') : ''}${e.title}</div>
+      ${det ? `<div class="task-det">${det}</div>` : ''}
+    </div>
+    <div class="badge ${bcls}">${blbl}</div>
+    ${isSup ? `<button class="act-btn del" title="Delete item" style="margin-left:6px" onclick="event.stopPropagation();deleteEvent(${e.id})">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4"/></svg>
+    </button>` : ''}
+  </div>`;
 }
 
 function buildShopEvents(events) {
   const el = document.getElementById('shop-events-list');
   if (!el) return;
   const isSup = ['supervisor','leadership'].includes(currentMember?.role);
-  const byDay = {};
-  for (const e of events) { if (!byDay[e.day]) byDay[e.day]=[]; byDay[e.day].push(e); }
   const dayOrder = ['Friday','Friday/Saturday','Saturday','Sunday'];
   let html = '';
   if (isSup) {
@@ -1823,56 +1853,50 @@ function buildShopEvents(events) {
       </button>
     </div>`;
   }
-  // Separate work orders from schedule/emphasis items
-  const workOrders = events.filter(e => e.event_type === 'work_order');
   const schedItems = events.filter(e => e.event_type !== 'work_order');
 
-  // Helper to render a single event row
-  function eventRow(e) {
-    const isWO  = e.event_type==='work_order';
-    const isEmp = e.event_type==='emphasis';
-    const time  = e.start_time ? e.start_time+(e.end_time?'–'+e.end_time:'') : '';
-    const det   = [time, e.details].filter(Boolean).join(' · ');
-    const bcls  = isWO ? 'b-upcoming' : isEmp ? 'b-urgent' : 'b-upcoming';
-    const blbl  = isWO ? 'WO' : isEmp ? 'Emphasis' : (e.day||'').split('/')[0].slice(0,3);
-    return `<div class="task-item" style="cursor:default">
-      <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
-      <div class="task-body">
-        <div class="task-title">${isWO ? (e.wo_number ? e.wo_number+' — ' : '') : ''}${e.title}</div>
-        ${det ? `<div class="task-det">${det}</div>` : ''}
-      </div>
-      <div class="badge ${bcls}">${blbl}</div>
-      ${isSup ? `<button class="act-btn del" title="Delete item" style="margin-left:6px" onclick="event.stopPropagation();deleteEvent(${e.id})">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4"/></svg>
-      </button>` : ''}
-    </div>`;
-  }
-
-  // Schedule & emphasis items grouped by day
   const schedByDay = {};
   for (const e of schedItems) { const d = e.day||'Unscheduled'; if (!schedByDay[d]) schedByDay[d]=[]; schedByDay[d].push(e); }
   for (const day of dayOrder) {
     if (!schedByDay[day]) continue;
     html += `<div class="task-group"><div class="grp-lbl">${day}</div>`;
-    for (const e of schedByDay[day]) html += eventRow(e);
+    for (const e of schedByDay[day]) html += shopEventRow(e, isSup);
     html += '</div>';
   }
-  // Catch any unscheduled non-WO items
   if (schedByDay['Unscheduled']) {
     html += `<div class="task-group"><div class="grp-lbl">Unscheduled</div>`;
-    for (const e of schedByDay['Unscheduled']) html += eventRow(e);
+    for (const e of schedByDay['Unscheduled']) html += shopEventRow(e, isSup);
     html += '</div>';
   }
 
-  // Work orders in their own section
+  if (!schedItems.length && !isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events for this UTA.</p>';
+  if (!schedItems.length && isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events yet. Use the button above to add one.</p>';
+  el.innerHTML = html;
+}
+
+function buildWorkOrders(events) {
+  const el = document.getElementById('wo-host');
+  if (!el) return;
+  const isSup = ['supervisor','leadership'].includes(currentMember?.role);
+  const workOrders = events.filter(e => e.event_type === 'work_order');
+  let html = '';
+  if (isSup) {
+    html += `<div style="margin-bottom:14px">
+      <button class="add-btn" onclick="openAddEvent('work_order')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+        Add Work Order
+      </button>
+    </div>`;
+  }
   if (workOrders.length) {
     html += `<div class="task-group"><div class="grp-lbl">Work Orders</div>`;
-    for (const e of workOrders) html += eventRow(e);
+    for (const e of workOrders) html += shopEventRow(e, isSup);
     html += '</div>';
+  } else if (isSup) {
+    html += '<p style="color:var(--t2);padding:12px 4px">No work orders yet. Use the button above to add one.</p>';
+  } else {
+    html += '<p style="color:var(--t2);padding:12px 4px">No work orders for this UTA.</p>';
   }
-
-  if (!events.length && !isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events for this UTA.</p>';
-  if (!events.length && isSup) html += '<p style="color:var(--t2);padding:12px 4px">No shop events yet. Use the button above to add one.</p>';
   el.innerHTML = html;
 }
 
@@ -2358,14 +2382,14 @@ async function flagTask(taskId, memberId, currentlyFlagged) {
 }
 
 /* ── Add Shop Event ────────────────────────────── */
-function openAddEvent() {
+function openAddEvent(presetType) {
   document.getElementById('ae-title').value = '';
   document.getElementById('ae-details').value = '';
   document.getElementById('ae-day').value = '';
   document.getElementById('ae-start').value = '';
   document.getElementById('ae-end').value = '';
   document.getElementById('ae-wo').value = '';
-  document.getElementById('ae-type').value = 'schedule';
+  document.getElementById('ae-type').value = presetType || 'schedule';
   document.getElementById('ae-error').style.display = 'none';
   openModal('add-event-modal');
   setTimeout(() => document.getElementById('ae-title').focus(), 100);
@@ -2414,6 +2438,7 @@ function switchMtPane(name) {
   document.querySelectorAll('.mt-pane').forEach(p =>
     p.classList.toggle('active', p.id === 'mt-pane-' + name));
   if (name === 'timeline') loadTimeline();
+  if (name === 'workorders') loadWorkOrders();
 }
 
 /* ── Squadron Timeline ─────────────────────────── */
