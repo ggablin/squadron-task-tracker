@@ -605,64 +605,156 @@
 
     /* ── Org chart ──────────────────────────────── */
     #sq-orgchart { margin-bottom: 24px; }
-    .org-leader-row {
-      padding: 16px 18px; margin-bottom: 16px;
-      display: flex; flex-wrap: wrap; gap: 14px;
+
+    /* Staff banner */
+    .org-staff {
+      background: var(--text); color: var(--bg);
+      border-radius: var(--r); padding: 18px 20px;
+      margin-bottom: 16px;
     }
-    .org-leader-row:empty { display: none; }
-    .org-shops-grid {
-      display: grid; grid-template-columns: 1fr;
-      gap: 14px;
+    .org-staff-label {
+      font-size: 9.5px; font-weight: 700; letter-spacing: .14em;
+      text-transform: uppercase; opacity: .5; margin-bottom: 12px;
+    }
+    .org-staff-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+      gap: 10px;
+    }
+    .org-staff-person {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 10px;
+      background: rgba(255,255,255,.08);
+      min-width: 0;
+    }
+    .org-staff-person .org-av {
+      background: var(--bg); color: var(--text);
+    }
+    .org-staff-person .org-name { color: var(--bg); }
+    .org-staff-person .org-pos {
+      font-size: 10px; color: rgba(255,255,255,.5); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .org-staff-person .org-rank-sm {
+      font-size: 10.5px; color: rgba(255,255,255,.45); margin-top: 1px;
+    }
+    [data-theme="dark"] .org-staff {
+      background: var(--cream); color: var(--text);
+    }
+    [data-theme="dark"] .org-staff-person {
+      background: rgba(255,255,255,.05);
+    }
+    [data-theme="dark"] .org-staff-person .org-av {
+      background: var(--text); color: var(--bg);
+    }
+    [data-theme="dark"] .org-staff-person .org-name { color: var(--text); }
+    [data-theme="dark"] .org-staff-person .org-pos { color: var(--t2); }
+    [data-theme="dark"] .org-staff-person .org-rank-sm { color: var(--t3); }
+
+    /* Flight cards */
+    .org-flights-grid {
+      display: grid; grid-template-columns: 1fr; gap: 14px;
     }
     @media (min-width: 760px) {
-      .org-shops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .org-flights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-    .org-shop-card {
-      background: var(--bg);
-      border-radius: var(--r);
+    .org-flight {
+      background: var(--bg); border-radius: var(--r);
       border: 2px solid var(--border);
-      padding: 16px 18px;
+      overflow: hidden;
     }
+    .org-flight-hd {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; cursor: pointer;
+      border-left: 4px solid var(--flight-color, var(--t3));
+      user-select: none; -webkit-tap-highlight-color: transparent;
+    }
+    .org-flight-hd:hover { background: var(--cream); }
+    .org-flight-hd .org-flight-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--flight-color, var(--t3));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .org-flight-hd .org-flight-info { flex: 1; min-width: 0; }
+    .org-flight-hd .org-flight-name {
+      font-size: 14px; font-weight: 700; letter-spacing: -.01em;
+    }
+    .org-flight-hd .org-flight-sub {
+      font-size: 11.5px; color: var(--t2); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .org-flight-hd .org-flight-chevron {
+      font-size: 16px; color: var(--t3); transition: transform .2s;
+      flex-shrink: 0;
+    }
+    .org-flight.open .org-flight-chevron { transform: rotate(90deg); }
+    .org-flight-body {
+      display: none; padding: 0 16px 16px; border-left: 4px solid var(--flight-color, var(--t3));
+    }
+    .org-flight.open .org-flight-body { display: block; }
+
+    /* Flight leaders row */
+    .org-flight-leaders {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-bottom: 14px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .org-flight-leaders:empty { display: none; }
+
+    /* Shop cards inside flight */
+    .org-shop-card {
+      background: var(--cream); border-radius: var(--rs);
+      padding: 12px 14px; margin-bottom: 10px;
+    }
+    .org-shop-card:last-child { margin-bottom: 0; }
     .org-shop-name {
-      font-size: 13px; font-weight: 700; letter-spacing: -.01em;
-      margin-bottom: 12px;
+      font-size: 12px; font-weight: 700; letter-spacing: .02em;
+      text-transform: uppercase; color: var(--t2); margin-bottom: 10px;
     }
     .org-section-lbl {
-      font-size: 9.5px; font-weight: 600; letter-spacing: .12em;
+      font-size: 9px; font-weight: 600; letter-spacing: .12em;
       text-transform: uppercase; color: var(--t3);
-      margin: 10px 0 8px;
+      margin: 8px 0 6px;
     }
     .org-section-lbl:first-child { margin-top: 0; }
     .org-people {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 8px;
+      gap: 6px;
     }
-    .org-people.supervisors { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+
+    /* Person chips */
     .org-person {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 10px; border-radius: 10px;
-      background: var(--cream);
-      min-width: 0;
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 8px;
+      background: var(--bg); min-width: 0;
+    }
+    .org-person.ncoic {
+      background: var(--bg); border: 1.5px solid var(--bm);
     }
     .org-person.supervisor {
-      background: var(--bg);
-      border: 1.5px solid var(--bm);
+      background: var(--bg); border: 1px solid var(--border);
     }
-    .org-person.leader {
-      background: var(--text); color: var(--bg);
+    .org-person.flt-leader {
+      background: var(--bg); border: 1.5px solid var(--flight-color, var(--bm));
     }
-    [data-theme="dark"] .org-person.leader { background: var(--text); color: var(--bg); }
     .org-av {
-      width: 30px; height: 30px; border-radius: 50%;
+      width: 28px; height: 28px; border-radius: 50%;
       background: var(--text); color: var(--bg);
-      font-size: 11px; font-weight: 600;
+      font-size: 10px; font-weight: 600;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
-    .org-person.leader .org-av { background: var(--bg); color: var(--text); }
+    .org-person.ncoic .org-av { background: var(--flight-color, var(--text)); }
+    .org-person.flt-leader .org-av { background: var(--flight-color, var(--text)); }
     .org-meta { min-width: 0; }
-    .org-name { font-size: 13px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .org-rank { font-size: 11px; color: var(--t2); margin-top: 1px; }
-    .org-person.leader .org-rank { color: var(--t3); }
+    .org-name {
+      font-size: 12.5px; font-weight: 600; line-height: 1.2;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .org-rank-sm { font-size: 10.5px; color: var(--t2); margin-top: 1px; }
+    .org-pos {
+      font-size: 10px; color: var(--t2); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .org-empty { font-size: 12px; color: var(--t2); padding: 4px 0; }
 
     /* Desktop-only / mobile-only utility */
@@ -1305,11 +1397,11 @@
       <!-- Org chart (visible to all members) -->
       <div id="sq-orgchart">
         <div class="sec-hd">
-          <div class="sec-title">Squadron Org Chart</div>
-          <div class="sec-sub">Active members, grouped by shop</div>
+          <div class="sec-title">Chain of Command</div>
+          <div class="sec-sub">108th Civil Engineer Squadron</div>
         </div>
-        <div id="org-leadership-row" class="card org-leader-row"></div>
-        <div id="org-shops-grid" class="org-shops-grid"></div>
+        <div id="org-staff-banner"></div>
+        <div id="org-flights"></div>
       </div>
 
       <!-- Leadership-only rollups -->
@@ -2125,44 +2217,116 @@ async function supToggle(event, taskId, memberId, currentState) {
 }
 
 /* ── Squadron Org Chart (visible to all members) ──── */
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+const FLIGHT_COLORS = {
+  'Infrastructure': '#5f7a5a',
+  'Construction':   '#4a8fb5',
+  'R&O':            '#8b6aad',
+  'EM':             '#996b4f',
+};
+const FLIGHT_ABBR = {
+  'Infrastructure': 'IF', 'Construction': 'CF', 'R&O': 'RO', 'EM': 'EM',
+};
+
 function orgInitials(p) {
   return ((p.first_name?.[0] || '') + (p.last_name?.[0] || '')).toUpperCase();
 }
-function orgPersonHtml(p, variant) {
+function orgPersonChip(p, variant) {
   const cls = variant ? 'org-person ' + variant : 'org-person';
-  const fullName = `${p.last_name}, ${p.first_name?.[0] || ''}.`;
-  const sub = variant === 'leader' && p.shop ? `${p.rank} · ${p.shop}` : p.rank;
+  const name = `${p.last_name}, ${p.first_name?.[0] || ''}.`;
+  const posLine = p.position ? `<div class="org-pos">${esc(p.position)}</div>` : '';
+  const rankLine = `<div class="org-rank-sm">${esc(p.rank)}</div>`;
   return `<div class="${cls}">
     <div class="org-av">${orgInitials(p)}</div>
     <div class="org-meta">
-      <div class="org-name">${fullName}</div>
-      <div class="org-rank">${sub}</div>
+      <div class="org-name">${esc(name)}</div>
+      ${posLine || rankLine}
     </div>
   </div>`;
 }
+
+function orgShopHtml(shop) {
+  const ncoicHtml = shop.ncoic
+    ? `<div class="org-section-lbl">${esc(shop.ncoic.position || 'NCOIC')}</div>
+       <div class="org-people">${orgPersonChip(shop.ncoic, 'ncoic')}</div>`
+    : '';
+  const supHtml = shop.supervisors.length
+    ? `<div class="org-section-lbl">Supervisors</div>
+       <div class="org-people">${shop.supervisors.map(p => orgPersonChip(p, 'supervisor')).join('')}</div>`
+    : '';
+  const memHtml = shop.members.length
+    ? `<div class="org-section-lbl">Members</div>
+       <div class="org-people">${shop.members.map(p => orgPersonChip(p)).join('')}</div>`
+    : '';
+  return `<div class="org-shop-card">
+    <div class="org-shop-name">${esc(shop.name)}</div>
+    ${ncoicHtml}${supHtml}${memHtml}
+  </div>`;
+}
+
 async function loadOrgChart() {
   try {
     const res = await fetch('/api/squadron/org-chart');
     if (!res.ok) return;
-    const { leadership = [], shops = [] } = await res.json();
+    const { staff = [], flights = [] } = await res.json();
 
-    document.getElementById('org-leadership-row').innerHTML =
-      leadership.map(p => orgPersonHtml(p, 'leader')).join('');
+    // Staff banner
+    document.getElementById('org-staff-banner').innerHTML = staff.length ? `
+      <div class="org-staff">
+        <div class="org-staff-label">Squadron Staff</div>
+        <div class="org-staff-grid">
+          ${staff.map(p => {
+            const name = `${p.last_name}, ${p.first_name?.[0] || ''}.`;
+            return `<div class="org-staff-person">
+              <div class="org-av">${orgInitials(p)}</div>
+              <div class="org-meta">
+                <div class="org-name">${esc(name)}</div>
+                ${p.position ? `<div class="org-pos">${esc(p.position)}</div>` : `<div class="org-rank-sm">${esc(p.rank)}</div>`}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : '';
 
-    document.getElementById('org-shops-grid').innerHTML = shops.map(s => {
-      const sup = s.supervisors.length
-        ? `<div class="org-section-lbl">Supervisors</div>
-           <div class="org-people supervisors">${s.supervisors.map(p => orgPersonHtml(p, 'supervisor')).join('')}</div>`
-        : '';
-      const mem = s.members.length
-        ? `<div class="org-section-lbl">Members</div>
-           <div class="org-people">${s.members.map(p => orgPersonHtml(p)).join('')}</div>`
-        : (s.supervisors.length ? '' : `<div class="org-empty">No members.</div>`);
-      return `<div class="org-shop-card">
-        <div class="org-shop-name">${s.name}</div>
-        ${sup}${mem}
+    // Flight cards
+    document.getElementById('org-flights').innerHTML = `
+      <div class="org-flights-grid">
+        ${flights.map(f => {
+          const color = FLIGHT_COLORS[f.name] || '#888';
+          const abbr = FLIGHT_ABBR[f.name] || '??';
+          const supt = f.leaders.find(l => l.position === 'Flight Superintendent');
+          const suptText = supt ? `${supt.rank} ${supt.last_name}` : '';
+          const shopCount = f.shops.length;
+          const memberCount = f.shops.reduce((n, s) =>
+            n + (s.ncoic ? 1 : 0) + s.supervisors.length + s.members.length, 0) + f.leaders.length;
+          const sub = suptText
+            ? `${suptText} · ${shopCount} shop${shopCount !== 1 ? 's' : ''} · ${memberCount} members`
+            : `${shopCount} shop${shopCount !== 1 ? 's' : ''} · ${memberCount} members`;
+
+          const leadersHtml = f.leaders.length
+            ? `<div class="org-flight-leaders">${f.leaders.map(p => orgPersonChip(p, 'flt-leader')).join('')}</div>`
+            : '';
+
+          return `<div class="org-flight" style="--flight-color:${color}">
+            <div class="org-flight-hd" onclick="this.parentElement.classList.toggle('open')">
+              <div class="org-flight-icon">${abbr}</div>
+              <div class="org-flight-info">
+                <div class="org-flight-name">${esc(f.name)} Flight</div>
+                <div class="org-flight-sub">${esc(sub)}</div>
+              </div>
+              <div class="org-flight-chevron">›</div>
+            </div>
+            <div class="org-flight-body">
+              ${leadersHtml}
+              ${f.shops.map(orgShopHtml).join('')}
+            </div>
+          </div>`;
+        }).join('')}
       </div>`;
-    }).join('');
   } catch(e) { console.error('loadOrgChart', e); }
 }
 

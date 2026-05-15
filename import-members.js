@@ -39,6 +39,8 @@ async function run() {
       const slug       = String(row.slug       || '').trim().toLowerCase();
       const active     = String(row.active     || '').trim().toUpperCase() !== 'FALSE';
       const email      = String(row.email      || '').trim() || null;
+      const flight     = String(row.flight    || '').trim() || null;
+      const position   = String(row.position  || '').trim() || null;
 
       if (!last_name || !first_name || !rank || !shop || !slug) {
         console.warn(`  SKIP (missing fields): row ${JSON.stringify({ last_name, first_name, rank, shop, slug })}`);
@@ -69,22 +71,23 @@ async function run() {
       );
 
       if (existing.length) {
-        // Update name/rank/shop/role/active/email — never overwrite password_hash
+        // Update name/rank/shop/role/active/email/flight/position — never overwrite password_hash
         await client.query(`
           UPDATE members
-          SET last_name=$1, first_name=$2, rank=$3, shop_id=$4, role=$5, active=$6, email=$7
-          WHERE slug=$8
-        `, [last_name, first_name, rank, shopId, role, active, email, slug]);
-        console.log(`  UPDATE  ${rank.padEnd(6)} ${slug.padEnd(15)} role:${role}`);
+          SET last_name=$1, first_name=$2, rank=$3, shop_id=$4, role=$5, active=$6, email=$7,
+              flight=$8, position=$9
+          WHERE slug=$10
+        `, [last_name, first_name, rank, shopId, role, active, email, flight, position, slug]);
+        console.log(`  UPDATE  ${rank.padEnd(6)} ${slug.padEnd(15)} role:${role}${flight ? '  flt:'+flight : ''}`);
         updated++;
       } else {
         // New member — initial password = slug (last name)
         const hash = await bcrypt.hash(slug, 10);
         await client.query(`
-          INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash, active, email)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [last_name, first_name, rank, shopId, role, slug, hash, active, email]);
-        console.log(`  INSERT  ${rank.padEnd(6)} ${slug.padEnd(15)} role:${role}  pwd:${slug}`);
+          INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash, active, email, flight, position)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `, [last_name, first_name, rank, shopId, role, slug, hash, active, email, flight, position]);
+        console.log(`  INSERT  ${rank.padEnd(6)} ${slug.padEnd(15)} role:${role}  pwd:${slug}${flight ? '  flt:'+flight : ''}`);
         added++;
       }
     }

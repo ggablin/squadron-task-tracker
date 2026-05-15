@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS members (
   password_hash VARCHAR(255) NOT NULL,
   active        BOOLEAN DEFAULT true,
   email         VARCHAR(255),
+  flight        VARCHAR(30),
+  position      VARCHAR(50),
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
@@ -105,6 +107,8 @@ DO $$ BEGIN
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
   ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+  ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
+  ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
 EXCEPTION WHEN others THEN NULL;
 END $$;
 

@@ -37,6 +37,8 @@ app.use(session({
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
       ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
       CREATE TABLE IF NOT EXISTS squadron_events (
         id            SERIAL PRIMARY KEY,
         uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
@@ -544,33 +546,86 @@ app.get('/api/squadron/shops/:shopId/members', requireAuth, requireRole('leaders
 
 // ── Squadron org chart (visible to all authenticated members) ────────────────
 
+const SHOP_TO_FLIGHT = {
+  'WFSM': 'Infrastructure', 'HVAC': 'Infrastructure',
+  'Electrical': 'Infrastructure', 'Power Pro': 'Infrastructure',
+  'Structures': 'Construction', 'Heavy Equipment': 'Construction',
+  'Operations': 'R&O', 'EA': 'R&O',
+  'EM': 'EM', 'C2': 'Squadron Staff',
+};
+
+const FLIGHT_ORDER = ['Infrastructure', 'Construction', 'R&O', 'EM'];
+
 app.get('/api/squadron/org-chart', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT m.id, m.rank, m.first_name, m.last_name, m.role,
-             m.shop_id, s.name AS shop_name
+             m.shop_id, s.name AS shop_name, m.flight, m.position
       FROM members m
       LEFT JOIN shops s ON s.id = m.shop_id
       WHERE m.active = true
-      ORDER BY s.name, m.last_name, m.first_name
+      ORDER BY m.last_name, m.first_name
     `);
 
-    const leadership = [];
-    const shopMap = new Map();
+    const staff = [];
+    const flightMap = new Map();
+    for (const f of FLIGHT_ORDER) {
+      flightMap.set(f, { name: f, leaders: [], shops: new Map() });
+    }
+
     for (const r of rows) {
-      const person = { id: r.id, rank: r.rank, first_name: r.first_name, last_name: r.last_name, shop: r.shop_name };
-      if (r.role === 'leadership') {
-        leadership.push(person);
+      const person = {
+        id: r.id, rank: r.rank, first_name: r.first_name,
+        last_name: r.last_name, position: r.position || null,
+        shop: r.shop_name,
+      };
+
+      const memberFlight = r.flight || SHOP_TO_FLIGHT[r.shop_name] || 'Squadron Staff';
+
+      // Squadron Staff goes to the top banner
+      if (memberFlight === 'Squadron Staff') {
+        if (r.role === 'leadership') staff.push(person);
+        // Non-leadership C2 members don't show on org chart (no shop card for C2)
+        continue;
+      }
+
+      const flight = flightMap.get(memberFlight);
+      if (!flight) continue;
+
+      // Flight-level leaders (superintendent, OIC, UTM) — have flight set explicitly + leadership role
+      if (r.flight && r.role === 'leadership' && !['NCOIC', 'SNCOIC'].includes(r.position)) {
+        flight.leaders.push(person);
+        continue;
+      }
+
+      // Shop-level: NCOIC/SNCOIC (leadership with position), supervisors, members
+      const shopName = r.shop_name;
+      if (!shopName || shopName === 'C2') continue;
+
+      if (!flight.shops.has(shopName)) {
+        flight.shops.set(shopName, { name: shopName, ncoic: null, supervisors: [], members: [] });
+      }
+      const shop = flight.shops.get(shopName);
+
+      if (r.role === 'leadership' && (r.position === 'NCOIC' || r.position === 'SNCOIC')) {
+        shop.ncoic = person;
+      } else if (r.role === 'supervisor') {
+        shop.supervisors.push(person);
       } else {
-        if (!shopMap.has(r.shop_id)) {
-          shopMap.set(r.shop_id, { id: r.shop_id, name: r.shop_name, supervisors: [], members: [] });
-        }
-        const bucket = shopMap.get(r.shop_id);
-        if (r.role === 'supervisor') bucket.supervisors.push(person);
-        else bucket.members.push(person);
+        shop.members.push(person);
       }
     }
-    res.json({ leadership, shops: Array.from(shopMap.values()) });
+
+    // Sort staff: Commander first, then Chief, then First Sergeant, then rest
+    const posOrder = { 'Commander': 0, 'Chief Enlisted Manager': 1, 'First Sergeant': 2, 'BCE/Engineering OIC': 3 };
+    staff.sort((a, b) => (posOrder[a.position] ?? 99) - (posOrder[b.position] ?? 99));
+
+    const flights = FLIGHT_ORDER.map(name => {
+      const f = flightMap.get(name);
+      return { name: f.name, leaders: f.leaders, shops: Array.from(f.shops.values()) };
+    });
+
+    res.json({ staff, flights });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
