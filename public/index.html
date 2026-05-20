@@ -299,6 +299,50 @@
     .bar-x { font-size: 10px; color: var(--t2); margin-top: 4px; letter-spacing: .04em; line-height: 1; }
 
     /* ──────────────────────────────────────────────
+       Horizontal progress-bar list (My Tasks hero)
+    ────────────────────────────────────────────── */
+    .hero-bars { display: flex; flex-direction: column; gap: 11px; }
+    .hero-bar-row {
+      display: grid;
+      grid-template-columns: 92px 1fr auto;
+      align-items: center;
+      gap: 14px;
+    }
+    .hero-bar-row.overall {
+      padding-bottom: 12px;
+      margin-bottom: 4px;
+      border-bottom: 1px dashed var(--bm);
+    }
+    .hero-bar-label {
+      font-size: 10.5px; font-weight: 600; color: var(--t2);
+      letter-spacing: .04em; text-transform: uppercase;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .hero-bar-row.overall .hero-bar-label { color: var(--text); font-weight: 700; }
+    .hero-bar-track {
+      height: 8px; background: var(--bm); border-radius: 4px; overflow: hidden;
+    }
+    .hero-bar-row.overall .hero-bar-track { height: 12px; border-radius: 6px; }
+    .hero-bar-fill {
+      height: 100%; background: var(--text); border-radius: 4px;
+      transition: width .35s ease;
+    }
+    .hero-bar-count {
+      font-size: 11.5px; font-weight: 600; color: var(--text);
+      font-variant-numeric: tabular-nums; min-width: 44px; text-align: right;
+    }
+    .hero-bar-count .hbc-tot { color: var(--t3); font-weight: 500; }
+    .hero-bar-row.overall .hero-bar-count { font-size: 13px; }
+
+    /* My Tasks gauge — larger than supervisor/leadership variants */
+    #mt-pane-tasks .gauge-pct { font-size: 28px; }
+    #mt-pane-tasks .gauge-lbl { font-size: 10px; }
+    #mt-pane-tasks .stat-num  { font-size: 34px; }
+    @media (max-width: 767px) {
+      #mt-pane-tasks .stat-num { font-size: 28px; }
+    }
+
+    /* ──────────────────────────────────────────────
        Compact mini-stats grid
     ────────────────────────────────────────────── */
     .mini-grid {
@@ -1287,7 +1331,7 @@
           <div class="hero-section">
             <div class="hero-gauge">
               <div class="gauge-wrap">
-                <svg id="g-member" viewBox="0 0 160 92" width="138" height="80"></svg>
+                <svg id="g-member" viewBox="0 0 160 92" width="172" height="100"></svg>
                 <div class="gauge-center">
                   <div class="gauge-pct" id="gp-member">43%</div>
                   <div class="gauge-lbl">Complete</div>
@@ -1303,6 +1347,11 @@
                   <div class="stat-num warn" id="gs-left">5</div>
                   <div class="stat-lbl">Remaining</div>
                 </div>
+                <div class="stat-vr"></div>
+                <div class="stat">
+                  <div class="stat-num" id="gs-flagged">0</div>
+                  <div class="stat-lbl">Flagged</div>
+                </div>
               </div>
             </div>
           </div>
@@ -1313,7 +1362,7 @@
                 <div class="chart-label">Progress by Category</div>
                 <div class="chart-meta" id="member-chart-meta">3 / 8</div>
               </div>
-              <div class="bar-chart" id="member-bar-chart"></div>
+              <div class="hero-bars" id="member-bar-list"></div>
             </div>
           </div>
 
@@ -1824,31 +1873,48 @@ function upcomingHTML(t) {
   </div>`;
 }
 
-function getMemberCatBars() {
+function renderMemberBars(checkable, done, total) {
   const cats = {};
-  for (const t of currentTasks) {
-    if (t.is_upcoming) continue;
-    if (!cats[t.category_code]) cats[t.category_code] = {label:t.category_code.slice(0,3).toUpperCase(),done:0,tot:0};
+  const order = [];
+  for (const t of checkable) {
+    if (!cats[t.category_code]) {
+      cats[t.category_code] = { label: t.category_label, done: 0, tot: 0 };
+      order.push(t.category_code);
+    }
     cats[t.category_code].tot++;
-    if (t.state==='done') cats[t.category_code].done++;
+    if (t.state === 'done') cats[t.category_code].done++;
   }
-  return Object.values(cats).map(c => {
-    const pct = c.tot ? Math.round(c.done/c.tot*100) : 100;
-    return {label:c.label, pct, hatch:pct<100&&pct>0};
-  });
+  const overallPct = total ? Math.round(done / total * 100) : 0;
+  const rows = [barRowHTML('Overall', done, total, overallPct, true)];
+  for (const code of order) {
+    const c = cats[code];
+    const pct = c.tot ? Math.round(c.done / c.tot * 100) : 0;
+    rows.push(barRowHTML(c.label, c.done, c.tot, pct, false));
+  }
+  document.getElementById('member-bar-list').innerHTML = rows.join('');
+}
+
+function barRowHTML(label, done, tot, pct, isOverall) {
+  return `<div class="hero-bar-row${isOverall ? ' overall' : ''}">
+    <div class="hero-bar-label">${label}</div>
+    <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${pct}%"></div></div>
+    <div class="hero-bar-count">${done}<span class="hbc-tot">/${tot}</span></div>
+  </div>`;
 }
 
 function updateMemberStats() {
   const checkable = currentTasks.filter(t => !t.is_upcoming);
-  const done  = checkable.filter(t => t.state==='done').length;
-  const total = checkable.length;
-  const pct   = total ? Math.round(done/total*100) : 0;
+  const done    = checkable.filter(t => t.state==='done').length;
+  const total   = checkable.length;
+  const flagged = checkable.filter(t => t.is_flagged).length;
+  const pct     = total ? Math.round(done/total*100) : 0;
   document.getElementById('gp-member').textContent         = pct + '%';
   document.getElementById('gs-done').textContent           = done;
   document.getElementById('gs-left').textContent           = total - done;
+  document.getElementById('gs-flagged').textContent        = flagged;
   document.getElementById('member-chart-meta').textContent = done + ' / ' + total;
   gauge('g-member', pct);
-  barChart('member-bar-chart', getMemberCatBars());
+  renderMemberBars(checkable, done, total);
 }
 
 async function cycleTask(el, event) {
