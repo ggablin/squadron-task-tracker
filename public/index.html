@@ -295,7 +295,7 @@
     }
     .bar-info { text-align: center; }
     .bar-val { font-size: 11.5px; font-weight: 600; color: var(--text); line-height: 1; }
-    .bar-x { font-size: 10px; color: var(--t2); margin-top: 4px; letter-spacing: .04em; line-height: 1; }
+    .bar-x { font-size: 10px; color: var(--t2); margin-top: 4px; letter-spacing: .04em; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* ──────────────────────────────────────────────
        Horizontal progress-bar list (My Tasks hero)
@@ -626,6 +626,18 @@
       /* In hero, gauge + stats inline on desktop */
       .hero-gauge { gap: 24px; }
 
+      /* Leadership hero: weight sections by content need */
+      #hero-leadership .hero-section:first-child {
+        flex: 0 0 auto;
+        min-width: 200px;
+      }
+      #hero-leadership .hero-section:nth-child(2) {
+        flex: 2;
+      }
+      #hero-leadership .hero-section:last-child {
+        flex: 0 0 180px;
+      }
+
       /* Squadron grid for additional cards */
       .sq-bottom-grid {
         display: grid;
@@ -642,12 +654,26 @@
       .stat-vr { height: 30px; }
       .stat { padding: 0 14px; }
       .stat-num { font-size: 26px; }
+      .bar-chart { height: 120px; }
+      .bar-val { font-size: 10px; }
+      .bar-x { font-size: 9px; }
+      .card-pad { padding: 16px; }
+      .mini-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .mini-grid > .mini-cell:nth-child(n+4) {
+        border-top: 1px solid var(--bm);
+        padding-top: 14px;
+        margin-top: 14px;
+      }
+      .mini-grid > .mini-cell:nth-child(4) { border-right: 1px solid var(--bm); }
+      .mini-grid > .mini-cell:nth-child(n+4):last-child { border-right: none; }
     }
 
     .sq-bottom-grid > * { margin: 0; }
 
     /* ── Org chart ──────────────────────────────── */
-    #sq-orgchart { margin-bottom: 24px; }
+    #sq-orgchart { margin-bottom: 32px; }
 
     /* Staff banner */
     .org-staff {
@@ -1267,7 +1293,9 @@
 
     /* ── Hero differentiation ───────────────────── */
     #hero-supervisor { border-bottom: 2px solid var(--bm); }
-    #hero-leadership { border-bottom: 2px solid var(--bm); padding-bottom: 30px; }
+    #hero-leadership { border-bottom: 2px solid var(--bm); padding-bottom: 30px; margin-bottom: 8px; }
+    #view-leadership .sec-hd { margin-top: 12px; }
+    .sq-bottom-grid { margin-top: 8px; }
 
     /* ── Utility classes ────────────────────────── */
     .stat-col-wrap { display: flex; flex-direction: column; gap: 24px; height: 100%; justify-content: center; }
