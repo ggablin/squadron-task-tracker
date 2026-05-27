@@ -286,7 +286,7 @@
       max-width: 30px;
       background: var(--text);
       border-radius: 1px 1px 0 0;
-      min-height: 2px;
+      min-height: 4px;
       transition: height .3s;
     }
     .bar-rect.hatch {
@@ -671,9 +671,12 @@
     }
 
     .sq-bottom-grid > * { margin: 0; }
+    .sq-bottom-grid .bar-chart { height: 100px; }
+    .sq-bottom-grid .chart-label-row { margin-bottom: 10px; }
+    .mini-num .mini-frac { margin-top: 0; margin-left: 1px; }
 
     /* ── Org chart ──────────────────────────────── */
-    #sq-orgchart { margin-bottom: 32px; }
+    #sq-orgchart { margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
 
     /* Staff banner */
     .org-staff {
@@ -2574,9 +2577,8 @@ async function loadSquadron() {
         pct:   c.total ? Math.round(parseInt(c.done) / parseInt(c.total) * 100) : 0,
       })));
       document.getElementById('sq-cat-mini').innerHTML = cats.map(c => {
-        const p = c.total ? Math.round(parseInt(c.done) / parseInt(c.total) * 100) : 0;
         return `<div class="mini-cell">
-          <div class="mini-num">${p}%</div>
+          <div class="mini-num">${c.done}<span class="mini-frac">/${c.total}</span></div>
           <div class="mini-lbl">${c.label}</div>
         </div>`;
       }).join('');
