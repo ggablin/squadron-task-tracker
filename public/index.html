@@ -164,7 +164,6 @@
       flex-shrink: 0;
       position: relative;
     }
-    .mob-eye { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); margin-bottom: 4px; }
     .mob-ttl { font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
     .mob-sub { font-size: 13px; color: var(--t2); margin-top: 3px; }
     .demo-pill {
@@ -438,7 +437,7 @@
        Expandable rows (members, shops)
     ────────────────────────────────────────────── */
     .expand-panel { max-height: 0; overflow: hidden; transition: max-height .28s ease; }
-    .expand-panel.open { max-height: 800px; }
+    .expand-panel.open { max-height: 5000px; }
     .chevron { width: 16px; height: 16px; flex-shrink: 0; color: var(--t3); transition: transform .2s; }
     .expanded .chevron { transform: rotate(90deg); }
 
@@ -465,10 +464,10 @@
 
     .mem-frac { font-size: 13px; font-weight: 600; color: var(--text); }
     .mem-frac-sub { font-size: 10.5px; color: var(--t3); margin-top: 1px; text-align: right; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .dot-ok { background: var(--ok); }
-    .dot-warn { background: var(--warn); }
-    .dot-bad { background: var(--urgent); }
+    .dot { width: 8px; height: 8px; flex-shrink: 0; }
+    .dot-ok   { background: var(--ok);     border-radius: 50%; }
+    .dot-warn { background: var(--warn);   border-radius: 2px; }
+    .dot-bad  { background: var(--urgent); border-radius: 1px; transform: rotate(45deg); }
 
     /* Member expanded — show category mini bar chart */
     .mem-expand-inner { padding: 4px 18px 18px 18px; }
@@ -709,7 +708,6 @@
     .org-flight-hd {
       display: flex; align-items: center; gap: 12px;
       padding: 14px 16px; cursor: pointer;
-      border-left: 4px solid var(--flight-color, var(--t3));
       user-select: none; -webkit-tap-highlight-color: transparent;
     }
     .org-flight-hd:hover { background: var(--cream); }
@@ -733,7 +731,7 @@
     }
     .org-flight.open .org-flight-chevron { transform: rotate(90deg); }
     .org-flight-body {
-      display: none; padding: 0 16px 16px; border-left: 4px solid var(--flight-color, var(--t3));
+      display: none; padding: 0 16px 16px;
     }
     .org-flight.open .org-flight-body { display: block; }
 
@@ -954,11 +952,9 @@
 
     /* ── Flagged task indicator ─────────────────── */
     .task-item.flagged {
-      border-left: 3px solid var(--warn);
       background: var(--wrn-bg);
     }
     .mem-task.flagged {
-      border-left: 3px solid var(--warn);
       background: var(--wrn-bg);
       border-radius: 6px;
       padding: 8px 10px;
@@ -1230,6 +1226,63 @@
     .tl-day-panel.active { display: block; }
 
     .tl-empty { color: var(--t2); font-size: 13px; padding: 12px 0; }
+
+    /* ── Toast notifications ────────────────────── */
+    .toast-container {
+      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+      z-index: 9500; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none; width: max-content; max-width: 90vw;
+    }
+    .toast {
+      padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
+      pointer-events: auto;
+      animation: toastIn .2s ease, toastOut .2s ease 3s forwards;
+    }
+    .toast-success { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok); }
+    .toast-error { background: var(--urg-bg); color: var(--urgent); border: 1px solid var(--urgent); }
+    @keyframes toastIn { from { transform: translateY(12px); opacity: 0; } }
+    @keyframes toastOut { to { opacity: 0; pointer-events: none; } }
+
+    /* ── Loading skeletons ──────────────────────── */
+    .skeleton {
+      height: 52px; border-radius: var(--rs); background: var(--cream);
+      margin-bottom: 6px; animation: pulse 1.2s ease-in-out infinite;
+    }
+    .skeleton-sm { height: 32px; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+    /* ── Onboard banner ─────────────────────────── */
+    .onboard-banner {
+      background: var(--ok-bg); border: 1px solid var(--ok);
+      border-radius: var(--rs); padding: 12px 16px;
+      font-size: 13px; color: var(--ok); margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .onboard-banner button {
+      background: none; border: none; color: var(--ok);
+      cursor: pointer; font-family: inherit; font-size: 12px;
+      font-weight: 600; white-space: nowrap; padding: 4px 8px; border-radius: 6px;
+    }
+    .onboard-banner button:hover { background: var(--ok); color: #fff; }
+
+    /* ── Hero differentiation ───────────────────── */
+    #hero-supervisor { border-bottom: 2px solid var(--bm); }
+    #hero-leadership { border-bottom: 2px solid var(--bm); padding-bottom: 30px; }
+
+    /* ── Utility classes ────────────────────────── */
+    .stat-col-wrap { display: flex; flex-direction: column; gap: 24px; height: 100%; justify-content: center; }
+    .stat-flush { padding: 0; }
+    .mini-grid-2col { grid-template-columns: repeat(2, 1fr); border-top: none; padding-top: 0; }
+    .mini-cell-left { text-align: left; }
+    .alert-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .alert-name { font-size: 13px; font-weight: 600; }
+    .alert-shop { font-size: 11px; color: var(--t2); }
+    .alert-pct { font-size: 18px; font-weight: 700; }
+    .field-row { display: flex; gap: 12px; }
+    .field-row > * { flex: 1; }
+    .mb-sm { margin-bottom: 14px; }
+    .mb-md { margin-bottom: 18px; }
+    .mb-lg { margin-bottom: 24px; }
   </style>
 </head>
 <body>
@@ -1293,7 +1346,6 @@
 
   <!-- ═══ MOBILE HEADER ═════════════════════════ -->
   <header class="mob-hdr">
-    <div class="mob-eye">108th CES UTA Tracker</div>
     <div class="mob-ttl" id="mob-title">May 2026 UTA</div>
     <div class="mob-sub" id="mob-sub"></div>
     <button class="theme-toggle mob-theme" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle theme">
@@ -1324,6 +1376,11 @@
       </div>
 
       <div id="mt-pane-tasks" class="mt-pane active">
+
+        <div class="onboard-banner" id="onboard-banner" style="display:none">
+          <span>Tap a checkbox to mark a task done. Use the note button for details.</span>
+          <button onclick="dismissOnboard()">Got it</button>
+        </div>
 
         <!-- HERO STRIP -->
         <div class="hero">
@@ -1385,7 +1442,7 @@
     <!-- ═══ SUPERVISOR VIEW ═══════════════════════ -->
     <div id="view-supervisor" class="view">
 
-      <div class="hero">
+      <div class="hero" id="hero-supervisor">
 
         <div class="hero-section">
           <div class="hero-gauge">
@@ -1427,7 +1484,7 @@
         <div class="sec-title">Shop Schedule</div>
         <div class="sec-sub">May 2026 UTA</div>
       </div>
-      <div id="shop-events-list" style="margin-bottom:24px"></div>
+      <div id="shop-events-list" class="mb-lg"></div>
 
       <!-- Members section — supervisors and leadership only -->
       <div id="shop-members-section">
@@ -1457,7 +1514,7 @@
       <div id="sq-rollups">
 
       <!-- HERO: gauge + bar chart + 2 stat blocks with arrows -->
-      <div class="hero">
+      <div class="hero" id="hero-leadership">
 
         <div class="hero-section">
           <div class="hero-gauge">
@@ -1493,15 +1550,15 @@
         </div>
 
         <div class="hero-section desk-only">
-          <div style="display:flex; flex-direction:column; gap:24px; height:100%; justify-content:center;">
-            <div class="stat has-arrow" style="padding:0">
+          <div class="stat-col-wrap">
+            <div class="stat has-arrow stat-flush">
               <div class="stat-num warn" id="sq-critical">—</div>
               <div class="stat-lbl-arrow">
                 Critical this UTA
                 <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M6 3l3 3-3 3"/></svg>
               </div>
             </div>
-            <div class="stat has-arrow" style="padding:0">
+            <div class="stat has-arrow stat-flush">
               <div class="stat-num" id="sq-members">—</div>
               <div class="stat-lbl-arrow">
                 Total Members
@@ -1514,13 +1571,13 @@
       </div><!-- /hero -->
 
       <!-- Mobile-only quick-stats (since the desk-only stats don't show on mobile) -->
-      <div class="card mob-only card-pad" style="margin-bottom:18px">
-        <div class="mini-grid" style="grid-template-columns:repeat(2,1fr); border-top:none; padding-top:0">
-          <div class="mini-cell" style="text-align:left">
+      <div class="card mob-only card-pad mb-md">
+        <div class="mini-grid mini-grid-2col">
+          <div class="mini-cell mini-cell-left">
             <div class="mini-num" style="color:var(--urgent)" id="sq-critical-mob">—</div>
             <div class="mini-lbl">Critical This UTA</div>
           </div>
-          <div class="mini-cell" style="text-align:left">
+          <div class="mini-cell mini-cell-left">
             <div class="mini-num" id="sq-members-mob">—</div>
             <div class="mini-lbl">Total Members</div>
           </div>
@@ -1528,10 +1585,10 @@
       </div>
 
       <!-- Squadron breakdown grid -->
-      <div class="sq-bottom-grid" style="margin-bottom:20px">
+      <div class="sq-bottom-grid mb-md">
 
         <div class="card card-pad">
-          <div class="chart-label-row" style="margin-bottom:18px">
+          <div class="chart-label-row mb-md">
             <div class="chart-label">Squadron by Category</div>
             <div class="chart-meta" id="sq-cat-meta">All — members</div>
           </div>
@@ -1540,7 +1597,7 @@
         </div>
 
         <div class="card card-pad">
-          <div class="chart-label-row" style="margin-bottom:18px">
+          <div class="chart-label-row mb-md">
             <div class="chart-label">Members Most Behind</div>
             <div class="chart-meta">Sorted by completion</div>
           </div>
@@ -1651,12 +1708,12 @@
         <option value="Sunday">Sunday</option>
       </select>
     </div>
-    <div class="modal-field" style="display:flex;gap:12px">
-      <div style="flex:1">
+    <div class="modal-field field-row">
+      <div>
         <label>Start Time</label>
         <input type="text" id="ae-start" placeholder="0830">
       </div>
-      <div style="flex:1">
+      <div>
         <label>End Time</label>
         <input type="text" id="ae-end" placeholder="1000">
       </div>
@@ -1674,12 +1731,29 @@
   </div>
 </div>
 
+<div class="toast-container" id="toast-container"></div>
 </div>
 <script>
 /* ── State ─────────────────────────────────────── */
 let currentMember = null;
 let currentTasks  = [];
 let shopMembers   = [];
+
+function showToast(msg, type) {
+  const c = document.getElementById('toast-container');
+  if (!c) return;
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + (type || 'success');
+  t.textContent = msg;
+  c.appendChild(t);
+  t.addEventListener('animationend', e => { if (e.animationName === 'toastOut') t.remove(); });
+}
+
+function dismissOnboard() {
+  const b = document.getElementById('onboard-banner');
+  if (b) b.style.display = 'none';
+  try { localStorage.setItem('onboarded', 'true'); } catch(e) {}
+}
 
 /* ── Boot ──────────────────────────────────────── */
 async function init() {
@@ -1719,6 +1793,12 @@ function showApp() {
   loadShopEvents();
   loadShopMembers();
   if (currentMember.role === 'leadership') loadSquadron();
+  try {
+    if (!localStorage.getItem('onboarded')) {
+      const ob = document.getElementById('onboard-banner');
+      if (ob) ob.style.display = '';
+    }
+  } catch(e) {}
 }
 
 function populateUserUI() {
@@ -1767,6 +1847,12 @@ async function doLogin() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-pwd').addEventListener('keydown',  e => { if (e.key==='Enter') doLogin(); });
   document.getElementById('login-slug').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('login-pwd').focus(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const open = document.querySelector('.modal-backdrop.open');
+      if (open) closeModal(open.id);
+    }
+  });
   init();
 });
 
@@ -1795,6 +1881,8 @@ function barChart(elId, items) {
 
 /* ── My Tasks ───────────────────────────────────── */
 async function loadTasks() {
+  const el = document.getElementById('member-tasks');
+  if (el) el.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   const res = await fetch('/api/tasks');
   if (!res.ok) return;
   currentTasks = await res.json();
@@ -1844,8 +1932,8 @@ function taskHTML(t) {
   let det = apptParts.length ? apptParts.join(' · ') + (t.details ? ' · ' + t.details : '') : (t.details || '');
   const flagCls = t.is_flagged ? ' flagged' : '';
   const flagStar = t.is_flagged ? '<span class="flag-star">★</span>' : '';
-  return `<div class="task-item${flagCls}" id="ti-${t.id}" data-id="${t.id}" data-state="${t.state}" data-ou="${t.urgency}" data-ob="${orig.text}" onclick="cycleTask(this,event)">
-    <div class="chk">
+  return `<div class="task-item${flagCls}" id="ti-${t.id}" data-id="${t.id}" data-state="${t.state}" data-ou="${t.urgency}" data-ob="${orig.text}">
+    <div class="chk" title="Mark task done" onclick="cycleTask(this.closest('.task-item'),event)">
       <svg class="ic ic-part" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M2.5 5h5" stroke="var(--warn)" stroke-width="1.8" stroke-linecap="round"/></svg>
       <svg class="ic ic-done" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.5 5 4 7.5 8.5 2.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
@@ -1918,24 +2006,33 @@ function updateMemberStats() {
 }
 
 async function cycleTask(el, event) {
-  if (el.style.cursor==='default') return;
+  if (el.style.cursor === 'default') return;
   if (event.target.closest('.note-btn,.note-area')) return;
-  const states = ['none','partial','done'];
-  const next   = states[(states.indexOf(el.dataset.state)+1)%3];
+  const prev = el.dataset.state;
+  const next = prev === 'done' ? 'none' : 'done';
   el.dataset.state = next;
-  const task = currentTasks.find(t => t.id===parseInt(el.dataset.id));
+  const task = currentTasks.find(t => t.id === parseInt(el.dataset.id));
   if (task) task.state = next;
   const b = badgeFor(el.dataset.ou, next);
-  const badge = document.getElementById('badge-'+el.id);
-  badge.className = 'badge '+b.cls; badge.textContent = b.text;
+  const badge = document.getElementById('badge-' + el.id);
+  badge.className = 'badge ' + b.cls; badge.textContent = b.text;
   updateMemberStats();
   try {
     const note = el.querySelector('textarea')?.value || null;
-    await fetch('/api/tasks/'+el.dataset.id, {
-      method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({state:next, note}),
+    const res = await fetch('/api/tasks/' + el.dataset.id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: next, note }),
     });
-  } catch(e) { console.error('save failed',e); }
+    if (!res.ok) throw new Error();
+    showToast('Task updated', 'success');
+  } catch (e) {
+    el.dataset.state = prev;
+    if (task) task.state = prev;
+    const rb = badgeFor(el.dataset.ou, prev);
+    badge.className = 'badge ' + rb.cls; badge.textContent = rb.text;
+    updateMemberStats();
+    showToast('Failed to save — try again', 'error');
+  }
 }
 
 function toggleNote(event, id) {
@@ -1956,11 +2053,13 @@ async function saveNote(event, taskId, elId) {
   const noteBtn = el?.querySelector('.note-btn');
   if (noteBtn) noteBtn.innerHTML = NOTE_ICO + (note ? 'View note' : 'Add note');
   try {
-    await fetch('/api/tasks/'+taskId, {
+    const res = await fetch('/api/tasks/'+taskId, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({state: el?.dataset.state||'none', note}),
     });
-  } catch(e) { console.error('note save failed',e); }
+    if (!res.ok) throw new Error();
+    showToast('Note saved', 'success');
+  } catch(e) { showToast('Failed to save note', 'error'); }
 }
 
 /* ── Shop events ────────────────────────────────── */
@@ -2004,7 +2103,7 @@ function buildShopEvents(events) {
   const dayOrder = ['Friday','Friday/Saturday','Saturday','Sunday'];
   let html = '';
   if (isSup) {
-    html += `<div style="margin-bottom:14px">
+    html += `<div class="mb-sm">
       <button class="add-btn" onclick="openAddEvent()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
         Add Item
@@ -2039,7 +2138,7 @@ function buildWorkOrders(events) {
   const workOrders = events.filter(e => e.event_type === 'work_order');
   let html = '';
   if (isSup) {
-    html += `<div style="margin-bottom:14px">
+    html += `<div class="mb-sm">
       <button class="add-btn" onclick="openAddEvent('work_order')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
         Add Work Order
@@ -2060,6 +2159,8 @@ function buildWorkOrders(events) {
 
 /* ── Shop members ───────────────────────────────── */
 async function loadShopMembers() {
+  const el = document.getElementById('member-list');
+  if (el) el.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   const res = await fetch('/api/shop/members');
   if (!res.ok) return;
   shopMembers = await res.json();
@@ -2082,7 +2183,7 @@ async function refreshShopMembers() {
     const dot     = item.querySelector('.dot');
     if (frac)    frac.textContent    = `${done}/${total}`;
     if (fracSub) fracSub.textContent = `${pct}%`;
-    if (dot)     dot.className       = 'dot ' + dc;
+    if (dot)     { dot.className = 'dot ' + dc; dot.title = pct===100?'Complete':pct>=50?'In progress':'Needs attention'; }
   }
   barChart('shop-bar-chart', shopMembers.map(m => {
     const done = parseInt(m.done_tasks)||0, tot = parseInt(m.total_tasks)||0;
@@ -2101,6 +2202,7 @@ function buildMembers() {
     const total = parseInt(m.total_tasks)||0;
     const pct   = total ? Math.round(done/total*100) : 0;
     const dc    = pct===100?'dot-ok':pct>=50?'dot-warn':'dot-bad';
+    const dt    = pct===100?'Complete':pct>=50?'In progress':'Needs attention';
     const init  = m.first_name[0]+m.last_name[0];
     const rowAttrs = isSup ? `class="mem-row" onclick="toggleMem(${m.id})"` : `class="mem-row readonly"`;
     const chevron = isSup
@@ -2118,7 +2220,7 @@ function buildMembers() {
         <div class="avatar">${init}</div>
         <div class="mem-meta"><div class="mem-name">${m.last_name}, ${m.first_name[0]}.</div><div class="mem-rank">${m.rank}</div></div>
         <div><div class="mem-frac">${done}/${total}</div><div class="mem-frac-sub">${pct}%</div></div>
-        <div class="dot ${dc}"></div>
+        <div class="dot ${dc}" title="${dt}"></div>
         ${chevron}
       </div>
       ${expand}
@@ -2172,7 +2274,7 @@ async function renderMemberTasks(memberId) {
     // Add Task button at top
     let html = '';
     if (isSup) {
-      html += `<div style="margin-bottom:14px">
+      html += `<div class="mb-sm">
         <button class="add-btn" onclick="event.stopPropagation();openAddTask(${memberId})">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
           Add Task
@@ -2180,7 +2282,7 @@ async function renderMemberTasks(memberId) {
       </div>`;
     }
 
-    if (!tasks.length && !isSup) { inner.innerHTML = '<p style="color:var(--t2);font-size:13px">No tasks this UTA.</p>'; return; }
+    if (!tasks.length && !isSup) { inner.innerHTML = '<p style="color:var(--t2);font-size:13px">No tasks assigned for this UTA. Check back closer to drill weekend.</p>'; return; }
 
     const cats = {};
     for (const t of tasks) {
@@ -2271,15 +2373,19 @@ async function renderShopMembers(shopId) {
 async function supToggle(event, taskId, memberId, currentState) {
   event.stopPropagation();
   const newState = currentState === 'done' ? 'none' : 'done';
-  await fetch('/api/tasks/'+taskId, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ state: newState }),
-  });
-  await Promise.all([
-    renderMemberTasks(memberId),
-    refreshShopMembers(),
-  ]);
+  try {
+    const res = await fetch('/api/tasks/'+taskId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: newState }),
+    });
+    if (!res.ok) throw new Error();
+    showToast('Task updated', 'success');
+    await Promise.all([
+      renderMemberTasks(memberId),
+      refreshShopMembers(),
+    ]);
+  } catch(e) { showToast('Failed to update task', 'error'); }
 }
 
 /* ── Squadron Org Chart (visible to all members) ──── */
@@ -2398,6 +2504,10 @@ async function loadOrgChart() {
 
 /* ── Squadron (leadership) ──────────────────────── */
 async function loadSquadron() {
+  const shopListEl = document.getElementById('shop-list');
+  const alertsEl = document.getElementById('sq-alerts');
+  if (shopListEl) shopListEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+  if (alertsEl) alertsEl.innerHTML = '<div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div>';
   try {
     const [shops, cats, members] = await Promise.all([
       fetch('/api/squadron').then(r => r.json()),
@@ -2452,16 +2562,16 @@ async function loadSquadron() {
         const total = parseInt(m.total_tasks || 0);
         const p     = total ? Math.round(done / total * 100) : 0;
         const color = p >= 80 ? 'var(--done)' : p >= 40 ? 'var(--t1)' : 'var(--urgent)';
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+        return `<div class="alert-row">
           <div>
-            <div style="font-size:13px;font-weight:600">${m.rank} ${m.last_name}</div>
-            <div style="font-size:11px;color:var(--t2)">${m.shop} · ${done}/${total} done</div>
+            <div class="alert-name">${m.rank} ${m.last_name}</div>
+            <div class="alert-shop">${m.shop} · ${done}/${total} done</div>
           </div>
-          <div style="font-size:18px;font-weight:700;color:${color}">${p}%</div>
+          <div class="alert-pct" style="color:${color}">${p}%</div>
         </div>`;
       }).join('');
     } else {
-      alerts.innerHTML = '<p style="color:var(--t2);font-size:13px">No data yet.</p>';
+      alerts.innerHTML = '<p style="color:var(--t2);font-size:13px">All members are on track.</p>';
     }
 
     // All Shops list
@@ -2522,8 +2632,29 @@ function switchView(btn) {
 }
 
 /* ── Modal helpers ──────────────────────────────── */
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-function openModal(id)  { document.getElementById(id).classList.add('open'); }
+let _modalTrapHandler = null;
+function closeModal(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('open');
+  if (_modalTrapHandler) { document.removeEventListener('keydown', _modalTrapHandler); _modalTrapHandler = null; }
+}
+function openModal(id) {
+  const el = document.getElementById(id);
+  el.classList.add('open');
+  const sheet = el.querySelector('.modal-sheet');
+  if (sheet) {
+    const focusable = sheet.querySelectorAll('input,select,textarea,button,[tabindex]');
+    if (focusable.length) {
+      _modalTrapHandler = e => {
+        if (e.key !== 'Tab') return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      };
+      document.addEventListener('keydown', _modalTrapHandler);
+    }
+  }
+}
 
 let cachedCategories = null;
 async function getCategories() {
@@ -2575,6 +2706,7 @@ async function submitAddTask() {
     });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
     closeModal('add-task-modal');
+    showToast('Task added', 'success');
     const expandedMember = document.querySelector('.mem-item.expanded');
     if (expandedMember) {
       const mid = parseInt(expandedMember.id.replace('memitem-',''));
@@ -2591,24 +2723,27 @@ async function submitAddTask() {
 async function deleteTask(taskId, memberId) {
   if (!confirm('Delete this task?')) return;
   try {
-    await fetch('/api/tasks/' + taskId, { method: 'DELETE' });
+    const res = await fetch('/api/tasks/' + taskId, { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    showToast('Task deleted', 'success');
     await renderMemberTasks(memberId);
     await refreshShopMembers();
-  } catch (e) { console.error('delete failed', e); }
+  } catch (e) { showToast('Failed to delete task', 'error'); }
 }
 
 /* ── Flag Task ─────────────────────────────────── */
 async function flagTask(taskId, memberId, currentlyFlagged) {
   try {
-    await fetch('/api/tasks/' + taskId + '/flag', {
+    const res = await fetch('/api/tasks/' + taskId + '/flag', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_flagged: !currentlyFlagged }),
     });
+    if (!res.ok) throw new Error();
     await renderMemberTasks(memberId);
     // Also refresh member's own view if they're the same person
     if (memberId === currentMember?.id) await loadTasks();
-  } catch (e) { console.error('flag failed', e); }
+  } catch (e) { showToast('Failed to update flag', 'error'); }
 }
 
 /* ── Add Shop Event ────────────────────────────── */
@@ -2646,6 +2781,7 @@ async function submitAddEvent() {
     });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
     closeModal('add-event-modal');
+    showToast('Item added', 'success');
     await loadShopEvents();
   } catch (e) {
     err.textContent = e.message || 'Failed to add item'; err.style.display = '';
@@ -2656,9 +2792,11 @@ async function submitAddEvent() {
 async function deleteEvent(eventId) {
   if (!confirm('Delete this shop item?')) return;
   try {
-    await fetch('/api/shop/events/' + eventId, { method: 'DELETE' });
+    const res = await fetch('/api/shop/events/' + eventId, { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    showToast('Item deleted', 'success');
     await loadShopEvents();
-  } catch (e) { console.error('delete event failed', e); }
+  } catch (e) { showToast('Failed to delete item', 'error'); }
 }
 
 /* ── My Tasks sub-tabs ─────────────────────────── */
