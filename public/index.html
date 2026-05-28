@@ -1343,7 +1343,7 @@
     <div class="sb-top">
       <div class="sb-brand">
         <div class="sb-brand-name">108th CES</div>
-        <div class="sb-brand-uta">May 2026 UTA · JB MDL</div>
+        <div class="sb-brand-uta">June 2026 UTA · JB MDL</div>
       </div>
       <div class="sb-sec-lbl">Navigation</div>
       <button class="sb-item active" data-view="member" onclick="switchView(this)">
@@ -1377,7 +1377,7 @@
 
   <!-- ═══ MOBILE HEADER ═════════════════════════ -->
   <header class="mob-hdr">
-    <div class="mob-ttl" id="mob-title">May 2026 UTA</div>
+    <div class="mob-ttl" id="mob-title">June 2026 UTA</div>
     <div class="mob-sub" id="mob-sub"></div>
     <button class="theme-toggle mob-theme" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle theme">
       <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -1391,7 +1391,7 @@
     <!-- DESKTOP TOPBAR -->
     <div class="desk-top">
       <div>
-        <div class="desk-ttl" id="desk-title">May 2026 UTA</div>
+        <div class="desk-ttl" id="desk-title">June 2026 UTA</div>
         <div class="desk-sub" id="desk-sub">SSgt Smith, J. · Electrical</div>
       </div>
       <div id="uta-label" style="font-size:12px;color:var(--t2)"></div>
@@ -1513,7 +1513,7 @@
       <!-- Shop schedule — visible to all members -->
       <div class="sec-hd">
         <div class="sec-title">Shop Schedule</div>
-        <div class="sec-sub">May 2026 UTA</div>
+        <div class="sec-sub">June 2026 UTA</div>
       </div>
       <div id="shop-events-list" class="mb-lg"></div>
 
@@ -1840,10 +1840,10 @@ function populateUserUI() {
   document.getElementById('sb-name').textContent = name;
   document.getElementById('sb-role').textContent = m.rank + ' · ' + m.shop;
   document.getElementById('mob-sub').textContent  = m.rank + ' ' + m.last_name + ' · ' + m.shop;
-  document.getElementById('uta-label').textContent = 'May 2026 UTA · JB MDL';
+  document.getElementById('uta-label').textContent = 'June 2026 UTA · JB MDL';
   document.getElementById('shop-members-title').textContent = m.shop + ' Shop';
-  document.getElementById('mob-title').textContent  = 'May 2026 UTA';
-  document.getElementById('desk-title').textContent = 'May 2026 UTA';
+  document.getElementById('mob-title').textContent  = 'June 2026 UTA';
+  document.getElementById('desk-title').textContent = 'June 2026 UTA';
   document.getElementById('desk-sub').textContent   = m.rank + ' ' + m.last_name + ' · ' + m.shop;
 }
 
@@ -2643,7 +2643,7 @@ function switchView(btn) {
   document.getElementById('view-'+name).classList.add('active');
   const m = currentMember;
   const titles = {
-    member:     ['May 2026 UTA',       m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
+    member:     ['June 2026 UTA',       m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
     supervisor: [(m?.shop||'')+' Shop', 'Supervisor View'],
     leadership: ['108th CES',           'Leadership View'],
   };
