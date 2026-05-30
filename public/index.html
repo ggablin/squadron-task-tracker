@@ -583,10 +583,14 @@
     .mob-btn svg { width: 22px; height: 22px; }
     .mob-badge-wrap { position: relative; }
     .mob-badge {
-      position: absolute; top: -2px; right: -4px;
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--urgent); border: 2px solid var(--bg);
+      position: absolute; top: -6px; right: -9px;
+      min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+      align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; line-height: 1;
+      color: #fff; background: var(--urgent);
+      border: 2px solid var(--bg); border-radius: 9px;
     }
+    .mob-badge:not([hidden]) { display: flex; }
 
     /* ══ DESKTOP ════════════════════════════════ */
     @media (min-width: 768px) {
@@ -1043,6 +1047,13 @@
     }
     .mt-tab:hover { color: var(--text); }
     .mt-tab.active { background: var(--text); color: var(--bg); }
+    .mt-tab-badge {
+      margin-left: 5px; padding: 1px 6px;
+      font-size: 10px; font-weight: 700;
+      color: #fff; background: var(--urgent);
+      border-radius: 9px;
+    }
+    .mt-tab.active .mt-tab-badge { background: rgba(255,255,255,.22); }
     .mt-pane { display: none; }
     .mt-pane.active { display: block; }
 
@@ -1349,11 +1360,11 @@
       <button class="sb-item active" data-view="member" onclick="switchView(this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
         My Tasks
+        <span class="sb-badge" id="navb-tasks" hidden></span>
       </button>
       <button class="sb-item" data-view="supervisor" onclick="switchView(this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M2 20c0-3 2.7-5.5 7-5.5"/><path d="M13 20c0-3.3 2.5-5.5 6-5.5"/></svg>
         My Shop
-        <span class="sb-badge">3</span>
       </button>
       <button class="sb-item" data-view="leadership" onclick="switchView(this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
@@ -1401,9 +1412,9 @@
     <div id="view-member" class="view active">
 
       <div class="mt-tabs" role="tablist">
-        <button class="mt-tab active" data-mt="tasks" onclick="switchMtPane('tasks')">My Tasks</button>
+        <button class="mt-tab active" data-mt="tasks" onclick="switchMtPane('tasks')">My Tasks<span class="mt-tab-badge" id="pillb-tasks" hidden></span></button>
         <button class="mt-tab" data-mt="timeline" onclick="switchMtPane('timeline')">Timeline</button>
-        <button class="mt-tab" data-mt="workorders" onclick="switchMtPane('workorders')">Work Orders</button>
+        <button class="mt-tab" data-mt="workorders" onclick="switchMtPane('workorders')">Work Orders<span class="mt-tab-badge" id="pillb-wo" hidden></span></button>
       </div>
 
       <div id="mt-pane-tasks" class="mt-pane active">
@@ -1652,14 +1663,14 @@
   <!-- ═══ MOBILE NAV ══════════════════════════════ -->
   <nav class="mob-nav">
     <button class="mob-btn active" data-view="member" onclick="switchView(this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <div class="mob-badge-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        <span class="mob-badge" id="navb-tasks-m" hidden></span>
+      </div>
       My Tasks
     </button>
     <button class="mob-btn" data-view="supervisor" onclick="switchView(this)">
-      <div class="mob-badge-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M2 20c0-3 2.7-5.5 7-5.5"/><path d="M13 20c0-3.3 2.5-5.5 6-5.5"/></svg>
-        <span class="mob-badge"></span>
-      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M2 20c0-3 2.7-5.5 7-5.5"/><path d="M13 20c0-3.3 2.5-5.5 6-5.5"/></svg>
       My Shop
     </button>
     <button class="mob-btn" data-view="leadership" onclick="switchView(this)">
@@ -1769,6 +1780,7 @@
 let currentMember = null;
 let currentTasks  = [];
 let shopMembers   = [];
+let woCount       = 0;
 
 function showToast(msg, type) {
   const c = document.getElementById('toast-container');
@@ -2034,6 +2046,21 @@ function updateMemberStats() {
   document.getElementById('member-chart-meta').textContent = done + ' / ' + total;
   gauge('g-member', pct);
   renderMemberBars(checkable, done, total);
+  updateNavBadges();
+}
+
+function updateNavBadges() {
+  const tasksLeft = currentTasks.filter(t => !t.is_upcoming && t.state !== 'done').length;
+  const set = (id, n) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = n;
+    el.hidden = n === 0;
+  };
+  set('pillb-tasks', tasksLeft);
+  set('pillb-wo',    woCount);
+  set('navb-tasks',   tasksLeft + woCount);
+  set('navb-tasks-m', tasksLeft + woCount);
 }
 
 async function cycleTask(el, event) {
@@ -2167,6 +2194,8 @@ function buildWorkOrders(events) {
   if (!el) return;
   const isSup = ['supervisor','leadership'].includes(currentMember?.role);
   const workOrders = events.filter(e => e.event_type === 'work_order');
+  woCount = workOrders.length;
+  updateNavBadges();
   let html = '';
   if (isSup) {
     html += `<div class="mb-sm">
