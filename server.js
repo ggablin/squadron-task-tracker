@@ -237,6 +237,55 @@ app.post('/api/tasks', requireAuth, requireRole('supervisor'), async (req, res) 
   }
 });
 
+// ── Bulk Create Task (leadership: a shop or the whole squadron) ─────────────
+
+app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { scope, shop_id, category_code, title, details, urgency,
+            appt_day, appt_time, appt_location } = req.body;
+    if (!category_code || !title) {
+      return res.status(400).json({ error: 'category_code and title are required' });
+    }
+    if (scope !== 'squadron' && scope !== 'shop') {
+      return res.status(400).json({ error: "scope must be 'squadron' or 'shop'" });
+    }
+
+    // For a shop-scoped task, verify the shop exists; squadron scope targets all shops.
+    let shopId = null;
+    if (scope === 'shop') {
+      if (!shop_id) return res.status(400).json({ error: 'shop_id is required for shop scope' });
+      const { rows: sr } = await pool.query('SELECT id FROM shops WHERE id = $1', [shop_id]);
+      if (!sr.length) return res.status(404).json({ error: 'Shop not found' });
+      shopId = sr[0].id;
+    }
+
+    // Resolve category
+    const { rows: catRows } = await pool.query(
+      'SELECT id FROM task_categories WHERE code = $1', [category_code]
+    );
+    if (!catRows.length) return res.status(400).json({ error: 'Invalid category_code' });
+
+    // Insert one task per active recipient in a single statement.
+    // shopId NULL ⇒ every active member (whole squadron).
+    const { rows } = await pool.query(`
+      INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, details, urgency,
+                         appt_day, appt_time, appt_location, is_upcoming, created_by_id, sort_order)
+      SELECT (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1),
+             m.id, $1, $2, $3, $4, $5, $6, $7, false, $8, 99
+      FROM members m
+      WHERE m.active = true AND ($9::int IS NULL OR m.shop_id = $9)
+      RETURNING id
+    `, [catRows[0].id, title, details || null, urgency || 'this_uta',
+        appt_day || null, appt_time || null, appt_location || null,
+        req.session.memberId, shopId]);
+
+    res.json({ created: rows.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Delete Task (supervisor: own shop, leadership: any) ─────────────────────
 
 app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), async (req, res) => {

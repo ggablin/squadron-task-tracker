@@ -1652,6 +1652,12 @@
         <div class="sec-title">All Shops</div>
         <div class="sec-sub">Tap a shop to expand</div>
       </div>
+      <div class="mb-sm">
+        <button class="add-btn" onclick="openSquadronAddTask()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+          Add Task
+        </button>
+      </div>
       <div class="card" id="shop-list"></div>
 
       </div><!-- /#sq-rollups -->
@@ -1716,6 +1722,58 @@
     </div>
     <div id="at-error" class="login-error" style="display:none"></div>
     <button class="modal-submit" id="at-submit" onclick="submitAddTask()">Add Task</button>
+  </div>
+</div>
+
+<!-- ═══ ADD SQUADRON TASK MODAL (leadership) ════ -->
+<div class="modal-backdrop" id="add-sq-task-modal" onclick="if(event.target===this)closeModal('add-sq-task-modal')">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <div class="modal-title">Add Task</div>
+      <button class="modal-close" onclick="closeModal('add-sq-task-modal')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="modal-field">
+      <label>Assign to</label>
+      <select id="sqt-target"></select>
+    </div>
+    <div class="modal-field">
+      <label>Category</label>
+      <select id="sqt-category"></select>
+    </div>
+    <div class="modal-field">
+      <label>Title</label>
+      <input type="text" id="sqt-title" placeholder="e.g. Complete Cyber Awareness CBT">
+    </div>
+    <div class="modal-field">
+      <label>Details (optional)</label>
+      <textarea id="sqt-details" rows="2" placeholder="Additional context, due dates, etc."></textarea>
+    </div>
+    <div class="modal-field">
+      <label>Urgency</label>
+      <select id="sqt-urgency">
+        <option value="this_uta">This UTA</option>
+        <option value="overdue">Overdue</option>
+        <option value="next_uta">Next UTA</option>
+        <option value="future">Future</option>
+        <option value="info">Info Only</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Appointment Day (optional)</label>
+      <input type="text" id="sqt-appt-day" placeholder="e.g. Saturday">
+    </div>
+    <div class="modal-field">
+      <label>Appointment Time (optional)</label>
+      <input type="text" id="sqt-appt-time" placeholder="e.g. 0900">
+    </div>
+    <div class="modal-field">
+      <label>Appointment Location (optional)</label>
+      <input type="text" id="sqt-appt-location" placeholder="e.g. Bldg 110, Rm 5">
+    </div>
+    <div id="sqt-error" class="login-error" style="display:none"></div>
+    <button class="modal-submit" id="sqt-submit" onclick="submitSquadronAddTask()">Add Task</button>
   </div>
 </div>
 
@@ -2772,6 +2830,70 @@ async function submitAddTask() {
       await renderMemberTasks(mid);
     }
     await refreshShopMembers();
+  } catch (e) {
+    err.textContent = e.message || 'Failed to add task'; err.style.display = '';
+  }
+  btn.disabled = false; btn.textContent = 'Add Task';
+}
+
+/* ── Add Squadron Task (leadership: shop or whole squadron) ────────── */
+async function openSquadronAddTask() {
+  const [cats, shops] = await Promise.all([
+    getCategories(),
+    fetch('/api/squadron').then(r => r.ok ? r.json() : []),
+  ]);
+
+  document.getElementById('sqt-category').innerHTML = cats.filter(c => c.code !== 'upcoming').map(c =>
+    `<option value="${c.code}">${c.label}</option>`
+  ).join('');
+
+  document.getElementById('sqt-target').innerHTML =
+    `<option value="squadron">Entire Squadron</option>` +
+    shops.map(s => `<option value="shop:${s.id}">${s.shop}</option>`).join('');
+
+  document.getElementById('sqt-title').value = '';
+  document.getElementById('sqt-details').value = '';
+  document.getElementById('sqt-urgency').value = 'this_uta';
+  document.getElementById('sqt-appt-day').value = '';
+  document.getElementById('sqt-appt-time').value = '';
+  document.getElementById('sqt-appt-location').value = '';
+  document.getElementById('sqt-error').style.display = 'none';
+  openModal('add-sq-task-modal');
+  setTimeout(() => document.getElementById('sqt-title').focus(), 100);
+}
+
+async function submitSquadronAddTask() {
+  const btn = document.getElementById('sqt-submit');
+  const err = document.getElementById('sqt-error');
+  err.style.display = 'none';
+  const title = document.getElementById('sqt-title').value.trim();
+  if (!title) { err.textContent = 'Title is required'; err.style.display = ''; return; }
+
+  const target = document.getElementById('sqt-target').value;
+  const body = {
+    scope: target === 'squadron' ? 'squadron' : 'shop',
+    category_code: document.getElementById('sqt-category').value,
+    title,
+    details: document.getElementById('sqt-details').value.trim() || null,
+    urgency: document.getElementById('sqt-urgency').value,
+    appt_day: document.getElementById('sqt-appt-day').value.trim() || null,
+    appt_time: document.getElementById('sqt-appt-time').value.trim() || null,
+    appt_location: document.getElementById('sqt-appt-location').value.trim() || null,
+  };
+  if (body.scope === 'shop') body.shop_id = parseInt(target.split(':')[1]);
+
+  btn.disabled = true; btn.textContent = 'Adding…';
+  try {
+    const res = await fetch('/api/squadron/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    const d = await res.json();
+    closeModal('add-sq-task-modal');
+    showToast(`Task added for ${d.created} member${d.created === 1 ? '' : 's'}`, 'success');
+    await loadSquadron();
   } catch (e) {
     err.textContent = e.message || 'Failed to add task'; err.style.display = '';
   }
