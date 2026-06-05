@@ -1,8 +1,9 @@
-# Squadron Task Tracker — Leadership Demo & Briefing Guide
+# Squadron Task Tracker — Leadership Briefing & Walkthrough Guide
 
 **App:** 108th CES UTA Task Tracker
 **Audience:** Squadron leadership & supervisors
-**Presenter notes + live demo script — keep this open during the brief.**
+**Status:** **Live** — every squadron member has an account and real UTA data is in the system.
+**Presenter notes + walkthrough script — keep this open during the brief.**
 
 ---
 
@@ -20,27 +21,28 @@ to their level:
 The payoff: real-time visibility into who's done what, fewer surprises on
 drill weekend, and one source of truth instead of a dozen spreadsheets.
 
+**The app is now live with the full squadron** — all members are loaded and
+working their real UTA tasks. This guide is for briefing the unit on what it
+does and how to use it.
+
 ---
 
 ## 2. Before you walk in — logistics checklist
 
 - [ ] App is running and reachable from the brief room (browser open, logged out).
-- [ ] Database is seeded with the demo squadron data.
+- [ ] You can log in with **your own account** (leadership login shows all three views).
 - [ ] Projector / screen share tested and readable from the back row.
-- [ ] These three demo logins written on a card (see below).
 - [ ] A phone or tablet on hand to show the mobile view.
 - [ ] Browser zoom bumped up a notch so the room can read it.
+- [ ] Heads-up: the screen shows **real member data** — fine for an internal
+      brief, but be mindful if anyone outside the unit is in the room.
 
-**Demo logins** (password is the same as the username for the seeded data):
-
-| Role        | Username     | Who they are        |
-|-------------|--------------|---------------------|
-| Member      | `becerra`    | SrA Becerra         |
-| Supervisor  | `ebbert`     | TSgt Ebbert         |
-| Leadership  | `gablin`     | SMSgt Gablin        |
-
-> Backups if needed: members `glenn`, `mesa`; supervisor `uzoma`;
-> leadership `mcnaughton`.
+**Accounts:** the app is live, so everyone uses their **own** username and
+password — there are no demo logins. A **leadership** account is the best one
+to brief from because it can see all three views (My Tasks, My Shop, and
+Squadron) from a single login. To show the plain member experience, either
+use your own **My Tasks** tab or have a volunteer in the room pull it up on
+their phone.
 
 ---
 
@@ -50,7 +52,7 @@ drill weekend, and one source of truth instead of a dozen spreadsheets.
 |---------------|-------------------------|---------------------------------------------------|
 | **My Tasks**  | Everyone                | Your personal task list + completion gauge        |
 | **My Shop**   | Supervisors & leadership| Your shop's progress + assign/manage tasks        |
-| **Squadron**  | Leadership (org chart: all) | Whole-squadron readiness rollup               |
+| **Squadron**  | Leadership (org chart: all) | Whole-squadron rollup + push tasks unit-wide  |
 
 You switch views from the **left sidebar** on a computer, or the **bottom
 nav bar** on a phone. The view someone gets is tied to their role — a member
@@ -96,9 +98,15 @@ screen and can act on it immediately.*
 - **Squadron by Category** breakdown (e.g., admin vs medical).
 - **Members Most Behind** — a prioritized list of who needs attention.
 - **All Shops** — tap any shop to drill into its members.
+- **Add Task (NEW)** — leadership can push a single task to **every member of
+  a specific shop** or to the **entire squadron** at once. Pick the target,
+  fill in the task (category, title, optional details, urgency, and optional
+  appointment day/time/location), and it lands in each member's My Tasks list,
+  where they track it just like any other task.
 
-*Why it matters: leadership sees squadron readiness in seconds and knows
-exactly where to apply pressure.*
+*Why it matters: leadership sees squadron readiness in seconds, knows exactly
+where to apply pressure — and can put a requirement in front of everyone who
+needs it without going shop by shop.*
 
 ### Nice touches to mention
 - **Dark/light theme toggle**.
@@ -115,51 +123,60 @@ exactly where to apply pressure.*
 3. Inside **My Tasks**, use the sub-tabs: *My Tasks / Timeline / Work Orders*.
 4. In **My Shop** and **Squadron**, **tap a member or a shop to expand** it.
 5. **Theme toggle** is in the sidebar (sun/moon icon).
-6. **Log out** from the user area to switch accounts during the demo.
+6. **Log out** from the user area when you're done.
 
 ---
 
-## 6. Live demo script (the spine of the briefing)
+## 6. Walkthrough script (the spine of the briefing)
 
-> Tell a story by logging in as each role in turn. Narrate the "why" as you click.
+> Brief from your own **leadership** login — it can show all three views.
+> Walk the room from the member's-eye view up to the squadron rollup, narrating
+> the "why" as you click.
 
-**Act 1 — The Member (login: `becerra`)**
+**Act 1 — The Member's view (your My Tasks tab)**
 1. Land on **My Tasks**. Point at the **gauge** — "this is what every Airman
    sees the moment they log in."
 2. **Check off a task** — watch the gauge and Done/Remaining counts update live.
 3. **Add a note** to a task — show how context travels with the task.
 4. Point out an **Overdue** item and how urgency makes it jump out.
 5. Click the **Timeline** tab — "and here's the whole drill schedule, same
-   for everyone."
-6. **Log out.**
+   for everyone." *(Optional: have a member in the room show their own My Tasks
+   on a phone for an authentic look.)*
 
-**Act 2 — The Supervisor (login: `ebbert`)**
-7. Open **My Shop**. Point at the **shop gauge** and **On Track vs Behind**.
-8. Show the **Member Progress** chart — "I can see my whole shop at once."
-9. **Tap a member** to expand their tasks.
-10. **Add a Task** and assign it to a member — "this is how I push a
-    requirement down."
-11. **Add a Shop Item** (a schedule entry or emphasis item).
-12. **Flag a task** to highlight it for the member.
-13. **Log out.**
+**Act 2 — The Supervisor's view (My Shop tab)**
+6. Open **My Shop**. Point at the **shop gauge** and **On Track vs Behind**.
+7. Show the **Member Progress** chart — "a supervisor sees the whole shop at once."
+8. **Tap a member** to expand their tasks.
+9. **Add a Task** assigned to a single member — "this is how a supervisor pushes
+   a requirement down."
+10. **Add a Shop Item** (a schedule entry or emphasis item) and **flag a task**
+    to highlight it for the member.
 
-**Act 3 — Leadership (login: `gablin`)**
-14. Open **Squadron**. Walk the **Completion by Shop** chart and the
-    squadron gauge.
-15. Show **Members Most Behind** — "this is my call list."
-16. Show **Squadron by Category** — where the squadron is lagging.
-17. Show the **Chain of Command** org chart.
-18. **Tap a shop** in All Shops to drill into its members.
+**Act 3 — Leadership view (Squadron tab)**
+11. Open **Squadron**. Walk the **Completion by Shop** chart and the squadron gauge.
+12. Show **Members Most Behind** — "this is my call list."
+13. Show **Squadron by Category** — where the squadron is lagging.
+14. Show the **Chain of Command** org chart.
+15. **Tap a shop** in All Shops to drill into its members.
+16. **Add Task (the new feature):** click **Add Task**, choose **Entire Squadron**
+    (or a single shop), and push a requirement out to everyone at once — "one
+    click and it's in every affected member's list."
 
 **Closer**
-19. Pull out your **phone**, show the same app with the bottom nav.
-20. Hit the **theme toggle** for a quick visual flourish, then wrap.
+17. Pull out your **phone**, show the same app with the bottom nav.
+18. Hit the **theme toggle** for a quick visual flourish, then wrap.
 
 ---
 
 ## 7. Talking points & value pitch
 
 - **Real-time UTA readiness** — no more "where are we?" on Saturday morning.
+- **Run "how-goes-it" off the live app, not slide decks** — pull up the Squadron
+  view in the meeting and see every member's progress at a glance. No more each
+  shop reading off its own slide; the numbers are live, consistent, and already
+  drilled down to the member level.
+- **Push a task to everyone in one move** — leadership can drop a requirement on
+  a whole shop or the entire squadron at once, instead of going shop by shop.
 - **Accountability** — every task has an owner, a state, and a note.
 - **Less drill-day chaos** — schedule, work orders, and tasks all in one place.
 - **Right info to the right person** — role-based access; members only see and
@@ -171,26 +188,34 @@ exactly where to apply pressure.*
 
 ## 8. Anticipated questions (be ready)
 
-- **How do members get accounts / passwords?** Accounts are pre-loaded; each
-  starts with an initial password that must be changed before go-live.
 - **Can members see each other's tasks?** No — members only see their own.
   Shop and squadron views are restricted to supervisors and leadership.
 - **Who can add or change tasks?** Supervisors and leadership add/assign/flag;
-  members update the status of their own tasks.
+  members update the status of their own tasks. Only **leadership** can push a
+  task to a whole shop or the entire squadron at once.
+- **If leadership pushes a task to the squadron, what does each member get?**
+  Their own copy of the task in My Tasks — each member checks it off and adds
+  notes independently; one person completing it doesn't clear it for anyone else.
 - **Where does the data live?** In a central database behind the app; everyone's
   changes show up for the appropriate viewers in real time.
 - **What happens each UTA?** Tasks and schedules are organized by UTA cycle, so
   each drill gets its own clean slate while history is retained.
 - **Does it work on a phone?** Yes — responsive layout with a bottom nav bar.
+- **What if someone forgets their password?** Accounts are managed centrally;
+  loop in the app admin to reset it.
 
 ---
 
 ## 9. Dry-run checklist (do this once the day before)
 
-- [ ] Log in as `becerra`, `ebbert`, and `gablin` — confirm each lands on the
-      right view.
-- [ ] Confirm the member has tasks (including an Overdue one) so the gauge demo lands.
-- [ ] Confirm the shop has multiple members so Member Progress looks real.
+- [ ] Log in with your own leadership account and confirm you land correctly and
+      can reach all three views (My Tasks, My Shop, Squadron).
+- [ ] Confirm My Tasks shows real tasks (including an Overdue one) so the gauge
+      demo lands.
+- [ ] Confirm your shop shows multiple members so Member Progress looks real.
 - [ ] Confirm the squadron rollup shows several shops and a "most behind" list.
+- [ ] Open **Squadron → Add Task**, confirm the target dropdown lists "Entire
+      Squadron" and every shop. *(Only run a real push if you actually intend to
+      assign the task — it goes to live members.)*
 - [ ] Walk the full Act 1 → Act 2 → Act 3 click-path once, start to finish.
 - [ ] Check the app on your phone.
