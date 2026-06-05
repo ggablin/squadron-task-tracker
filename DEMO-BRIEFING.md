@@ -219,3 +219,22 @@ needs it without going shop by shop.*
       assign the task — it goes to live members.)*
 - [ ] Walk the full Act 1 → Act 2 → Act 3 click-path once, start to finish.
 - [ ] Check the app on your phone.
+
+---
+
+## 10. Roadmap — future feature ideas
+
+Where we're looking to take the app next (good to mention if the room asks
+"what's coming"):
+
+- **Notifications (email + in-app)** — *designed, ready to build.* Members get
+  notified when next month's tasks go live and when a task is assigned mid-UTA;
+  supervisors/leadership get a periodic digest of completions in their shop.
+- **Attendance** — track UTA attendance alongside tasks.
+- **Add events to calendar** — export/sync schedule and appointment items to a
+  personal calendar.
+- **PT calculator** — built-in fitness score calculator.
+- **Promotion requirements / tracker** — track each member's promotion
+  eligibility and remaining requirements.
+
+*These are ideas on the board, not commitments — priority and timing TBD.*
