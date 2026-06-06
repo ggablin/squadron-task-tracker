@@ -358,12 +358,16 @@ app.get('/api/categories', requireAuth, async (req, res) => {
 
 app.get('/api/shop/events', requireAuth, async (req, res) => {
   try {
+    // Leadership may view another shop via ?shop_id (drives the My Shop switcher);
+    // everyone else is pinned to their own shop.
+    const targetShopId = req.session.role === 'leadership' && req.query.shop_id
+      ? parseInt(req.query.shop_id) : req.session.shopId;
     const { rows } = await pool.query(`
       SELECT id, event_type, day, start_time, end_time, title, details, wo_number, sort_order FROM shop_events
       WHERE shop_id = $1
         AND uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       ORDER BY sort_order
-    `, [req.session.shopId]);
+    `, [targetShopId]);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -423,6 +427,10 @@ app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async
 
 app.get('/api/shop/members', requireAuth, async (req, res) => {
   try {
+    // Leadership may view another shop via ?shop_id (drives the My Shop switcher);
+    // everyone else is pinned to their own shop.
+    const targetShopId = req.session.role === 'leadership' && req.query.shop_id
+      ? parseInt(req.query.shop_id) : req.session.shopId;
     const { rows } = await pool.query(`
       SELECT m.id, m.last_name, m.first_name, m.rank, m.role,
              COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                    AS total_tasks,
@@ -435,7 +443,7 @@ app.get('/api/shop/members', requireAuth, async (req, res) => {
       WHERE m.shop_id = $1 AND m.active = true
       GROUP BY m.id, m.last_name, m.first_name, m.rank, m.role
       ORDER BY m.last_name
-    `, [req.session.shopId]);
+    `, [targetShopId]);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -449,7 +457,10 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
     const { rows: mr } = await pool.query(
       'SELECT shop_id FROM members WHERE id = $1 AND active = true', [memberId]
     );
-    if (!mr.length || mr[0].shop_id !== req.session.shopId) {
+    if (!mr.length) return res.status(404).json({ error: 'Member not found' });
+    // Leadership can view any shop's members (My Shop switcher); supervisors are
+    // limited to their own shop.
+    if (req.session.role !== 'leadership' && mr[0].shop_id !== req.session.shopId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -604,6 +615,43 @@ const SHOP_TO_FLIGHT = {
 };
 
 const FLIGHT_ORDER = ['Infrastructure', 'Construction', 'R&O', 'EM'];
+
+// Leaders granted all-shop access regardless of flight (same reach as squadron staff).
+const SQUADRON_WIDE_SLUGS = new Set(['gablin']);
+
+// ── My Shop switcher: which shops a leader may view/manage ───────────────────
+// Returns the leader's flight shops (+ their own shop). Squadron staff and
+// allowlisted leaders get every shop. Drives the shop-switcher dropdown.
+app.get('/api/shop/overseen', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows: meRows } = await pool.query(
+      `SELECT m.flight, m.slug, m.shop_id, s.name AS shop_name
+       FROM members m JOIN shops s ON s.id = m.shop_id
+       WHERE m.id = $1`,
+      [req.session.memberId]
+    );
+    if (!meRows.length) return res.status(401).json({ error: 'Session invalid' });
+    const me = meRows[0];
+
+    const allShops = !me.flight || me.flight === 'Squadron Staff' || SQUADRON_WIDE_SLUGS.has(me.slug);
+
+    let shops;
+    if (allShops) {
+      ({ rows: shops } = await pool.query('SELECT id, name FROM shops ORDER BY name'));
+    } else {
+      const flightShopNames = Object.keys(SHOP_TO_FLIGHT).filter(n => SHOP_TO_FLIGHT[n] === me.flight);
+      const names = Array.from(new Set([...flightShopNames, me.shop_name]));
+      ({ rows: shops } = await pool.query(
+        'SELECT id, name FROM shops WHERE name = ANY($1) ORDER BY name', [names]
+      ));
+    }
+
+    res.json({ shops, ownShopId: me.shop_id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 app.get('/api/squadron/org-chart', requireAuth, async (req, res) => {
   try {

@@ -954,6 +954,21 @@
     .modal-field textarea:focus,
     .modal-field select:focus { border-color: var(--text); }
     .modal-field textarea { resize: none; min-height: 60px; }
+
+    /* Shop switcher (My Shop header — leadership) */
+    .shop-switch-bar { align-items: center; gap: 10px; margin-bottom: 16px; }
+    .shop-switch-bar .ssb-lbl {
+      font-size: 11px; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--t2);
+    }
+    #shop-switcher {
+      flex: 0 1 auto; padding: 9px 13px;
+      border: 2px solid var(--border); border-radius: 10px;
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      color: var(--text); background: var(--bg); cursor: pointer;
+      outline: none; transition: border-color .15s;
+    }
+    #shop-switcher:focus { border-color: var(--text); }
     .modal-submit {
       width: 100%; padding: 13px;
       background: var(--text); color: #fff;
@@ -1484,6 +1499,12 @@
     <!-- ═══ SUPERVISOR VIEW ═══════════════════════ -->
     <div id="view-supervisor" class="view">
 
+      <!-- Shop switcher — leadership overseeing more than one shop -->
+      <div id="shop-switch-bar" class="shop-switch-bar" style="display:none">
+        <span class="ssb-lbl">Viewing shop</span>
+        <select id="shop-switcher" onchange="onShopSwitch(this.value)" aria-label="Switch shop"></select>
+      </div>
+
       <div class="hero" id="hero-supervisor">
 
         <div class="hero-section">
@@ -1839,6 +1860,13 @@ let currentMember = null;
 let currentTasks  = [];
 let shopMembers   = [];
 let woCount       = 0;
+let viewingShopId = null;   // My Shop switcher: shop currently being viewed (leadership)
+let overseenShops = [];     // shops a leader may switch between
+
+// Query suffix so leadership's My Shop fetches target the switched shop.
+function shopQ() {
+  return (currentMember?.role === 'leadership' && viewingShopId) ? ('?shop_id=' + viewingShopId) : '';
+}
 
 function showToast(msg, type) {
   const c = document.getElementById('toast-container');
@@ -1890,6 +1918,7 @@ function showApp() {
   document.getElementById('app').style.display = '';
   applyRole();
   populateUserUI();
+  setupShopSwitcher();
   loadTasks();
   loadShopEvents();
   loadShopMembers();
@@ -1923,6 +1952,40 @@ function applyRole() {
   // gating below hides leadership-only rollups and supervisor-only edit affordances.
   const rollups = document.getElementById('sq-rollups');
   if (rollups) rollups.style.display = role === 'leadership' ? '' : 'none';
+}
+
+/* ── Shop switcher (My Shop — leadership oversees multiple shops) ── */
+async function setupShopSwitcher() {
+  const bar = document.getElementById('shop-switch-bar');
+  const sel = document.getElementById('shop-switcher');
+  if (!bar || !sel) return;
+  if (currentMember?.role !== 'leadership') { bar.style.display = 'none'; return; }
+  try {
+    const res = await fetch('/api/shop/overseen');
+    if (!res.ok) return;
+    const data = await res.json();
+    overseenShops = data.shops || [];
+    viewingShopId = data.ownShopId || null;
+    sel.innerHTML = overseenShops.map(s =>
+      `<option value="${s.id}" ${s.id===viewingShopId?'selected':''}>${s.name} Shop</option>`
+    ).join('');
+    // Only surface the switcher when there's more than one shop to choose from.
+    bar.style.display = overseenShops.length > 1 ? 'flex' : 'none';
+  } catch {}
+}
+
+function onShopSwitch(shopId) {
+  viewingShopId = parseInt(shopId);
+  const shop = overseenShops.find(s => s.id === viewingShopId);
+  const name = shop ? shop.name : (currentMember?.shop || '');
+  // Reflect the selected shop in the header + members section title.
+  document.getElementById('mob-title').textContent  = name + ' Shop';
+  document.getElementById('desk-title').textContent = name + ' Shop';
+  const smt = document.getElementById('shop-members-title');
+  if (smt) smt.textContent = name + ' Shop';
+  // loadShopMembers rebuilds the roster (collapsing any expanded member).
+  loadShopEvents();
+  loadShopMembers();
 }
 
 /* ── Login ──────────────────────────────────────── */
@@ -2180,7 +2243,7 @@ async function saveNote(event, taskId, elId) {
 
 /* ── Shop events ────────────────────────────────── */
 async function loadShopEvents() {
-  const res = await fetch('/api/shop/events');
+  const res = await fetch('/api/shop/events' + shopQ());
   if (!res.ok) return;
   const events = await res.json();
   buildShopEvents(events);
@@ -2279,14 +2342,14 @@ function buildWorkOrders(events) {
 async function loadShopMembers() {
   const el = document.getElementById('member-list');
   if (el) el.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
-  const res = await fetch('/api/shop/members');
+  const res = await fetch('/api/shop/members' + shopQ());
   if (!res.ok) return;
   shopMembers = await res.json();
   buildMembers();
 }
 
 async function refreshShopMembers() {
-  const res = await fetch('/api/shop/members');
+  const res = await fetch('/api/shop/members' + shopQ());
   if (!res.ok) return;
   shopMembers = await res.json();
   for (const m of shopMembers) {
@@ -2384,7 +2447,7 @@ async function renderMemberTasks(memberId) {
   const inner = document.getElementById('expand-inner-'+memberId);
   if (!inner) return;
   try {
-    const res = await fetch('/api/shop/members/'+memberId+'/tasks');
+    const res = await fetch('/api/shop/members/'+memberId+'/tasks' + shopQ());
     if (!res.ok) throw new Error();
     const tasks = await res.json();
     const isSup = ['supervisor','leadership'].includes(currentMember?.role);
@@ -2729,10 +2792,12 @@ function switchView(btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   const m = currentMember;
+  // For leadership, the My Shop title follows the switched shop; otherwise own shop.
+  const viewedShop = (overseenShops.find(s => s.id === viewingShopId)?.name) || m?.shop || '';
   const titles = {
-    member:     ['June 2026 UTA',       m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
-    supervisor: [(m?.shop||'')+' Shop', 'Supervisor View'],
-    leadership: ['108th CES',           'Leadership View'],
+    member:     ['June 2026 UTA',     m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
+    supervisor: [viewedShop+' Shop',  'Supervisor View'],
+    leadership: ['108th CES',         'Leadership View'],
   };
   const [t, s] = titles[name] || ['',''];
   document.getElementById('mob-title').textContent  = t;
@@ -2958,6 +3023,7 @@ async function submitAddEvent() {
         end_time: document.getElementById('ae-end').value.trim() || null,
         details: document.getElementById('ae-details').value.trim() || null,
         wo_number: document.getElementById('ae-wo').value.trim() || null,
+        shop_id: viewingShopId,   // leadership: target the switched shop (server ignores for non-leadership)
       }),
     });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
