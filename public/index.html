@@ -956,7 +956,7 @@
     .modal-field textarea { resize: none; min-height: 60px; }
 
     /* Shop switcher (My Shop header — leadership) */
-    .shop-switch-bar { align-items: center; gap: 10px; margin-bottom: 16px; }
+    .shop-switch-bar { align-items: center; gap: 10px; margin-bottom: 14px; padding-left: 4px; }
     .shop-switch-bar .ssb-lbl {
       font-size: 11px; font-weight: 700; letter-spacing: .05em;
       text-transform: uppercase; color: var(--t2);
@@ -1045,7 +1045,7 @@
     .confirm-delete .cd-no { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
 
     /* ── My Tasks sub-tabs (My Tasks | Timeline) ── */
-    .mt-tabs {
+    .mt-tabs, .shop-tabs {
       display: flex; gap: 4px;
       background: var(--cream);
       border-radius: 12px; padding: 4px;
@@ -1053,15 +1053,15 @@
       margin: 0 0 20px;
     }
     #mt-pane-tasks .hero { margin-top: 0; }
-    .mt-tab {
+    .mt-tab, .shop-tab {
       flex: 1; background: transparent; border: 0;
       padding: 9px 10px; border-radius: 9px;
       font-family: inherit; font-size: 13px; font-weight: 600;
       color: var(--t2); cursor: pointer;
       transition: background .15s, color .15s;
     }
-    .mt-tab:hover { color: var(--text); }
-    .mt-tab.active { background: var(--text); color: var(--bg); }
+    .mt-tab:hover, .shop-tab:hover { color: var(--text); }
+    .mt-tab.active, .shop-tab.active { background: var(--text); color: var(--bg); }
     .mt-tab-badge {
       margin-left: 5px; padding: 1px 6px;
       font-size: 10px; font-weight: 700;
@@ -1069,8 +1069,8 @@
       border-radius: 9px;
     }
     .mt-tab.active .mt-tab-badge { background: rgba(255,255,255,.22); }
-    .mt-pane { display: none; }
-    .mt-pane.active { display: block; }
+    .mt-pane, .shop-pane { display: none; }
+    .mt-pane.active, .shop-pane.active { display: block; }
 
     /* ── Timeline pane ─────────────────────────── */
     #mt-pane-timeline {
@@ -1499,12 +1499,6 @@
     <!-- ═══ SUPERVISOR VIEW ═══════════════════════ -->
     <div id="view-supervisor" class="view">
 
-      <!-- Shop switcher — leadership overseeing more than one shop -->
-      <div id="shop-switch-bar" class="shop-switch-bar" style="display:none">
-        <span class="ssb-lbl">Viewing shop</span>
-        <select id="shop-switcher" onchange="onShopSwitch(this.value)" aria-label="Switch shop"></select>
-      </div>
-
       <div class="hero" id="hero-supervisor">
 
         <div class="hero-section">
@@ -1542,20 +1536,36 @@
 
       </div>
 
-      <!-- Shop schedule — visible to all members -->
-      <div class="sec-hd">
-        <div class="sec-title">Shop Schedule</div>
-        <div class="sec-sub">June 2026 UTA</div>
+      <!-- Shop switcher — leadership overseeing more than one shop (sits below the gauge) -->
+      <div id="shop-switch-bar" class="shop-switch-bar" style="display:none">
+        <span class="ssb-lbl">Viewing shop</span>
+        <select id="shop-switcher" onchange="onShopSwitch(this.value)" aria-label="Switch shop"></select>
       </div>
-      <div id="shop-events-list" class="mb-lg"></div>
 
-      <!-- Members section — supervisors and leadership only -->
-      <div id="shop-members-section">
-        <div class="sec-hd">
-          <div class="sec-title" id="shop-members-title">Structures Shop</div>
-          <div class="sec-sub">Tap a member to expand</div>
+      <!-- Shop / Shop Schedule pills -->
+      <div class="shop-tabs" role="tablist">
+        <button class="shop-tab active" data-sp="members" onclick="switchShopPane('members')">Shop</button>
+        <button class="shop-tab" data-sp="schedule" onclick="switchShopPane('schedule')">Shop Schedule</button>
+      </div>
+
+      <!-- Pane: Shop (member roster) -->
+      <div id="shop-pane-members" class="shop-pane active">
+        <div id="shop-members-section">
+          <div class="sec-hd">
+            <div class="sec-title" id="shop-members-title">Structures Shop</div>
+            <div class="sec-sub">Tap a member to expand</div>
+          </div>
+          <div class="card" id="member-list"></div>
         </div>
-        <div class="card" id="member-list"></div>
+      </div>
+
+      <!-- Pane: Shop Schedule — visible to all members -->
+      <div id="shop-pane-schedule" class="shop-pane">
+        <div class="sec-hd">
+          <div class="sec-title">Shop Schedule</div>
+          <div class="sec-sub">June 2026 UTA</div>
+        </div>
+        <div id="shop-events-list" class="mb-lg"></div>
       </div>
 
     </div>
@@ -2806,7 +2816,7 @@ function switchView(btn) {
   document.getElementById('desk-sub').textContent   = s;
 
   if (name === 'member') { switchMtPane('tasks'); loadTasks(); }
-  if (name === 'supervisor') { loadShopEvents(); loadShopMembers(); }
+  if (name === 'supervisor') { switchShopPane('members'); loadShopEvents(); loadShopMembers(); }
   if (name === 'leadership') {
     loadOrgChart();
     if (currentMember?.role === 'leadership') loadSquadron();
@@ -3054,6 +3064,14 @@ function switchMtPane(name) {
     p.classList.toggle('active', p.id === 'mt-pane-' + name));
   if (name === 'timeline') loadTimeline();
   if (name === 'workorders') loadWorkOrders();
+}
+
+/* ── My Shop sub-tabs (Shop | Shop Schedule) ── */
+function switchShopPane(name) {
+  document.querySelectorAll('.shop-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.sp === name));
+  document.querySelectorAll('.shop-pane').forEach(p =>
+    p.classList.toggle('active', p.id === 'shop-pane-' + name));
 }
 
 /* ── Squadron Timeline ─────────────────────────── */
