@@ -51,7 +51,7 @@ their phone.
 | View          | Who sees it             | Headline feature                                  |
 |---------------|-------------------------|---------------------------------------------------|
 | **My Tasks**  | Everyone                | Your personal task list + completion gauge        |
-| **My Shop**   | Supervisors & leadership| Your shop's progress + assign/manage tasks        |
+| **My Shop**   | Supervisors & leadership| Your shop's progress + assign/manage tasks (leaders can switch shops) |
 | **Squadron**  | Leadership (org chart: all) | Whole-squadron rollup + push tasks unit-wide  |
 
 You switch views from the **left sidebar** on a computer, or the **bottom
@@ -82,14 +82,22 @@ being chased.*
 ### My Shop — supervisors & leadership
 - **Shop completion gauge** plus **On Track vs Behind** counts.
 - **Member Progress** chart across everyone in the shop.
-- **Shop Schedule** — schedule items, work orders, and emphasis items for the drill.
-- **Member roster** — tap any member to expand and see their tasks.
+- Two sub-tabs (pills) under the gauge: **Shop** and **Shop Schedule**.
+  - **Shop** — the **member roster**; tap any member to expand and see their tasks.
+  - **Shop Schedule** — schedule items, work orders, and emphasis items for the drill.
+- **Shop switcher (NEW)** — leadership who oversee more than one shop (a flight
+  chief, or squadron-level leadership) get a **"Viewing shop" dropdown** below
+  the gauge to switch which shop they're looking at. A flight chief sees the
+  shops in their flight; squadron leadership can page through every shop. A
+  supervisor with a single shop doesn't see the dropdown — it only appears when
+  there's more than one shop to switch between.
 - Supervisors can **Add Task** (assign it to a specific member) and
   **Add Shop Item** (schedule / work order / emphasis) right from this screen,
   and can **flag** a task.
 
 *Why it matters: a supervisor manages the whole shop's readiness from one
-screen and can act on it immediately.*
+screen and can act on it immediately — and a flight chief can hop shop-to-shop
+without leaving the view.*
 
 ### Squadron — leadership
 - **Chain of Command** org chart (this part is visible to everyone).
@@ -121,9 +129,11 @@ needs it without going shop by shop.*
 2. **Switch views** from the left sidebar (computer) or bottom bar (phone):
    *My Tasks → My Shop → Squadron*.
 3. Inside **My Tasks**, use the sub-tabs: *My Tasks / Timeline / Work Orders*.
-4. In **My Shop** and **Squadron**, **tap a member or a shop to expand** it.
-5. **Theme toggle** is in the sidebar (sun/moon icon).
-6. **Log out** from the user area when you're done.
+4. Inside **My Shop**, use the pills *Shop / Shop Schedule*; if you oversee more
+   than one shop, the **"Viewing shop" dropdown** below the gauge switches shops.
+5. In **My Shop** and **Squadron**, **tap a member or a shop to expand** it.
+6. **Theme toggle** is in the sidebar (sun/moon icon).
+7. **Log out** from the user area when you're done.
 
 ---
 
@@ -146,25 +156,28 @@ needs it without going shop by shop.*
 **Act 2 — The Supervisor's view (My Shop tab)**
 6. Open **My Shop**. Point at the **shop gauge** and **On Track vs Behind**.
 7. Show the **Member Progress** chart — "a supervisor sees the whole shop at once."
-8. **Tap a member** to expand their tasks.
-9. **Add a Task** assigned to a single member — "this is how a supervisor pushes
-   a requirement down."
-10. **Add a Shop Item** (a schedule entry or emphasis item) and **flag a task**
+8. On the **Shop** pill, **tap a member** to expand their tasks; then flip to the
+   **Shop Schedule** pill to show the drill's schedule, work orders, and emphasis items.
+9. *(Leadership only)* Use the **"Viewing shop" dropdown** to switch to another
+   shop — "as a flight chief I can check any shop in my flight from right here."
+10. **Add a Task** assigned to a single member — "this is how a supervisor pushes
+    a requirement down."
+11. **Add a Shop Item** (a schedule entry or emphasis item) and **flag a task**
     to highlight it for the member.
 
 **Act 3 — Leadership view (Squadron tab)**
-11. Open **Squadron**. Walk the **Completion by Shop** chart and the squadron gauge.
-12. Show **Members Most Behind** — "this is my call list."
-13. Show **Squadron by Category** — where the squadron is lagging.
-14. Show the **Chain of Command** org chart.
-15. **Tap a shop** in All Shops to drill into its members.
-16. **Add Task (the new feature):** click **Add Task**, choose **Entire Squadron**
+12. Open **Squadron**. Walk the **Completion by Shop** chart and the squadron gauge.
+13. Show **Members Most Behind** — "this is my call list."
+14. Show **Squadron by Category** — where the squadron is lagging.
+15. Show the **Chain of Command** org chart.
+16. **Tap a shop** in All Shops to drill into its members.
+17. **Add Task:** click **Add Task**, choose **Entire Squadron**
     (or a single shop), and push a requirement out to everyone at once — "one
     click and it's in every affected member's list."
 
 **Closer**
-17. Pull out your **phone**, show the same app with the bottom nav.
-18. Hit the **theme toggle** for a quick visual flourish, then wrap.
+18. Pull out your **phone**, show the same app with the bottom nav.
+19. Hit the **theme toggle** for a quick visual flourish, then wrap.
 
 ---
 
@@ -212,7 +225,10 @@ needs it without going shop by shop.*
       can reach all three views (My Tasks, My Shop, Squadron).
 - [ ] Confirm My Tasks shows real tasks (including an Overdue one) so the gauge
       demo lands.
-- [ ] Confirm your shop shows multiple members so Member Progress looks real.
+- [ ] Confirm your shop shows multiple members so Member Progress looks real,
+      and that the **Shop / Shop Schedule** pills both load.
+- [ ] If you oversee more than one shop, confirm the **"Viewing shop" dropdown**
+      appears and switches the shop you're looking at.
 - [ ] Confirm the squadron rollup shows several shops and a "most behind" list.
 - [ ] Open **Squadron → Add Task**, confirm the target dropdown lists "Entire
       Squadron" and every shop. *(Only run a real push if you actually intend to
