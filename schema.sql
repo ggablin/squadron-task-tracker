@@ -78,10 +78,23 @@ CREATE TABLE IF NOT EXISTS shop_events (
   title         VARCHAR(255) NOT NULL,
   details       TEXT,
   wo_number     VARCHAR(50),
+  status        VARCHAR(20) DEFAULT 'open'
+                  CHECK (status IN ('open','in_progress','complete')),
   created_by_id INTEGER REFERENCES members(id),
   sort_order    INTEGER DEFAULT 99,
   created_at    TIMESTAMP DEFAULT NOW()
 );
+
+-- Append-only history of work-order status changes (full timeline, mandatory note).
+CREATE TABLE IF NOT EXISTS shop_event_status_log (
+  id            SERIAL PRIMARY KEY,
+  shop_event_id INTEGER REFERENCES shop_events(id) ON DELETE CASCADE,
+  status        VARCHAR(20) NOT NULL CHECK (status IN ('open','in_progress','complete')),
+  note          TEXT NOT NULL,
+  updated_by_id INTEGER REFERENCES members(id),
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_se_status_log_event ON shop_event_status_log (shop_event_id);
 
 CREATE TABLE IF NOT EXISTS squadron_events (
   id            SERIAL PRIMARY KEY,
@@ -107,6 +120,7 @@ DO $$ BEGIN
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
   ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+  ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open';
   ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
 EXCEPTION WHEN others THEN NULL;

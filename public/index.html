@@ -432,6 +432,9 @@
     .b-upcoming { background: var(--wrn-bg); color: var(--warn); }
     .b-partial { background: var(--wrn-bg); color: var(--warn); }
     .b-done { background: var(--ok-bg); color: var(--ok); }
+    /* Work-order status badges */
+    .b-open { background: var(--border); color: var(--t2); }
+    .b-progress { background: var(--wrn-bg); color: var(--warn); }
 
     /* ──────────────────────────────────────────────
        Expandable rows (members, shops)
@@ -1542,13 +1545,14 @@
         <select id="shop-switcher" onchange="onShopSwitch(this.value)" aria-label="Switch shop"></select>
       </div>
 
-      <!-- Shop / Shop Schedule pills -->
+      <!-- Members / Work Orders / Schedule pills -->
       <div class="shop-tabs" role="tablist">
-        <button class="shop-tab active" data-sp="members" onclick="switchShopPane('members')">Shop</button>
-        <button class="shop-tab" data-sp="schedule" onclick="switchShopPane('schedule')">Shop Schedule</button>
+        <button class="shop-tab active" data-sp="members" onclick="switchShopPane('members')">Members</button>
+        <button class="shop-tab" data-sp="workorders" onclick="switchShopPane('workorders')">Work Orders</button>
+        <button class="shop-tab" data-sp="schedule" onclick="switchShopPane('schedule')">Schedule</button>
       </div>
 
-      <!-- Pane: Shop (member roster) -->
+      <!-- Pane: Members (member roster) -->
       <div id="shop-pane-members" class="shop-pane active">
         <div id="shop-members-section">
           <div class="sec-hd">
@@ -1559,10 +1563,19 @@
         </div>
       </div>
 
-      <!-- Pane: Shop Schedule — visible to all members -->
+      <!-- Pane: Work Orders — visible to all members -->
+      <div id="shop-pane-workorders" class="shop-pane">
+        <div class="sec-hd">
+          <div class="sec-title">Work Orders</div>
+          <div class="sec-sub">June 2026 UTA</div>
+        </div>
+        <div id="shop-wo-host" class="mb-lg"></div>
+      </div>
+
+      <!-- Pane: Schedule — visible to all members -->
       <div id="shop-pane-schedule" class="shop-pane">
         <div class="sec-hd">
-          <div class="sec-title">Shop Schedule</div>
+          <div class="sec-title">Schedule</div>
           <div class="sec-sub">June 2026 UTA</div>
         </div>
         <div id="shop-events-list" class="mb-lg"></div>
@@ -1812,7 +1825,7 @@
 <div class="modal-backdrop" id="add-event-modal" onclick="if(event.target===this)closeModal('add-event-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title">Add Shop Item</div>
+      <div class="modal-title" id="ae-modal-title">Add Shop Item</div>
       <button class="modal-close" onclick="closeModal('add-event-modal')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -1858,7 +1871,37 @@
       <input type="text" id="ae-wo" placeholder="WO# 202600000">
     </div>
     <div id="ae-error" class="login-error" style="display:none"></div>
-    <button class="modal-submit" onclick="submitAddEvent()">Add Item</button>
+    <button class="modal-submit" id="ae-submit" onclick="submitAddEvent()">Add Item</button>
+  </div>
+</div>
+
+<!-- ═══ WORK ORDER STATUS MODAL ════════════════ -->
+<div class="modal-backdrop" id="wo-status-modal" onclick="if(event.target===this)closeModal('wo-status-modal')">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <div class="modal-title">Update Work Order</div>
+      <button class="modal-close" onclick="closeModal('wo-status-modal')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div id="ws-wo-title" class="mb-sm" style="font-weight:600"></div>
+    <input type="hidden" id="ws-event-id">
+    <div class="modal-field">
+      <label>Status</label>
+      <select id="ws-status">
+        <option value="open">Open</option>
+        <option value="in_progress">In Progress</option>
+        <option value="complete">Complete</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Details (required)</label>
+      <textarea id="ws-note" rows="3" placeholder="What was done, current state, blockers…"></textarea>
+    </div>
+    <div id="ws-error" class="login-error" style="display:none"></div>
+    <button class="modal-submit" onclick="submitStatus()">Save Update</button>
+    <div class="sec-hd" style="margin-top:18px"><div class="sec-title">History</div></div>
+    <div id="ws-history"></div>
   </div>
 </div>
 
@@ -1872,6 +1915,8 @@ let shopMembers   = [];
 let woCount       = 0;
 let viewingShopId = null;   // My Shop switcher: shop currently being viewed (leadership)
 let overseenShops = [];     // shops a leader may switch between
+let shopEventsCache = [];   // last-fetched shop events, for status/edit modal prefill
+let editingEventId  = null; // set while the add/edit modal is in edit mode
 
 // Query suffix so leadership's My Shop fetches target the switched shop.
 function shopQ() {
@@ -2256,8 +2301,13 @@ async function loadShopEvents() {
   const res = await fetch('/api/shop/events' + shopQ());
   if (!res.ok) return;
   const events = await res.json();
+  shopEventsCache = events;
+  // Count once here (buildWorkOrders renders into two hosts).
+  woCount = events.filter(e => e.event_type === 'work_order').length;
+  updateNavBadges();
   buildShopEvents(events);
-  buildWorkOrders(events);
+  buildWorkOrders(events, 'wo-host');       // My Tasks → Work Orders tab
+  buildWorkOrders(events, 'shop-wo-host');  // My Shop → Work Orders pane
 }
 
 async function loadWorkOrders() {
@@ -2265,20 +2315,36 @@ async function loadWorkOrders() {
   return loadShopEvents();
 }
 
+function woStatusMeta(status) {
+  switch (status) {
+    case 'in_progress': return { label: 'In Progress', cls: 'b-progress' };
+    case 'complete':    return { label: 'Complete',    cls: 'b-done' };
+    default:            return { label: 'Open',         cls: 'b-open' };
+  }
+}
+
 function shopEventRow(e, isSup) {
   const isWO  = e.event_type==='work_order';
   const isEmp = e.event_type==='emphasis';
   const time  = e.start_time ? e.start_time+(e.end_time?'–'+e.end_time:'') : '';
-  const det   = [time, e.details].filter(Boolean).join(' · ');
+  const det   = [time, e.details ? tlEsc(e.details) : ''].filter(Boolean).join(' · ');
   const bcls  = isWO ? 'b-upcoming' : isEmp ? 'b-urgent' : 'b-upcoming';
   const blbl  = isWO ? 'WO' : isEmp ? 'Emphasis' : (e.day||'').split('/')[0].slice(0,3);
+  const titleHtml = (isWO && e.wo_number ? tlEsc(e.wo_number)+' — ' : '') + tlEsc(e.title);
+  const sm = isWO ? woStatusMeta(e.status) : null;
   return `<div class="task-item" style="cursor:default">
     <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
     <div class="task-body">
-      <div class="task-title">${isWO ? (e.wo_number ? e.wo_number+' — ' : '') : ''}${e.title}</div>
+      <div class="task-title">${titleHtml}</div>
       ${det ? `<div class="task-det">${det}</div>` : ''}
     </div>
-    <div class="badge ${bcls}">${blbl}</div>
+    ${isWO ? `<span class="badge ${sm.cls}" title="Work order status">${sm.label}</span>` : `<div class="badge ${bcls}">${blbl}</div>`}
+    ${isWO ? `<button class="act-btn" title="Update status" style="margin-left:6px" onclick="event.stopPropagation();openStatusModal(${e.id})">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v4l2.5 1.5"/><circle cx="8" cy="8" r="6"/></svg>
+    </button>` : ''}
+    ${isSup ? `<button class="act-btn" title="Edit item" style="margin-left:6px" onclick="event.stopPropagation();openEditEvent(${e.id})">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z"/></svg>
+    </button>` : ''}
     ${isSup ? `<button class="act-btn del" title="Delete item" style="margin-left:6px" onclick="event.stopPropagation();deleteEvent(${e.id})">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4"/></svg>
     </button>` : ''}
@@ -2320,13 +2386,11 @@ function buildShopEvents(events) {
   el.innerHTML = html;
 }
 
-function buildWorkOrders(events) {
-  const el = document.getElementById('wo-host');
+function buildWorkOrders(events, hostId) {
+  const el = document.getElementById(hostId || 'wo-host');
   if (!el) return;
   const isSup = ['supervisor','leadership'].includes(currentMember?.role);
   const workOrders = events.filter(e => e.event_type === 'work_order');
-  woCount = workOrders.length;
-  updateNavBadges();
   let html = '';
   if (isSup) {
     html += `<div class="mb-sm">
@@ -3004,6 +3068,7 @@ async function flagTask(taskId, memberId, currentlyFlagged) {
 
 /* ── Add Shop Event ────────────────────────────── */
 function openAddEvent(presetType) {
+  editingEventId = null;
   document.getElementById('ae-title').value = '';
   document.getElementById('ae-details').value = '';
   document.getElementById('ae-day').value = '';
@@ -3012,6 +3077,26 @@ function openAddEvent(presetType) {
   document.getElementById('ae-wo').value = '';
   document.getElementById('ae-type').value = presetType || 'schedule';
   document.getElementById('ae-error').style.display = 'none';
+  document.getElementById('ae-modal-title').textContent = 'Add Shop Item';
+  document.getElementById('ae-submit').textContent = 'Add Item';
+  openModal('add-event-modal');
+  setTimeout(() => document.getElementById('ae-title').focus(), 100);
+}
+
+function openEditEvent(eventId) {
+  const e = shopEventsCache.find(x => x.id === eventId);
+  if (!e) { showToast('Item not found — refresh and try again', 'error'); return; }
+  editingEventId = eventId;
+  document.getElementById('ae-type').value = e.event_type || 'schedule';
+  document.getElementById('ae-title').value = e.title || '';
+  document.getElementById('ae-day').value = e.day || '';
+  document.getElementById('ae-start').value = e.start_time || '';
+  document.getElementById('ae-end').value = e.end_time || '';
+  document.getElementById('ae-details').value = e.details || '';
+  document.getElementById('ae-wo').value = e.wo_number || '';
+  document.getElementById('ae-error').style.display = 'none';
+  document.getElementById('ae-modal-title').textContent = 'Edit Shop Item';
+  document.getElementById('ae-submit').textContent = 'Save Changes';
   openModal('add-event-modal');
   setTimeout(() => document.getElementById('ae-title').focus(), 100);
 }
@@ -3021,27 +3106,94 @@ async function submitAddEvent() {
   err.style.display = 'none';
   const title = document.getElementById('ae-title').value.trim();
   if (!title) { err.textContent = 'Title is required'; err.style.display = ''; return; }
+  const editing = editingEventId != null;
+  const body = {
+    event_type: document.getElementById('ae-type').value,
+    title,
+    day: document.getElementById('ae-day').value || null,
+    start_time: document.getElementById('ae-start').value.trim() || null,
+    end_time: document.getElementById('ae-end').value.trim() || null,
+    details: document.getElementById('ae-details').value.trim() || null,
+    wo_number: document.getElementById('ae-wo').value.trim() || null,
+  };
+  // shop_id only applies to creation (leadership targets the switched shop);
+  // edits are scoped by the event id on the server.
+  if (!editing) body.shop_id = viewingShopId;
   try {
-    const res = await fetch('/api/shop/events', {
-      method: 'POST',
+    const res = await fetch('/api/shop/events' + (editing ? '/' + editingEventId : ''), {
+      method: editing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_type: document.getElementById('ae-type').value,
-        title,
-        day: document.getElementById('ae-day').value || null,
-        start_time: document.getElementById('ae-start').value.trim() || null,
-        end_time: document.getElementById('ae-end').value.trim() || null,
-        details: document.getElementById('ae-details').value.trim() || null,
-        wo_number: document.getElementById('ae-wo').value.trim() || null,
-        shop_id: viewingShopId,   // leadership: target the switched shop (server ignores for non-leadership)
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
     closeModal('add-event-modal');
-    showToast('Item added', 'success');
+    showToast(editing ? 'Item updated' : 'Item added', 'success');
+    editingEventId = null;
     await loadShopEvents();
   } catch (e) {
-    err.textContent = e.message || 'Failed to add item'; err.style.display = '';
+    err.textContent = e.message || 'Failed to save item'; err.style.display = '';
+  }
+}
+
+/* ── Work Order Status ─────────────────────────── */
+async function openStatusModal(eventId) {
+  const e = shopEventsCache.find(x => x.id === eventId);
+  document.getElementById('ws-event-id').value = eventId;
+  document.getElementById('ws-status').value = (e && e.status) || 'open';
+  document.getElementById('ws-note').value = '';
+  document.getElementById('ws-error').style.display = 'none';
+  const titleEl = document.getElementById('ws-wo-title');
+  titleEl.textContent = e ? ((e.wo_number ? e.wo_number + ' — ' : '') + e.title) : '';
+  document.getElementById('ws-history').innerHTML = '<p style="color:var(--t2);padding:8px 4px">Loading…</p>';
+  openModal('wo-status-modal');
+  setTimeout(() => document.getElementById('ws-note').focus(), 100);
+  await loadStatusHistory(eventId);
+}
+
+async function loadStatusHistory(eventId) {
+  const host = document.getElementById('ws-history');
+  try {
+    const res = await fetch('/api/shop/events/' + eventId + '/log');
+    if (!res.ok) throw new Error();
+    const log = await res.json();
+    if (!log.length) { host.innerHTML = '<p style="color:var(--t2);padding:8px 4px">No updates yet.</p>'; return; }
+    host.innerHTML = log.map(l => {
+      const sm = woStatusMeta(l.status);
+      const who = [l.rank, l.last_name].filter(Boolean).join(' ') || 'Unknown';
+      const when = l.created_at ? new Date(l.created_at).toLocaleString() : '';
+      return `<div class="task-item" style="cursor:default;align-items:flex-start">
+        <div class="task-body">
+          <div class="task-title"><span class="badge ${sm.cls}">${sm.label}</span></div>
+          <div class="task-det">${tlEsc(l.note)}</div>
+          <div class="task-det" style="opacity:.8">${tlEsc(who)} · ${tlEsc(when)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    host.innerHTML = '<p style="color:var(--t2);padding:8px 4px">Failed to load history.</p>';
+  }
+}
+
+async function submitStatus() {
+  const err = document.getElementById('ws-error');
+  err.style.display = 'none';
+  const eventId = document.getElementById('ws-event-id').value;
+  const status = document.getElementById('ws-status').value;
+  const note = document.getElementById('ws-note').value.trim();
+  if (!note) { err.textContent = 'Details are required'; err.style.display = ''; return; }
+  try {
+    const res = await fetch('/api/shop/events/' + eventId + '/status', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, note }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    showToast('Status updated', 'success');
+    document.getElementById('ws-note').value = '';
+    await loadShopEvents();        // refresh badges in both panes
+    await loadStatusHistory(eventId);  // refresh the timeline in place
+  } catch (e) {
+    err.textContent = e.message || 'Failed to update status'; err.style.display = '';
   }
 }
 

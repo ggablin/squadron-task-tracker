@@ -37,8 +37,18 @@ app.use(session({
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
       ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
+      ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open';
       ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
+      CREATE TABLE IF NOT EXISTS shop_event_status_log (
+        id            SERIAL PRIMARY KEY,
+        shop_event_id INTEGER REFERENCES shop_events(id) ON DELETE CASCADE,
+        status        VARCHAR(20) NOT NULL CHECK (status IN ('open','in_progress','complete')),
+        note          TEXT NOT NULL,
+        updated_by_id INTEGER REFERENCES members(id),
+        created_at    TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_se_status_log_event ON shop_event_status_log (shop_event_id);
       CREATE TABLE IF NOT EXISTS squadron_events (
         id            SERIAL PRIMARY KEY,
         uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
@@ -363,7 +373,7 @@ app.get('/api/shop/events', requireAuth, async (req, res) => {
     const targetShopId = req.session.role === 'leadership' && req.query.shop_id
       ? parseInt(req.query.shop_id) : req.session.shopId;
     const { rows } = await pool.query(`
-      SELECT id, event_type, day, start_time, end_time, title, details, wo_number, sort_order FROM shop_events
+      SELECT id, event_type, day, start_time, end_time, title, details, wo_number, status, sort_order FROM shop_events
       WHERE shop_id = $1
         AND uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       ORDER BY sort_order
@@ -419,6 +429,108 @@ app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async
 
     await pool.query('DELETE FROM shop_events WHERE id = $1', [eventId]);
     res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Edit Shop Event (supervisor: own shop, leadership: any) ──────────────────
+// Status is intentionally not editable here — it changes only via the status
+// endpoint so the history log stays authoritative.
+
+app.put('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id);
+    const { event_type, day, start_time, end_time, title, details, wo_number } = req.body;
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    if (!event_type || !['schedule','work_order','emphasis'].includes(event_type)) {
+      return res.status(400).json({ error: 'event_type must be schedule, work_order, or emphasis' });
+    }
+
+    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    if (!er.length) return res.status(404).json({ error: 'Event not found' });
+    if (req.session.role === 'supervisor' && er[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot edit events from other shops' });
+    }
+
+    const { rows: [event] } = await pool.query(`
+      UPDATE shop_events
+         SET event_type = $1, day = $2, start_time = $3, end_time = $4,
+             title = $5, details = $6, wo_number = $7
+       WHERE id = $8
+      RETURNING *
+    `, [event_type, day || null, start_time || null, end_time || null,
+        title, details || null, wo_number || null, eventId]);
+
+    res.json(event);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Update Work Order Status (all users: own shop; leadership: any) ───────────
+// Appends a row to the history log and updates the current status. Note is
+// mandatory.
+
+app.put('/api/shop/events/:id/status', requireAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const eventId = parseInt(req.params.id);
+    const { status, note } = req.body;
+    if (!['open','in_progress','complete'].includes(status)) {
+      return res.status(400).json({ error: 'status must be open, in_progress, or complete' });
+    }
+    if (!note || !note.trim()) {
+      return res.status(400).json({ error: 'A details note is required' });
+    }
+
+    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    if (!er.length) return res.status(404).json({ error: 'Event not found' });
+    // Members and supervisors may only touch their own shop; leadership any shop.
+    if (req.session.role !== 'leadership' && er[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot update events outside your shop' });
+    }
+
+    await client.query('BEGIN');
+    await client.query(`
+      INSERT INTO shop_event_status_log (shop_event_id, status, note, updated_by_id)
+      VALUES ($1, $2, $3, $4)
+    `, [eventId, status, note.trim(), req.session.memberId]);
+    await client.query('UPDATE shop_events SET status = $1 WHERE id = $2', [status, eventId]);
+    await client.query('COMMIT');
+
+    res.json({ success: true, status });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// ── Work Order Status History (all users: own shop; leadership: any) ─────────
+
+app.get('/api/shop/events/:id/log', requireAuth, async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id);
+    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    if (!er.length) return res.status(404).json({ error: 'Event not found' });
+    if (req.session.role !== 'leadership' && er[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { rows } = await pool.query(`
+      SELECT l.status, l.note, l.created_at,
+             m.rank, m.first_name, m.last_name
+        FROM shop_event_status_log l
+        LEFT JOIN members m ON m.id = l.updated_by_id
+       WHERE l.shop_event_id = $1
+       ORDER BY l.created_at DESC
+    `, [eventId]);
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
