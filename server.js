@@ -66,6 +66,20 @@ app.use(session({
         sort_order    INTEGER DEFAULT 99,
         created_at    TIMESTAMP DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS notifications (
+        id            SERIAL PRIMARY KEY,
+        member_id     INTEGER NOT NULL REFERENCES members(id),
+        type          VARCHAR(30) NOT NULL
+                        CHECK (type IN ('tasks_live','task_assigned','completion_digest')),
+        title         VARCHAR(255) NOT NULL,
+        body          TEXT,
+        link          VARCHAR(50),
+        read_at       TIMESTAMP,
+        emailed_at    TIMESTAMP,
+        created_at    TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_member ON notifications (member_id, read_at);
+      CREATE INDEX IF NOT EXISTS idx_notifications_unemailed ON notifications (emailed_at) WHERE emailed_at IS NULL;
     `);
     console.log('Migration check complete');
   } catch (e) {
@@ -86,6 +100,24 @@ function requireRole(minRole) {
     if ((levels[req.session.role] ?? -1) >= levels[minRole]) return next();
     res.status(403).json({ error: 'Forbidden' });
   };
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+// Single source of truth for both the in-app center and the email channel.
+// One parameterized multi-row INSERT; failures are logged but never block the
+// request that triggered them.
+async function notify(memberIds, { type, title, body = null, link = null }) {
+  const ids = (memberIds || []).filter(id => id != null);
+  if (!ids.length) return;
+  try {
+    await pool.query(
+      `INSERT INTO notifications (member_id, type, title, body, link)
+       SELECT id, $2, $3, $4, $5 FROM unnest($1::int[]) AS id`,
+      [ids, type, title, body, link]
+    );
+  } catch (err) {
+    console.error('notify() failed:', err.message);
+  }
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -240,6 +272,16 @@ app.post('/api/tasks', requireAuth, requireRole('supervisor'), async (req, res) 
         appt_day || null, appt_time || null, appt_location || null,
         is_upcoming || false, req.session.memberId]);
 
+    // Notify the assignee (but not a supervisor assigning a task to themselves).
+    if (member_id !== req.session.memberId) {
+      await notify([member_id], {
+        type: 'task_assigned',
+        title: 'New task assigned',
+        body: title,
+        link: 'member',
+      });
+    }
+
     res.json(task);
   } catch (err) {
     console.error(err);
@@ -284,10 +326,16 @@ app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), async (r
              m.id, $1, $2, $3, $4, $5, $6, $7, false, $8, 99
       FROM members m
       WHERE m.active = true AND ($9::int IS NULL OR m.shop_id = $9)
-      RETURNING id
+      RETURNING member_id
     `, [catRows[0].id, title, details || null, urgency || 'this_uta',
         appt_day || null, appt_time || null, appt_location || null,
         req.session.memberId, shopId]);
+
+    // Notify every recipient except the leader who issued the bulk task.
+    await notify(
+      rows.map(r => r.member_id).filter(id => id !== req.session.memberId),
+      { type: 'task_assigned', title: 'New task assigned', body: title, link: 'member' }
+    );
 
     res.json({ created: rows.length });
   } catch (err) {
@@ -841,6 +889,53 @@ app.get('/api/squadron/org-chart', requireAuth, async (req, res) => {
   }
 });
 
+// ── Notifications API ───────────────────────────────────────────────────────
+
+// Recent notifications for the signed-in member, plus the unread count.
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, type, title, body, link, read_at, created_at
+      FROM notifications
+      WHERE member_id = $1
+      ORDER BY (read_at IS NULL) DESC, created_at DESC
+      LIMIT 30
+    `, [req.session.memberId]);
+    const { rows: [c] } = await pool.query(
+      'SELECT COUNT(*)::int AS unread FROM notifications WHERE member_id = $1 AND read_at IS NULL',
+      [req.session.memberId]
+    );
+    res.json({ notifications: rows, unread: c.unread });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Mark a single notification read ({ id }) or all of them ({ all: true }).
+app.post('/api/notifications/read', requireAuth, async (req, res) => {
+  try {
+    const { id, all } = req.body;
+    if (all) {
+      await pool.query(
+        'UPDATE notifications SET read_at = NOW() WHERE member_id = $1 AND read_at IS NULL',
+        [req.session.memberId]
+      );
+    } else if (id) {
+      await pool.query(
+        'UPDATE notifications SET read_at = NOW() WHERE id = $1 AND member_id = $2',
+        [id, req.session.memberId]
+      );
+    } else {
+      return res.status(400).json({ error: 'id or all is required' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Static ────────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -849,3 +944,24 @@ app.get('*', (req, res) =>
 );
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// ── Scheduled jobs (in-process) ─────────────────────────────────────────────
+// Completion digests + email flushing run on a timer inside the web process.
+// Disable with ENABLE_CRON=false (e.g. for local/dev or one-off scripts).
+if (process.env.ENABLE_CRON !== 'false') {
+  const cron = require('node-cron');
+  const { runDigests } = require('./notify-digests');
+  const { flushEmails } = require('./notify-emails');
+
+  // Completion digest once a day at 21:00 (end of a typical drill day).
+  cron.schedule('0 21 * * *', () => {
+    runDigests({ pool }).catch(e => console.error('digest job failed:', e.message));
+  });
+
+  // Flush pending notification emails every 5 minutes.
+  cron.schedule('*/5 * * * *', () => {
+    flushEmails({ pool }).catch(e => console.error('email job failed:', e.message));
+  });
+
+  console.log('Scheduled jobs registered (digests 21:00 daily, email flush every 5m)');
+}

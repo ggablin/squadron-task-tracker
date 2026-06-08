@@ -314,11 +314,27 @@ async function run() {
     }
 
     await client.query('COMMIT');
+
+    // Notify every active member who received checkable (non-upcoming) tasks in
+    // the new cycle that their tasks are live. One row per member.
+    const { rowCount: notified } = await pool.query(`
+      INSERT INTO notifications (member_id, type, title, body, link)
+      SELECT m.id, 'tasks_live', $2,
+             'Your ' || $3 || ' tasks are live — ' || COUNT(*) || ' item' ||
+               CASE WHEN COUNT(*) = 1 THEN '' ELSE 's' END || '.',
+             'member'
+      FROM members m
+      JOIN tasks t ON t.member_id = m.id
+      WHERE t.uta_cycle_id = $1 AND t.is_upcoming = false AND m.active = true
+      GROUP BY m.id
+    `, [utaId, cycleName + ' tasks are live', cycleName]);
+
     console.log(`\n✅ Import complete for ${cycleName}`);
     console.log(`   Tasks:         ${taskCount} imported (${taskSkip} skipped)`);
     console.log(`   Work Orders:   ${woCount}`);
     console.log(`   Shop Schedule: ${schedCount} shop_events (includes ALL→per-shop fan-out)`);
     console.log(`   Timeline:      ${timelineCount} squadron_events`);
+    console.log(`   Notifications: ${notified} members notified tasks are live`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Import failed:', err.message);

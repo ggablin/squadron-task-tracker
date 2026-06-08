@@ -126,6 +126,22 @@ DO $$ BEGIN
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
+-- In-app + email notifications (single source of truth for both channels)
+CREATE TABLE IF NOT EXISTS notifications (
+  id            SERIAL PRIMARY KEY,
+  member_id     INTEGER NOT NULL REFERENCES members(id),  -- recipient
+  type          VARCHAR(30) NOT NULL
+                  CHECK (type IN ('tasks_live','task_assigned','completion_digest')),
+  title         VARCHAR(255) NOT NULL,
+  body          TEXT,
+  link          VARCHAR(50),          -- view name for in-app deep-link (e.g. 'member','supervisor')
+  read_at       TIMESTAMP,            -- NULL = unread
+  emailed_at    TIMESTAMP,            -- NULL = not yet emailed
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_member ON notifications (member_id, read_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_unemailed ON notifications (emailed_at) WHERE emailed_at IS NULL;
+
 -- Session storage for connect-pg-simple
 CREATE TABLE IF NOT EXISTS session (
   sid    VARCHAR    NOT NULL COLLATE "default",
