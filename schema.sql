@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS members (
   email         VARCHAR(255),
   flight        VARCHAR(30),
   position      VARCHAR(50),
+  must_change_password BOOLEAN DEFAULT true,
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
@@ -123,6 +124,7 @@ DO $$ BEGIN
   ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open';
   ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
+  ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
