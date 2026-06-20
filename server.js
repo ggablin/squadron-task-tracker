@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
+const crypto = require('crypto');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -40,6 +41,7 @@ app.use(session({
       ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open';
       ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
       CREATE TABLE IF NOT EXISTS shop_event_status_log (
         id            SERIAL PRIMARY KEY,
         shop_event_id INTEGER REFERENCES shop_events(id) ON DELETE CASCADE,
@@ -128,7 +130,8 @@ app.post('/api/auth/login', async (req, res) => {
     if (!slug || !password) return res.status(400).json({ error: 'Missing credentials' });
 
     const { rows } = await pool.query(
-      `SELECT m.*, s.name AS shop_name
+      `SELECT m.*, s.name AS shop_name,
+              (SELECT name FROM uta_cycles WHERE is_current = true LIMIT 1) AS uta_name
        FROM members m JOIN shops s ON s.id = m.shop_id
        WHERE m.slug = $1 AND m.active = true`,
       [slug.toLowerCase().trim()]
@@ -154,6 +157,8 @@ app.post('/api/auth/login', async (req, res) => {
         role:       member.role,
         shop:       member.shop_name,
         slug:       member.slug,
+        uta_name:   member.uta_name,
+        must_change_password: member.must_change_password,
       });
     });
   } catch (err) {
@@ -166,10 +171,71 @@ app.post('/api/auth/logout', (req, res) => {
   req.session.destroy(() => res.json({ success: true }));
 });
 
+// ── Change Password ──────────────────────────────────────────────────────────
+
+app.post('/api/auth/password', requireAuth, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ error: 'Missing fields' });
+    if (String(new_password).length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+
+    const { rows } = await pool.query('SELECT password_hash FROM members WHERE id = $1', [req.session.memberId]);
+    if (!rows.length) return res.status(404).json({ error: 'Member not found' });
+
+    const valid = await bcrypt.compare(current_password, rows[0].password_hash);
+    if (!valid) return res.status(403).json({ error: 'Current password is incorrect' });
+
+    const hash = await bcrypt.hash(new_password, 10);
+    await pool.query(
+      'UPDATE members SET password_hash = $1, must_change_password = false WHERE id = $2',
+      [hash, req.session.memberId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Reset a member's password (supervisor: own shop, leadership: any) ─────────
+// Sets a random one-time temp password and forces a change at next login, so the
+// reset never leaves the account guessable. Returns the temp for the resetter to
+// hand to the member.
+app.post('/api/members/:id/reset-password', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const memberId = parseInt(req.params.id);
+    const { rows: mr } = await pool.query(
+      'SELECT id, shop_id FROM members WHERE id = $1 AND active = true', [memberId]
+    );
+    if (!mr.length) return res.status(404).json({ error: 'Member not found' });
+    if (req.session.role === 'supervisor' && mr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot reset members outside your shop' });
+    }
+
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I, L, O, 0, 1
+    const bytes = crypto.randomBytes(8);
+    let temp = '';
+    for (let i = 0; i < 8; i++) temp += alphabet[bytes[i] % alphabet.length];
+
+    const hash = await bcrypt.hash(temp, 10);
+    await pool.query(
+      'UPDATE members SET password_hash = $1, must_change_password = true WHERE id = $2',
+      [hash, memberId]
+    );
+    res.json({ success: true, temp_password: temp });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT m.id, m.first_name, m.last_name, m.rank, m.role, m.slug, s.name AS shop
+      `SELECT m.id, m.first_name, m.last_name, m.rank, m.role, m.slug, m.must_change_password, s.name AS shop,
+              (SELECT name FROM uta_cycles WHERE is_current = true LIMIT 1) AS uta_name
        FROM members m JOIN shops s ON s.id = m.shop_id
        WHERE m.id = $1`,
       [req.session.memberId]
