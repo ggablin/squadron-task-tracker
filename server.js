@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
+const crypto = require('crypto');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -192,6 +193,38 @@ app.post('/api/auth/password', requireAuth, async (req, res) => {
       [hash, req.session.memberId]
     );
     res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Reset a member's password (supervisor: own shop, leadership: any) ─────────
+// Sets a random one-time temp password and forces a change at next login, so the
+// reset never leaves the account guessable. Returns the temp for the resetter to
+// hand to the member.
+app.post('/api/members/:id/reset-password', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const memberId = parseInt(req.params.id);
+    const { rows: mr } = await pool.query(
+      'SELECT id, shop_id FROM members WHERE id = $1 AND active = true', [memberId]
+    );
+    if (!mr.length) return res.status(404).json({ error: 'Member not found' });
+    if (req.session.role === 'supervisor' && mr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot reset members outside your shop' });
+    }
+
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I, L, O, 0, 1
+    const bytes = crypto.randomBytes(8);
+    let temp = '';
+    for (let i = 0; i < 8; i++) temp += alphabet[bytes[i] % alphabet.length];
+
+    const hash = await bcrypt.hash(temp, 10);
+    await pool.query(
+      'UPDATE members SET password_hash = $1, must_change_password = true WHERE id = $2',
+      [hash, memberId]
+    );
+    res.json({ success: true, temp_password: temp });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

@@ -2008,6 +2008,21 @@
   </div>
 </div>
 
+<!-- ═══ RESET PASSWORD RESULT MODAL ═════════════ -->
+<div class="modal-backdrop" id="reset-result-modal" onclick="if(event.target===this)closeModal('reset-result-modal')">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <div class="modal-title">Temporary Password</div>
+      <button class="modal-close" onclick="closeModal('reset-result-modal')" aria-label="Close">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <p style="color:var(--t2);font-size:13px;margin-bottom:12px">Give this one-time password to <span id="rr-name" style="font-weight:600;color:var(--text)">the member</span>. They will be required to set a new one the next time they sign in.</p>
+    <div id="rr-temp" style="font-size:24px;font-weight:700;letter-spacing:.08em;text-align:center;padding:16px;background:var(--cream);border-radius:var(--rs);font-variant-numeric:tabular-nums;user-select:all"></div>
+    <button class="modal-submit" onclick="closeModal('reset-result-modal')" style="margin-top:16px">Done</button>
+  </div>
+</div>
+
 <div class="toast-container" id="toast-container"></div>
 </div>
 <script>
@@ -2183,6 +2198,21 @@ async function submitChangePw() {
     err.textContent = e.message || 'Could not update password'; err.style.display = '';
   }
   btn.disabled = false; btn.textContent = 'Update Password';
+}
+
+/* ── Reset a member's password (supervisor/leadership) ── */
+async function resetMemberPassword(memberId) {
+  const m = shopMembers.find(x => x.id === memberId);
+  const who = m ? (m.last_name + ', ' + (m.first_name ? m.first_name[0] + '.' : '')) : 'this member';
+  if (!confirm('Reset the password for ' + who + '?\n\nThey will get a one-time temporary password and must choose a new one the next time they sign in.')) return;
+  try {
+    const res = await fetch('/api/members/' + memberId + '/reset-password', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Reset failed');
+    document.getElementById('rr-name').textContent = who;
+    document.getElementById('rr-temp').textContent = data.temp_password;
+    openModal('reset-result-modal');
+  } catch (e) { showToast(e.message || 'Failed to reset password', 'error'); }
 }
 
 /* ── Boot ──────────────────────────────────────── */
@@ -2786,10 +2816,14 @@ async function renderMemberTasks(memberId) {
     // Add Task button at top
     let html = '';
     if (isSup) {
-      html += `<div class="mb-sm">
+      html += `<div class="mb-sm" style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="add-btn" onclick="event.stopPropagation();openAddTask(${memberId})">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
           Add Task
+        </button>
+        <button class="add-btn" onclick="event.stopPropagation();resetMemberPassword(${memberId})">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="12" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>
+          Reset Password
         </button>
       </div>`;
     }
