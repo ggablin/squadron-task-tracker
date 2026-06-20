@@ -39,6 +39,7 @@ app.use(session({
       ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
       CREATE TABLE IF NOT EXISTS squadron_events (
         id            SERIAL PRIMARY KEY,
         uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
@@ -86,7 +87,8 @@ app.post('/api/auth/login', async (req, res) => {
     if (!slug || !password) return res.status(400).json({ error: 'Missing credentials' });
 
     const { rows } = await pool.query(
-      `SELECT m.*, s.name AS shop_name
+      `SELECT m.*, s.name AS shop_name,
+              (SELECT name FROM uta_cycles WHERE is_current = true LIMIT 1) AS uta_name
        FROM members m JOIN shops s ON s.id = m.shop_id
        WHERE m.slug = $1 AND m.active = true`,
       [slug.toLowerCase().trim()]
@@ -112,6 +114,8 @@ app.post('/api/auth/login', async (req, res) => {
         role:       member.role,
         shop:       member.shop_name,
         slug:       member.slug,
+        uta_name:   member.uta_name,
+        must_change_password: member.must_change_password,
       });
     });
   } catch (err) {
@@ -127,13 +131,42 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT m.id, m.first_name, m.last_name, m.rank, m.role, m.slug, s.name AS shop
+      `SELECT m.id, m.first_name, m.last_name, m.rank, m.role, m.slug, m.must_change_password, s.name AS shop,
+              (SELECT name FROM uta_cycles WHERE is_current = true LIMIT 1) AS uta_name
        FROM members m JOIN shops s ON s.id = m.shop_id
        WHERE m.id = $1`,
       [req.session.memberId]
     );
     if (!rows.length) return res.status(401).json({ error: 'Session invalid' });
     res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Change Password ──────────────────────────────────────────────────────────
+
+app.post('/api/auth/password', requireAuth, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ error: 'Missing fields' });
+    if (String(new_password).length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+
+    const { rows } = await pool.query('SELECT password_hash FROM members WHERE id = $1', [req.session.memberId]);
+    if (!rows.length) return res.status(404).json({ error: 'Member not found' });
+
+    const valid = await bcrypt.compare(current_password, rows[0].password_hash);
+    if (!valid) return res.status(403).json({ error: 'Current password is incorrect' });
+
+    const hash = await bcrypt.hash(new_password, 10);
+    await pool.query(
+      'UPDATE members SET password_hash = $1, must_change_password = false WHERE id = $2',
+      [hash, req.session.memberId]
+    );
+    res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
