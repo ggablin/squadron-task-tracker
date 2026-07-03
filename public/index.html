@@ -705,7 +705,7 @@
     .mini-num .mini-frac { margin-top: 0; margin-left: 1px; }
 
     /* ── Org chart ──────────────────────────────── */
-    #view-leadership { display: flex; flex-direction: column; }
+    #view-leadership.active { display: flex; flex-direction: column; }  /* .active so id-specificity doesn't override .view hide */
     #sq-orgchart { margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
     /* U5: on mobile, glance-and-go rollups come first; org chart drops below.
        Desktop keeps source order (org chart first). */
