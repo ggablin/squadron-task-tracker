@@ -55,7 +55,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   flagged_by_id  INTEGER REFERENCES members(id),
   created_by_id  INTEGER REFERENCES members(id),
   sort_order     INTEGER DEFAULT 99,
-  created_at     TIMESTAMP DEFAULT NOW()
+  created_at     TIMESTAMP DEFAULT NOW(),
+  -- C7/TB1: dedupe key so sync-tasks.js / the task builder can INSERT ... ON CONFLICT DO NOTHING
+  UNIQUE (uta_cycle_id, member_id, category_id, title)
 );
 
 CREATE TABLE IF NOT EXISTS task_completions (
@@ -125,6 +127,16 @@ DO $$ BEGIN
   ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- C7/TB1: dedupe constraint for additive task sync. Idempotent/collision-safe —
+-- skips silently if it already exists OR if legacy duplicate (member, category,
+-- title) rows still need de-duping. If sync-tasks.js later reports a missing
+-- constraint, de-dupe those rows and re-run this.
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_cycle_member_cat_title_uniq
+    UNIQUE (uta_cycle_id, member_id, category_id, title);
 EXCEPTION WHEN others THEN NULL;
 END $$;
 

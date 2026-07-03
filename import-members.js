@@ -5,6 +5,7 @@ const XLSX   = require('xlsx');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const path   = require('path');
+const crypto = require('crypto');
 
 const VALID_ROLES = new Set(['member', 'supervisor', 'leadership']);
 
@@ -81,13 +82,17 @@ async function run() {
         console.log(`  UPDATE  ${rank.padEnd(6)} ${slug.padEnd(15)} role:${role}${flight ? '  flt:'+flight : ''}`);
         updated++;
       } else {
-        // New member — initial password = slug (last name)
-        const hash = await bcrypt.hash(slug, 10);
+        // New member — initial password = random (must be changed on first login)
+        const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I, L, O, 0, 1
+        const bytes = crypto.randomBytes(8);
+        let temp = '';
+        for (let i = 0; i < 8; i++) temp += alphabet[bytes[i] % alphabet.length];
+        const hash = await bcrypt.hash(temp, 10);
         await client.query(`
-          INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash, active, email, flight, position)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        `, [last_name, first_name, rank, shopId, role, slug, hash, active, email, flight, position]);
-        console.log(`  INSERT  ${rank.padEnd(6)} ${slug.padEnd(15)} role:${role}  pwd:${slug}${flight ? '  flt:'+flight : ''}`);
+          INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash, active, email, flight, position, must_change_password)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `, [last_name, first_name, rank, shopId, role, slug, hash, active, email, flight, position, true]);
+        console.log(`  INSERT  ${rank.padEnd(6)} ${slug.padEnd(15)} role:${role}  pwd:${temp}${flight ? '  flt:'+flight : ''}`);
         added++;
       }
     }
@@ -95,7 +100,9 @@ async function run() {
     await client.query('COMMIT');
     console.log(`\n✅ Done. Added: ${added}  Updated: ${updated}  Skipped: ${skipped}  Errors: ${errors}`);
     if (added > 0) {
-      console.log('\n⚠  Initial passwords = slug (last name). Distribute securely before going live.');
+      console.log('\n⚠  Initial passwords are RANDOM 8-char tokens (shown as pwd:XXXXXXXX above, one per new member).');
+      console.log('   They are NOT stored anywhere else — capture this log and distribute securely (supervisors → members).');
+      console.log('   Every new member is forced to set their own password at first login.');
     }
     if (errors > 0) {
       console.log(`\n⚠  ${errors} row(s) skipped due to invalid role values — fix in Members.xlsx and re-run.`);

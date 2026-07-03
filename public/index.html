@@ -346,6 +346,23 @@
       #mt-pane-tasks .stat-num { font-size: 28px; }
     }
 
+    /* U1: on phones, collapse the category-bars section behind a toggle so the
+       member's task list is the first thing on screen. Desktop keeps the full hero. */
+    @media (max-width: 640px) {
+      #mt-pane-tasks .hero { padding: 8px 16px 12px; margin: -16px -16px 16px; gap: 0; }
+      #mt-pane-tasks #hero-bars-section { display: none; }
+      #mt-pane-tasks #hero-bars-section.open { display: block; }
+      .hero-bars-toggle {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 11px; font-weight: 600; color: var(--t2);
+        background: none; border: none; padding: 6px 4px; margin-top: 8px;
+        cursor: pointer; -webkit-tap-highlight-color: transparent;
+      }
+      .hero-bars-toggle svg { width: 12px; height: 12px; transition: transform 0.2s; }
+      .hero-bars-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+    }
+    @media (min-width: 641px) { .hero-bars-toggle { display: none; } }
+
     /* ──────────────────────────────────────────────
        Compact mini-stats grid
     ────────────────────────────────────────────── */
@@ -689,7 +706,14 @@
     .mini-num .mini-frac { margin-top: 0; margin-left: 1px; }
 
     /* ── Org chart ──────────────────────────────── */
+    #view-leadership { display: flex; flex-direction: column; }
     #sq-orgchart { margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
+    /* U5: on mobile, glance-and-go rollups come first; org chart drops below.
+       Desktop keeps source order (org chart first). */
+    @media (max-width: 767px) {
+      #sq-rollups { order: -1; }
+      #sq-orgchart { order: 0; }
+    }
 
     /* Staff banner */
     .org-staff {
@@ -1097,6 +1121,11 @@
       --tl-sage-bg:  #1f2a1c; --tl-sage-ink:  #a8c0a0;
       --tl-slate-bg: #232a32; --tl-slate-ink: #a8b4c0;
       --tl-mauve-bg: #2e2027; --tl-mauve-ink: #c8a8b4;
+    }
+
+    /* D1: light-blue shop chips were ~1.07:1 (invisible) in dark mode. */
+    [data-theme="dark"] #mt-pane-timeline .tl-chip-shop {
+      background: #232a32; border-color: #3a4a5a; color: var(--text);
     }
 
     .tl-head {
@@ -1536,10 +1565,11 @@
                   <div class="stat-lbl">Flagged</div>
                 </div>
               </div>
+              <button class="hero-bars-toggle" id="hero-bars-toggle" aria-expanded="false" onclick="toggleHeroBars()"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="3 6 6 9 9 6"></polyline></svg> Categories</button>
             </div>
           </div>
 
-          <div class="hero-section">
+          <div class="hero-section" id="hero-bars-section">
             <div class="chart-section">
               <div class="chart-label-row">
                 <div class="chart-label">Progress by Category</div>
@@ -2038,6 +2068,16 @@ let editingEventId  = null; // set while the add/edit modal is in edit mode
 let utaLabel        = 'June 2026 UTA';
 let forcePwChange   = false;
 
+// ── SWR cache markers (C4): paint cached data instantly, then revalidate in the
+// background so bouncing between tabs never re-flashes a skeleton. ──
+let timelineCache   = null;    // last squadron timeline {uta, events}; null = never loaded
+let _tasksLoaded    = false;   // currentTasks holds a real (possibly empty) result
+let _eventsLoaded   = false;   // shopEventsCache holds a real result
+let _shopEventsKey   = '';     // shopQ() the shopEventsCache was fetched for (switcher safety)
+let _tasksInFlight    = false;
+let _eventsInFlight   = false;
+let _timelineInFlight = false;
+
 // Map a completion percentage to a health color using existing tokens.
 const healthColor = p => p >= 80 ? 'var(--ok)' : p >= 40 ? 'var(--warn)' : 'var(--urgent)';
 
@@ -2229,6 +2269,8 @@ async function doLogout() {
   if (notifPollTimer) { clearInterval(notifPollTimer); notifPollTimer = null; }
   closeNotifPanel();
   currentMember = null; currentTasks = []; shopMembers = [];
+  // Also drop the SWR caches so the next user in this tab starts clean.
+  _tasksLoaded = false; _eventsLoaded = false; _shopEventsKey = ''; shopEventsCache = []; timelineCache = null;
   document.getElementById('app').style.display = 'none';
   showLogin();
 }
@@ -2249,6 +2291,11 @@ function showLogin() {
 function showApp() {
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('app').style.display = '';
+  // Fresh session: drop any SWR caches left from a previous user in this tab
+  // (doLogout does not reload the page) so we never paint one member's data for another.
+  _tasksLoaded = false; currentTasks = [];
+  _eventsLoaded = false; _shopEventsKey = ''; shopEventsCache = [];
+  timelineCache = null;
   applyRole();
   populateUserUI();
   if (currentMember.must_change_password) openChangePw(true);
@@ -2323,7 +2370,7 @@ function onShopSwitch(shopId) {
   const smt = document.getElementById('shop-members-title');
   if (smt) smt.textContent = name + ' Shop';
   // loadShopMembers rebuilds the roster (collapsing any expanded member).
-  loadShopEvents();
+  loadShopEvents(true);   // switched shop → always fetch fresh (cache is keyed per shop)
   loadShopMembers();
 }
 
@@ -2383,14 +2430,29 @@ function barChart(elId, items) {
 }
 
 /* ── My Tasks ───────────────────────────────────── */
-async function loadTasks() {
+async function loadTasks(forceRefresh = false) {
   const el = document.getElementById('member-tasks');
-  if (el) el.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
-  const res = await fetch('/api/tasks');
-  if (!res.ok) return;
-  currentTasks = await res.json();
-  buildTasks();
-  updateMemberStats();
+  // Cache-first: paint the last-known tasks immediately, then revalidate quietly.
+  if (!forceRefresh && _tasksLoaded) {
+    buildTasks();
+    updateMemberStats();
+    if (_tasksInFlight) return;
+    _tasksInFlight = true;
+    try {
+      const res = await fetch('/api/tasks');
+      if (res.ok) { currentTasks = await res.json(); buildTasks(); updateMemberStats(); }
+    } catch (e) { /* keep the cached view on a transient failure */ }
+    finally { _tasksInFlight = false; }
+    return;
+  }
+  // Cold path: first load (skeleton once) or a forced refresh after a mutation.
+  if (_tasksInFlight && !forceRefresh) return;   // a cold load is already in flight — don't re-skeleton/re-fetch
+  if (el && !_tasksLoaded) el.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+  _tasksInFlight = true;
+  try {
+    const res = await fetch('/api/tasks');
+    if (res.ok) { currentTasks = await res.json(); _tasksLoaded = true; buildTasks(); updateMemberStats(); }
+  } finally { _tasksInFlight = false; }
 }
 
 function buildTasks() {
@@ -2509,6 +2571,15 @@ function updateMemberStats() {
   updateNavBadges();
 }
 
+// U1: reveal/hide the collapsed category bars in the compact mobile hero.
+function toggleHeroBars() {
+  const btn = document.getElementById('hero-bars-toggle');
+  const sec = document.getElementById('hero-bars-section');
+  if (!btn || !sec) return;
+  const isOpen = sec.classList.toggle('open');
+  btn.setAttribute('aria-expanded', isOpen);
+}
+
 function updateNavBadges() {
   const tasksLeft = currentTasks.filter(t => !t.is_upcoming && t.state !== 'done').length;
   const set = (id, n) => {
@@ -2584,11 +2655,7 @@ async function saveNote(event, taskId, elId) {
 }
 
 /* ── Shop events ────────────────────────────────── */
-async function loadShopEvents() {
-  const res = await fetch('/api/shop/events' + shopQ());
-  if (!res.ok) return;
-  const events = await res.json();
-  shopEventsCache = events;
+function renderShopEvents(events) {
   // Count once here (buildWorkOrders renders into two hosts).
   woCount = events.filter(e => e.event_type === 'work_order').length;
   updateNavBadges();
@@ -2597,9 +2664,46 @@ async function loadShopEvents() {
   buildWorkOrders(events, 'shop-wo-host');  // My Shop → Work Orders pane
 }
 
-async function loadWorkOrders() {
+async function loadShopEvents(forceRefresh = false) {
+  const key = shopQ();   // '' = own shop; '?shop_id=N' = leadership viewing another shop
+  // Cache-first, but only when the cache belongs to the shop currently in view.
+  if (!forceRefresh && _eventsLoaded && _shopEventsKey === key) {
+    renderShopEvents(shopEventsCache);
+    if (_eventsInFlight) return;
+    _eventsInFlight = true;
+    try {
+      const res = await fetch('/api/shop/events' + key);
+      if (res.ok) {
+        const events = await res.json();
+        if (shopQ() === key) {   // ignore a response that lost a race with a shop switch
+          shopEventsCache = events;
+          renderShopEvents(events);
+        }
+      }
+    } catch (e) { /* keep the cached view on a transient failure */ }
+    finally { _eventsInFlight = false; }
+    return;
+  }
+  // Cold path: no cache, a forced refresh, or the viewed shop just changed.
+  if (_eventsInFlight && !forceRefresh) return;   // a cold load is already in flight
+  _eventsInFlight = true;
+  try {
+    const res = await fetch('/api/shop/events' + key);
+    if (res.ok) {
+      const events = await res.json();
+      if (shopQ() === key) {   // ignore a response that lost a race with a shop switch
+        shopEventsCache = events;
+        _eventsLoaded = true;
+        _shopEventsKey = key;
+        renderShopEvents(events);
+      }
+    }
+  } finally { _eventsInFlight = false; }
+}
+
+async function loadWorkOrders(forceRefresh = false) {
   // Single fetch path lives in loadShopEvents; reuse it so both panes stay in sync.
-  return loadShopEvents();
+  return loadShopEvents(forceRefresh);
 }
 
 function woStatusMeta(status) {
@@ -3170,8 +3274,8 @@ function switchView(btn) {
   document.getElementById('desk-title').textContent = t;
   document.getElementById('desk-sub').textContent   = s;
 
-  if (name === 'member') { switchMtPane('tasks'); loadTasks(); }
-  if (name === 'supervisor') { switchShopPane('members'); loadShopEvents(); loadShopMembers(); }
+  if (name === 'member') { switchMtPane('tasks'); loadTasks(false); }
+  if (name === 'supervisor') { switchShopPane('members'); loadShopEvents(false); loadShopMembers(); }
   if (name === 'leadership') {
     loadOrgChart();
     if (currentMember?.role === 'leadership') loadSquadron();
@@ -3261,6 +3365,11 @@ async function submitAddTask() {
       await renderMemberTasks(mid);
     }
     await refreshShopMembers();
+    // C4: only force the member view when the task was added for the current user
+    // (the supervisor-adds-for-member flow is handled by renderMemberTasks above).
+    if (parseInt(document.getElementById('at-member').value) === currentMember?.id) {
+      await loadTasks(true);
+    }
   } catch (e) {
     err.textContent = e.message || 'Failed to add task'; err.style.display = '';
   }
@@ -3354,7 +3463,7 @@ async function flagTask(taskId, memberId, currentlyFlagged) {
     if (!res.ok) throw new Error();
     await renderMemberTasks(memberId);
     // Also refresh member's own view if they're the same person
-    if (memberId === currentMember?.id) await loadTasks();
+    if (memberId === currentMember?.id) await loadTasks(true);
   } catch (e) { showToast('Failed to update flag', 'error'); }
 }
 
@@ -3421,7 +3530,7 @@ async function submitAddEvent() {
     closeModal('add-event-modal');
     showToast(editing ? 'Item updated' : 'Item added', 'success');
     editingEventId = null;
-    await loadShopEvents();
+    await loadShopEvents(true);
   } catch (e) {
     err.textContent = e.message || 'Failed to save item'; err.style.display = '';
   }
@@ -3482,7 +3591,7 @@ async function submitStatus() {
     if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
     showToast('Status updated', 'success');
     document.getElementById('ws-note').value = '';
-    await loadShopEvents();        // refresh badges in both panes
+    await loadShopEvents(true);        // refresh badges in both panes
     await loadStatusHistory(eventId);  // refresh the timeline in place
   } catch (e) {
     err.textContent = e.message || 'Failed to update status'; err.style.display = '';
@@ -3496,7 +3605,7 @@ async function deleteEvent(eventId) {
     const res = await fetch('/api/shop/events/' + eventId, { method: 'DELETE' });
     if (!res.ok) throw new Error();
     showToast('Item deleted', 'success');
-    await loadShopEvents();
+    await loadShopEvents(true);
   } catch (e) { showToast('Failed to delete item', 'error'); }
 }
 
@@ -3506,8 +3615,8 @@ function switchMtPane(name) {
     b.classList.toggle('active', b.dataset.mt === name));
   document.querySelectorAll('.mt-pane').forEach(p =>
     p.classList.toggle('active', p.id === 'mt-pane-' + name));
-  if (name === 'timeline') loadTimeline();
-  if (name === 'workorders') loadWorkOrders();
+  if (name === 'timeline') loadTimeline(false);
+  if (name === 'workorders') loadWorkOrders(false);
 }
 
 /* ── My Shop sub-tabs (Shop | Shop Schedule) ── */
@@ -3643,21 +3752,17 @@ function tlSwitchDay(key) {
     p.classList.toggle('active', p.dataset.tlDay === key));
 }
 
-async function loadTimeline() {
+function renderTimeline(uta, events) {
   const host = document.getElementById('tl-host');
   if (!host) return;
-  try {
-    const res = await fetch('/api/squadron/timeline');
-    if (!res.ok) throw new Error('Failed to load timeline');
-    const { uta, events } = await res.json();
-    const startDate = uta?.start_date ? uta.start_date.slice(0, 10) : null;
+  const startDate = uta?.start_date ? uta.start_date.slice(0, 10) : null;
 
-    const byDay = { Friday: [], Saturday: [], Sunday: [] };
-    for (const ev of events) {
-      if (byDay[ev.day]) byDay[ev.day].push(ev);
-    }
+  const byDay = { Friday: [], Saturday: [], Sunday: [] };
+  for (const ev of (events || [])) {
+    if (byDay[ev.day]) byDay[ev.day].push(ev);
+  }
 
-    const segHtml = `
+  const segHtml = `
       <div class="tl-seg" role="tablist">
         ${TL_DAY_ORDER.map((d, i) => `
           <button class="tl-seg-btn ${i === 0 ? 'active' : ''}"
@@ -3668,17 +3773,42 @@ async function loadTimeline() {
           </button>`).join('')}
       </div>`;
 
-    const panelsHtml = TL_DAY_ORDER.map(d =>
-      tlRenderDay(d, tlDayDate(startDate, d), byDay[d])
-    ).join('');
+  const panelsHtml = TL_DAY_ORDER.map(d =>
+    tlRenderDay(d, tlDayDate(startDate, d), byDay[d])
+  ).join('');
 
-    host.innerHTML = segHtml + panelsHtml;
-    const firstPanel = host.querySelector(`.tl-day-panel[data-tl-day="${TL_DAY_KEY[TL_DAY_ORDER[0]]}"]`);
-    if (firstPanel) firstPanel.classList.add('active');
+  host.innerHTML = segHtml + panelsHtml;
+  const firstPanel = host.querySelector(`.tl-day-panel[data-tl-day="${TL_DAY_KEY[TL_DAY_ORDER[0]]}"]`);
+  if (firstPanel) firstPanel.classList.add('active');
+}
+
+async function loadTimeline(forceRefresh = false) {
+  const host = document.getElementById('tl-host');
+  if (!host) return;
+  // Cache-first: repaint the last timeline instantly, then revalidate quietly.
+  if (!forceRefresh && timelineCache) {
+    renderTimeline(timelineCache.uta, timelineCache.events);
+    if (_timelineInFlight) return;
+    _timelineInFlight = true;
+    try {
+      const res = await fetch('/api/squadron/timeline');
+      if (res.ok) { timelineCache = await res.json(); renderTimeline(timelineCache.uta, timelineCache.events); }
+    } catch (e) { /* keep the cached view on a transient failure */ }
+    finally { _timelineInFlight = false; }
+    return;
+  }
+  // Cold path: first view (cache null), or a forced refresh.
+  if (_timelineInFlight && !forceRefresh) return;   // a cold load is already in flight
+  _timelineInFlight = true;
+  try {
+    const res = await fetch('/api/squadron/timeline');
+    if (!res.ok) throw new Error('Failed to load timeline');
+    timelineCache = await res.json();
+    renderTimeline(timelineCache.uta, timelineCache.events);
   } catch (e) {
     console.error('loadTimeline', e);
-    host.innerHTML = '<div class="tl-empty">Could not load timeline.</div>';
-  }
+    if (!timelineCache) host.innerHTML = '<div class="tl-empty">Could not load timeline.</div>';
+  } finally { _timelineInFlight = false; }
 }
 </script>
 </body>

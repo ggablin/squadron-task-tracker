@@ -82,6 +82,11 @@ app.use(session({
       );
       CREATE INDEX IF NOT EXISTS idx_notifications_member ON notifications (member_id, read_at);
       CREATE INDEX IF NOT EXISTS idx_notifications_unemailed ON notifications (emailed_at) WHERE emailed_at IS NULL;
+      DO $$ BEGIN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_cycle_member_cat_title_uniq
+          UNIQUE (uta_cycle_id, member_id, category_id, title);
+      EXCEPTION WHEN others THEN NULL;
+      END $$;
     `);
     console.log('Migration check complete');
   } catch (e) {
@@ -102,6 +107,15 @@ function requireRole(minRole) {
     if ((levels[req.session.role] ?? -1) >= levels[minRole]) return next();
     res.status(403).json({ error: 'Forbidden' });
   };
+}
+
+// Blocks every state-changing endpoint until a defaulted account sets its own
+// password. Session flag is set from members.must_change_password at login and
+// cleared by POST /api/auth/password. Read-only endpoints are intentionally
+// exempt so a not-yet-onboarded member can still see their tasks.
+function requireOnboarded(req, res, next) {
+  if (req.session.mustChange) return res.status(403).json({ error: 'You must change your password before continuing' });
+  next();
 }
 
 // ── Notifications ────────────────────────────────────────────────────────────
@@ -146,6 +160,7 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.role     = member.role;
     req.session.shopId   = member.shop_id;
     req.session.shopName = member.shop_name;
+    req.session.mustChange = member.must_change_password;
 
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Session save failed' });
@@ -192,7 +207,13 @@ app.post('/api/auth/password', requireAuth, async (req, res) => {
       'UPDATE members SET password_hash = $1, must_change_password = false WHERE id = $2',
       [hash, req.session.memberId]
     );
-    res.json({ success: true });
+    req.session.mustChange = false;
+    // Persist the cleared flag before responding (same as the login handler), so a
+    // request the client fires right after onboarding isn't blocked by a stale session.
+    req.session.save(err => {
+      if (err) return res.status(500).json({ error: 'Session save failed' });
+      res.json({ success: true });
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -203,7 +224,7 @@ app.post('/api/auth/password', requireAuth, async (req, res) => {
 // Sets a random one-time temp password and forces a change at next login, so the
 // reset never leaves the account guessable. Returns the temp for the resetter to
 // hand to the member.
-app.post('/api/members/:id/reset-password', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.post('/api/members/:id/reset-password', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const memberId = parseInt(req.params.id);
     const { rows: mr } = await pool.query(
@@ -274,18 +295,23 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
   }
 });
 
-app.put('/api/tasks/:id', requireAuth, async (req, res) => {
+app.put('/api/tasks/:id', requireAuth, requireOnboarded, async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
     const { state, note } = req.body;
 
-    const { rows: tr } = await pool.query(
-      'SELECT member_id FROM tasks WHERE id = $1', [taskId]
-    );
+    const { rows: tr } = await pool.query(`
+      SELECT t.member_id, m.shop_id FROM tasks t
+      JOIN members m ON m.id = t.member_id
+      WHERE t.id = $1
+    `, [taskId]);
     if (!tr.length) return res.status(404).json({ error: 'Task not found' });
 
-    const isSupervisorPlus = ['supervisor', 'leadership'].includes(req.session.role);
-    if (tr[0].member_id !== req.session.memberId && !isSupervisorPlus) {
+    // Members only own task; supervisors only own-shop; leadership any
+    if (tr[0].member_id !== req.session.memberId && req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot update tasks outside your shop' });
+    }
+    if (tr[0].member_id !== req.session.memberId && !['supervisor', 'leadership'].includes(req.session.role)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -306,7 +332,7 @@ app.put('/api/tasks/:id', requireAuth, async (req, res) => {
 
 // ── Create Task (supervisor: own shop, leadership: any) ─────────────────────
 
-app.post('/api/tasks', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.post('/api/tasks', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const { member_id, category_code, title, details, urgency, appt_day, appt_time, appt_location, is_upcoming } = req.body;
     if (!member_id || !category_code || !title) {
@@ -357,7 +383,7 @@ app.post('/api/tasks', requireAuth, requireRole('supervisor'), async (req, res) 
 
 // ── Bulk Create Task (leadership: a shop or the whole squadron) ─────────────
 
-app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), async (req, res) => {
+app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
   try {
     const { scope, shop_id, category_code, title, details, urgency,
             appt_day, appt_time, appt_location } = req.body;
@@ -412,7 +438,7 @@ app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), async (r
 
 // ── Delete Task (supervisor: own shop, leadership: any) ─────────────────────
 
-app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
 
@@ -438,7 +464,7 @@ app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), async (req,
 
 // ── Flag Task (supervisor: own shop, leadership: any) ───────────────────────
 
-app.put('/api/tasks/:id/flag', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.put('/api/tasks/:id/flag', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
     const { is_flagged } = req.body;
@@ -501,7 +527,7 @@ app.get('/api/shop/events', requireAuth, async (req, res) => {
 
 // ── Create Shop Event (supervisor: own shop, leadership: any) ────────────────
 
-app.post('/api/shop/events', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.post('/api/shop/events', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const { event_type, day, start_time, end_time, title, details, wo_number, shop_id } = req.body;
     if (!title) return res.status(400).json({ error: 'title is required' });
@@ -532,7 +558,7 @@ app.post('/api/shop/events', requireAuth, requireRole('supervisor'), async (req,
 
 // ── Delete Shop Event (supervisor: own shop, leadership: any) ────────────────
 
-app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id);
     const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
@@ -553,7 +579,7 @@ app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async
 // Status is intentionally not editable here — it changes only via the status
 // endpoint so the history log stays authoritative.
 
-app.put('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async (req, res) => {
+app.put('/api/shop/events/:id', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id);
     const { event_type, day, start_time, end_time, title, details, wo_number } = req.body;
@@ -588,7 +614,7 @@ app.put('/api/shop/events/:id', requireAuth, requireRole('supervisor'), async (r
 // Appends a row to the history log and updates the current status. Note is
 // mandatory.
 
-app.put('/api/shop/events/:id/status', requireAuth, async (req, res) => {
+app.put('/api/shop/events/:id/status', requireAuth, requireOnboarded, async (req, res) => {
   const client = await pool.connect();
   try {
     const eventId = parseInt(req.params.id);
