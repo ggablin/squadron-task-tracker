@@ -31,9 +31,10 @@
       --text:     #1f1f1f;
       --t2:       #6f7066;
       --t3:       #b8b9b0;
+      --t3-nav-text: #696660;   /* D2: AA-legible nav/placeholder text (5.46:1 on white) */
 
       --urgent:   #a8472f;  --urg-bg:  #f5ece9;
-      --warn:     #c9954a;  --wrn-bg:  #f5eedf;
+      --warn:     #8a6a2f;  --wrn-bg:  #f5eedf;
       --ok:       #5f7a5a;  --ok-bg:   #edf2eb;
 
       --gon:  #1f1f1f;  --goff: #ddddd5;
@@ -51,9 +52,10 @@
       --text:     #ece8e0;
       --t2:       #a8a39a;
       --t3:       #6e6962;
+      --t3-nav-text: #9a9389;   /* D2: AA-legible nav/placeholder text (4.91:1 on dark) */
 
       --urgent:   #d97a60;  --urg-bg:  #3a201a;
-      --warn:     #d9a866;  --wrn-bg:  #3a2e1a;
+      --warn:     #c9a766;  --wrn-bg:  #3a2e1a;
       --ok:       #88a880;  --ok-bg:   #1f2a1c;
 
       --gon:      #ece8e0;  --goff:    #3a3633;
@@ -94,7 +96,7 @@
     .sb-brand-uta { font-size: 11.5px; color: var(--t2); margin-top: 3px; letter-spacing: .01em; }
 
     .sb-sec-lbl {
-      font-size: 10px; font-weight: 600; letter-spacing: .12em;
+      font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
       text-transform: uppercase; color: var(--t3);
       padding: 0 12px; margin-bottom: 6px;
     }
@@ -113,7 +115,7 @@
     .sb-badge {
       margin-left: auto;
       background: var(--urgent); color: #fff;
-      font-size: 10px; font-weight: 700;
+      font-size: 10.5px; font-weight: 700;
       padding: 1px 7px; border-radius: 10px;
     }
     .sb-item.active .sb-badge { background: rgba(255,255,255,.22); }
@@ -176,7 +178,7 @@
       background: rgba(31,31,31,.05);
       border: 1px solid var(--bm);
       border-radius: 20px; padding: 4px 10px;
-      font-size: 10px; font-weight: 500; color: var(--t2);
+      font-size: 10.5px; font-weight: 500; color: var(--t2);
       margin-top: 10px; letter-spacing: .03em;
     }
     .demo-dot { width: 6px; height: 6px; border-radius: 50%; background: #6fcf97; }
@@ -231,7 +233,7 @@
     .gauge-wrap { position: relative; flex-shrink: 0; }
     .gauge-center { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; pointer-events: none; }
     .gauge-pct { font-size: 22px; font-weight: 700; letter-spacing: -.025em; line-height: 1; }
-    .gauge-lbl { font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); margin-top: 2px; }
+    .gauge-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--t2); margin-top: 2px; }
 
     /* Stats group beside gauge */
     .stat-row {
@@ -245,13 +247,13 @@
     .stat-num { font-size: 30px; font-weight: 700; letter-spacing: -.035em; line-height: 1; }
     .stat-num.warn { color: var(--urgent); }
     .stat-lbl { font-size: 11px; color: var(--t2); margin-top: 4px; line-height: 1.25; }
-    .stat.has-arrow { cursor: pointer; transition: opacity .15s; position: relative; }
-    .stat.has-arrow:hover { opacity: .65; }
+    .stat.has-arrow { position: relative; }  /* U6: was a false affordance (pointer+hover, no handler) */
     .stat-lbl-arrow {
       display: inline-flex; align-items: center; gap: 4px;
       font-size: 11px; color: var(--t2); margin-top: 4px;
     }
     .stat-lbl-arrow svg { width: 9px; height: 9px; }
+    .stat.has-arrow .stat-lbl-arrow svg { display: none; }  /* U6: no click handler → drop the misleading arrow */
 
     /* ──────────────────────────────────────────────
        BAR CHART (vertical) — values BELOW bars, consistent y
@@ -296,7 +298,7 @@
     }
     .bar-rect.hatch {
       background: transparent;
-      background-image: repeating-linear-gradient(45deg, var(--text) 0, var(--text) 0.5px, transparent 0.5px, transparent 4px);
+      background-image: repeating-linear-gradient(45deg, var(--warn) 0, var(--warn) 0.8px, transparent 0.8px, transparent 3.5px);
     }
     .bar-info { text-align: center; }
     .bar-val { font-size: 11.5px; font-weight: 600; color: var(--text); line-height: 1; }
@@ -340,7 +342,7 @@
 
     /* My Tasks gauge — larger than supervisor/leadership variants */
     #mt-pane-tasks .gauge-pct { font-size: 28px; }
-    #mt-pane-tasks .gauge-lbl { font-size: 10px; }
+    #mt-pane-tasks .gauge-lbl { font-size: 11px; }
     #mt-pane-tasks .stat-num  { font-size: 34px; }
     @media (max-width: 767px) {
       #mt-pane-tasks .stat-num { font-size: 28px; }
@@ -412,10 +414,8 @@
       margin-top: 1px; background: var(--bg);
       transition: all .15s;
     }
-    .task-item[data-state="partial"] .chk { border-color: var(--warn); background: var(--wrn-bg); }
     .task-item[data-state="done"] .chk { border-color: var(--ok); background: var(--ok); }
     .chk .ic { display: none; }
-    .task-item[data-state="partial"] .chk .ic-part { display: block; }
     .task-item[data-state="done"] .chk .ic-done { display: block; }
 
     .task-body { flex: 1; min-width: 0; }
@@ -442,7 +442,7 @@
       min-height: 56px; outline: none;
     }
     .note-input:focus { border-color: var(--text); background: var(--bg); }
-    .note-input::placeholder { color: var(--t3); }
+    .note-input::placeholder { color: var(--t3-nav-text); }
 
     .badge {
       font-size: 10.5px; font-weight: 600;
@@ -453,7 +453,6 @@
     .b-urgent { background: var(--urg-bg); color: var(--urgent); }
     .b-urgent::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--urgent); margin-right: 5px; vertical-align: middle; }
     .b-upcoming { background: var(--wrn-bg); color: var(--warn); }
-    .b-partial { background: var(--wrn-bg); color: var(--warn); }
     .b-done { background: var(--ok-bg); color: var(--ok); }
     /* Work-order status badges */
     .b-open { background: var(--border); color: var(--t2); }
@@ -506,10 +505,10 @@
     .mcc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; height: 100%; justify-content: flex-end; }
     .mcc-bar-wrap { width: 100%; max-width: 22px; height: 36px; position: relative; display: flex; align-items: flex-end; }
     .mcc-bar { width: 100%; background: var(--text); border-radius: 1px; }
-    .mcc-bar.hatch { background: transparent; background-image: repeating-linear-gradient(45deg, var(--text) 0, var(--text) 0.5px, transparent 0.5px, transparent 3.5px); }
+    .mcc-bar.hatch { background: transparent; background-image: repeating-linear-gradient(45deg, var(--warn) 0, var(--warn) 0.8px, transparent 0.8px, transparent 3px); }
     .mcc-bar.empty { background: var(--bm); height: 2px !important; }
-    .mcc-lbl { font-size: 9.5px; font-weight: 500; color: var(--t2); letter-spacing: .03em; text-align: center; line-height: 1.2; }
-    .mcc-val { font-size: 10px; font-weight: 600; color: var(--text); }
+    .mcc-lbl { font-size: 10.5px; font-weight: 500; color: var(--t2); letter-spacing: .03em; text-align: center; line-height: 1.2; }
+    .mcc-val { font-size: 10.5px; font-weight: 600; color: var(--text); }
 
     /* Member expanded — task list rows */
     .mem-task-group { margin-bottom: 18px; }
@@ -602,7 +601,7 @@
       padding: 6px 8px; background: none; border: none;
       font-family: inherit; font-size: 10px; font-weight: 600;
       letter-spacing: .04em; text-transform: uppercase;
-      color: var(--t3); cursor: pointer;
+      color: var(--t3-nav-text); cursor: pointer;
       -webkit-tap-highlight-color: transparent; transition: color .15s;
     }
     .mob-btn.active { color: var(--text); }
@@ -685,8 +684,8 @@
       .stat { padding: 0 14px; }
       .stat-num { font-size: 26px; }
       .bar-chart { height: 120px; }
-      .bar-val { font-size: 10px; }
-      .bar-x { font-size: 10px; }
+      .bar-val { font-size: 10.5px; }
+      .bar-x { font-size: 10.5px; }
       .card-pad { padding: 16px; }
       .mini-grid {
         grid-template-columns: repeat(3, 1fr);
@@ -722,7 +721,7 @@
       margin-bottom: 16px;
     }
     .org-staff-label {
-      font-size: 9.5px; font-weight: 700; letter-spacing: .14em;
+      font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
       text-transform: uppercase; opacity: .5; margin-bottom: 12px;
     }
     .org-staff-grid {
@@ -1060,23 +1059,6 @@
     .add-btn:hover { background: var(--cream); color: var(--text); border-color: var(--bm); }
     .add-btn svg { width: 14px; height: 14px; }
 
-    /* ── Confirm delete inline ─────────────────── */
-    .confirm-delete {
-      display: none; align-items: center; gap: 8px;
-      padding: 8px 12px;
-      background: var(--urg-bg); border-radius: 8px;
-      font-size: 12px; color: var(--urgent);
-      margin-top: 8px;
-    }
-    .confirm-delete.open { display: flex; }
-    .confirm-delete button {
-      padding: 4px 12px; border-radius: 6px;
-      border: none; font-family: inherit; font-size: 12px; font-weight: 600;
-      cursor: pointer;
-    }
-    .confirm-delete .cd-yes { background: var(--urgent); color: #fff; }
-    .confirm-delete .cd-no { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
-
     /* ── My Tasks sub-tabs (My Tasks | Timeline) ── */
     .mt-tabs, .shop-tabs {
       display: flex; gap: 4px;
@@ -1211,7 +1193,7 @@
     .tl-event-sub { font-size: 12.5px; color: var(--t2); line-height: 1.4; }
 
     .tl-pill {
-      font-size: 9.5px; font-weight: 700; letter-spacing: .06em;
+      font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
       text-transform: uppercase; padding: 2px 8px; border-radius: 99px;
       flex-shrink: 0; white-space: nowrap;
     }
@@ -1298,7 +1280,7 @@
     }
     .tl-members-label {
       width: 100%;
-      font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
+      font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
       color: var(--t2); text-transform: uppercase; margin-bottom: 2px;
     }
     .tl-chip {
@@ -1424,6 +1406,39 @@
     .mb-sm { margin-bottom: 14px; }
     .mb-md { margin-bottom: 18px; }
     .mb-lg { margin-bottom: 24px; }
+    /* ── Phase 2/3 component additions ─────────────────────────── */
+    /* U2: read-only rows show a small dot, not a tappable checkbox */
+    .row-readonly .chk { border: none; background: none; }
+    .row-readonly .chk::before {
+      content: ''; display: block;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--t3); opacity: .6;
+    }
+    /* U3: work-order number as a muted label above the title */
+    .task-wo-label { font-size: 11px; color: var(--t2); font-weight: 400; margin-bottom: 3px; }
+    /* U4: compact per-category summary for an expanded member on mobile */
+    .mem-cat-summary { display: flex; align-items: center; justify-content: space-between; padding: 6px 2px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .mem-cat-summary:last-child { border-bottom: none; }
+    .mem-cat-item { color: var(--text); }
+    .summary-pct { color: var(--t2); font-weight: 600; font-variant-numeric: tabular-nums; }
+    /* D5: all-clear celebratory state at 100% */
+    .all-clear-box {
+      text-align: center; padding: 22px 16px; margin-bottom: 16px;
+      border: 1px solid var(--ok); border-radius: var(--r);
+      background: linear-gradient(160deg, var(--ok-bg), var(--bg));
+    }
+    .all-clear-emoji {
+      width: 40px; height: 40px; margin: 0 auto 10px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; background: var(--ok); color: #fff;
+      font-size: 22px; font-weight: 700;
+    }
+    .all-clear-title { font-size: 16px; font-weight: 700; color: var(--text); }
+    .all-clear-subtitle { font-size: 13px; color: var(--t2); margin-top: 3px; }
+    [data-theme="dark"] .all-clear-box { background: linear-gradient(160deg, var(--ok-bg), var(--s2)); }
+    /* D4: staggered tick-gauge reveal on first render only */
+    @keyframes gaugeReveal { from { stroke-width: 0; opacity: 0; } to { stroke-width: var(--gauge-sw, 2); opacity: 1; } }
+    .gauge-line.animate { animation: gaugeReveal .5s ease-out both; }
   </style>
 </head>
 <body>
@@ -2412,10 +2427,14 @@ function gauge(id, pct) {
   if (!svg) return;
   const cx=80,cy=90,ir=55,or=69,n=52;
   const filled = Math.round(n*pct/100);
+  const animate = !svg.dataset.rendered;   // D4: staggered reveal on first paint only
   svg.innerHTML = Array.from({length:n},(_,i)=>{
     const rad=(180+180*i/(n-1))*Math.PI/180, c=Math.cos(rad), s=Math.sin(rad);
-    return `<line x1="${(cx+ir*c).toFixed(2)}" y1="${(cy+ir*s).toFixed(2)}" x2="${(cx+or*c).toFixed(2)}" y2="${(cy+or*s).toFixed(2)}" stroke="${i<filled?'var(--gon)':'var(--goff)'}" stroke-width="${i<filled?'2.6':'2'}" stroke-linecap="round"/>`;
+    const sw = i<filled?'2.6':'2';
+    const anim = animate ? ` class="gauge-line animate" style="animation-delay:${i*15}ms;--gauge-sw:${sw}"` : '';
+    return `<line${anim} x1="${(cx+ir*c).toFixed(2)}" y1="${(cy+ir*s).toFixed(2)}" x2="${(cx+or*c).toFixed(2)}" y2="${(cy+or*s).toFixed(2)}" stroke="${i<filled?'var(--gon)':'var(--goff)'}" stroke-width="${sw}" stroke-linecap="round"/>`;
   }).join('');
+  svg.dataset.rendered = 'true';
 }
 
 /* ── Bar chart ──────────────────────────────────── */
@@ -2425,7 +2444,7 @@ function barChart(elId, items) {
   el.innerHTML = items.map(d => {
     const cls = d.hatch ? 'bar-rect hatch' : 'bar-rect';
     const h   = Math.max(0, Math.min(100, d.pct));
-    return `<div class="bar-col"><div class="bar-track"><div class="${cls}" style="height:${h}%"></div></div><div class="bar-info"><div class="bar-val">${d.pct}%</div><div class="bar-x">${d.label}</div></div></div>`;
+    return `<div class="bar-col"><div class="bar-track"><div class="${cls}" style="height:${h}%"></div></div><div class="bar-info"><div class="bar-val">${d.pct}%</div><div class="bar-x" title="${d.title ? escapeHtml(d.title) : ''}">${escapeHtml(d.label)}</div></div></div>`;
   }).join('');
 }
 
@@ -2481,7 +2500,6 @@ function buildTasks() {
 
 function badgeFor(urgency, state) {
   if (state === 'done')       return {cls:'b-done',    text:'Done'};
-  if (state === 'partial')    return {cls:'b-partial',  text:'In Progress'};
   if (urgency === 'overdue')  return {cls:'b-urgent',   text:'Overdue'};
   if (urgency === 'this_uta') return {cls:'b-urgent',   text:'This UTA'};
   if (urgency === 'next_uta') return {cls:'b-upcoming', text:'Next UTA'};
@@ -2492,12 +2510,11 @@ const NOTE_ICO = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" str
 
 function taskHTML(t) {
   const b    = badgeFor(t.urgency, t.state);
-  const orig = badgeFor(t.urgency, 'none');
   const apptParts = [t.appt_day, t.appt_time, t.appt_location].filter(Boolean);
   let det = apptParts.length ? apptParts.join(' · ') + (t.details ? ' · ' + t.details : '') : (t.details || '');
   const flagCls = t.is_flagged ? ' flagged' : '';
   const flagStar = t.is_flagged ? '<span class="flag-star">★</span>' : '';
-  return `<div class="task-item${flagCls}" id="ti-${t.id}" data-id="${t.id}" data-state="${t.state}" data-ou="${t.urgency}" data-ob="${orig.text}">
+  return `<div class="task-item${flagCls}" id="ti-${t.id}" data-id="${t.id}" data-state="${t.state}" data-ou="${t.urgency}">
     <div class="chk" role="checkbox" tabindex="0" aria-checked="${t.state==='done'}" aria-label="Mark done: ${escapeHtml(t.title)}" onclick="cycleTask(this.closest('.task-item'),event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cycleTask(this.closest('.task-item'),event);}">
       <svg class="ic ic-part" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M2.5 5h5" stroke="var(--warn)" stroke-width="1.8" stroke-linecap="round"/></svg>
       <svg class="ic ic-done" viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.5 5 4 7.5 8.5 2.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2516,8 +2533,8 @@ function taskHTML(t) {
 }
 
 function upcomingHTML(t) {
-  return `<div class="task-item" style="opacity:.65;cursor:default">
-    <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
+  return `<div class="task-item row-readonly" style="opacity:.65;cursor:default">
+    <div class="chk"></div>
     <div class="task-body">
       <div class="task-title">${escapeHtml(t.title)}</div>
       ${t.details ? `<div class="task-det">${escapeHtml(t.details)}</div>` : ''}
@@ -2549,10 +2566,22 @@ function renderMemberBars(checkable, done, total) {
 
 function barRowHTML(label, done, tot, pct, isOverall) {
   return `<div class="hero-bar-row${isOverall ? ' overall' : ''}">
-    <div class="hero-bar-label">${label}</div>
+    <div class="hero-bar-label">${escapeHtml(label)}</div>
     <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${pct}%"></div></div>
     <div class="hero-bar-count">${done}<span class="hbc-tot">/${tot}</span></div>
   </div>`;
+}
+
+// D5: the all-clear banner. Owned by updateMemberStats (below) so it stays in sync
+// on every toggle, not just on a full buildTasks() rebuild.
+const ALL_CLEAR_HTML = '<div class="all-clear-box"><div class="all-clear-emoji">✓</div><div class="all-clear-title">You\'re all set for this UTA</div><div class="all-clear-subtitle">Great work — every task is complete.</div></div>';
+function syncAllClear(done, total) {
+  const host = document.getElementById('member-tasks');
+  if (!host) return;
+  const box = host.querySelector('.all-clear-box');
+  const show = total > 0 && done === total;
+  if (show && !box) host.insertAdjacentHTML('afterbegin', ALL_CLEAR_HTML);
+  else if (!show && box) box.remove();
 }
 
 function updateMemberStats() {
@@ -2568,6 +2597,7 @@ function updateMemberStats() {
   document.getElementById('member-chart-meta').textContent = done + ' / ' + total;
   gauge('g-member', pct);
   renderMemberBars(checkable, done, total);
+  syncAllClear(done, total);
   updateNavBadges();
 }
 
@@ -2721,12 +2751,14 @@ function shopEventRow(e, isSup) {
   const det   = [time, e.details ? tlEsc(e.details) : ''].filter(Boolean).join(' · ');
   const bcls  = isWO ? 'b-upcoming' : isEmp ? 'b-urgent' : 'b-upcoming';
   const blbl  = isWO ? 'WO' : isEmp ? 'Emphasis' : (e.day||'').split('/')[0].slice(0,3);
-  const titleHtml = (isWO && e.wo_number ? tlEsc(e.wo_number)+' — ' : '') + tlEsc(e.title);
+  const woLabel = isWO && e.wo_number ? `<div class="task-wo-label">${tlEsc(e.wo_number)}</div>` : '';
+  const titleText = tlEsc(e.title);
   const sm = isWO ? woStatusMeta(e.status) : null;
-  return `<div class="task-item" style="cursor:default">
-    <div class="chk" style="opacity:.3"><svg viewBox="0 0 10 10" width="10" height="10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/></svg></div>
+  return `<div class="task-item row-readonly" style="cursor:default">
+    <div class="chk"></div>
     <div class="task-body">
-      <div class="task-title">${titleHtml}</div>
+      ${woLabel}
+      <div class="task-title">${titleText}</div>
       ${det ? `<div class="task-det">${det}</div>` : ''}
     </div>
     ${isWO ? `<span class="badge ${sm.cls}" title="Work order status">${sm.label}</span>` : `<div class="badge ${bcls}">${blbl}</div>`}
@@ -2864,7 +2896,7 @@ function buildMembers() {
     return `<div class="mem-item" id="memitem-${m.id}">
       <div ${rowAttrs}>
         <div class="avatar">${init}</div>
-        <div class="mem-meta"><div class="mem-name">${m.last_name}, ${m.first_name[0]}.</div><div class="mem-rank">${m.rank}</div></div>
+        <div class="mem-meta"><div class="mem-name">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.</div><div class="mem-rank">${escapeHtml(m.rank)}</div></div>
         <div><div class="mem-frac">${done}/${total}</div><div class="mem-frac-sub">${pct}%</div></div>
         <div class="dot ${dc}" title="${dt}"></div>
         ${chevron}
@@ -2875,7 +2907,9 @@ function buildMembers() {
   barChart('shop-bar-chart', shopMembers.map(m => {
     const done=parseInt(m.done_tasks)||0, tot=parseInt(m.total_tasks)||0;
     const pct=tot?Math.round(done/tot*100):0;
-    return {label:m.last_name.slice(0,5), pct, hatch:pct<100&&pct>0};
+    const initials = m.last_name[0] + m.first_name[0];
+    const fullName = m.last_name + ', ' + m.first_name;
+    return {label: initials, pct, hatch:pct<100&&pct>0, title: fullName};
   }));
   updateShopStats();
 }
@@ -2940,13 +2974,19 @@ async function renderMemberTasks(memberId) {
       if (!cats[t.category_code]) cats[t.category_code] = { label: t.category_label, tasks: [] };
       cats[t.category_code].tasks.push(t);
     }
+    // U4: on phones show a compact per-category summary; full task list on desktop.
+    const isMobile = window.innerWidth < 768;
     for (const [,cat] of Object.entries(cats)) {
       const d = cat.tasks.filter(t => t.state === 'done').length;
+      if (isMobile) {
+        html += `<div class="mem-cat-summary"><span class="mem-cat-item">${escapeHtml(cat.label)}</span><span class="summary-pct">${d}/${cat.tasks.length}</span></div>`;
+        continue;
+      }
       html += `<div class="mem-task-group">
         <div class="mem-task-cat">${escapeHtml(cat.label)} · ${d}/${cat.tasks.length}</div>`;
       for (const t of cat.tasks) {
-        const sc = t.state==='done'?'var(--ok)':t.state==='partial'?'var(--warn)':'var(--t3)';
-        const si = t.state==='done'?'✓':t.state==='partial'?'–':'○';
+        const sc = t.state==='done'?'var(--ok)':'var(--t3)';
+        const si = t.state==='done'?'✓':'○';
         const isDone = t.state === 'done';
         const flagCls = t.is_flagged ? ' flagged' : '';
         const flagStar = t.is_flagged ? '<span class="flag-star">★</span>' : '';
@@ -3009,8 +3049,8 @@ async function renderShopMembers(shopId) {
       const total = parseInt(m.total_tasks)||0;
       const pct   = total ? Math.round(done/total*100) : 0;
       return `<div class="shop-mem-row">
-        <div class="shop-mem-rank-c">${m.rank}</div>
-        <div class="shop-mem-name-c">${m.last_name}, ${m.first_name[0]}.</div>
+        <div class="shop-mem-rank-c">${escapeHtml(m.rank)}</div>
+        <div class="shop-mem-name-c">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.</div>
         <div class="shop-mem-bar-c"><div class="shop-mem-fill-c" style="width:${pct}%"></div></div>
         <div class="shop-mem-pct-c">${pct}%</div>
       </div>`;
@@ -3198,7 +3238,7 @@ async function loadSquadron() {
       document.getElementById('sq-cat-mini').innerHTML = cats.map(c => {
         return `<div class="mini-cell">
           <div class="mini-num">${c.done}<span class="mini-frac">/${c.total}</span></div>
-          <div class="mini-lbl">${c.label}</div>
+          <div class="mini-lbl">${escapeHtml(c.label)}</div>
         </div>`;
       }).join('');
     }
@@ -3213,8 +3253,8 @@ async function loadSquadron() {
         const color = healthColor(p);
         return `<div class="alert-row">
           <div>
-            <div class="alert-name">${m.rank} ${m.last_name}</div>
-            <div class="alert-shop">${m.shop} · ${done}/${total} done</div>
+            <div class="alert-name">${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}</div>
+            <div class="alert-shop">${escapeHtml(m.shop)} · ${done}/${total} done</div>
           </div>
           <div class="alert-pct" style="color:${color}">${p}%</div>
         </div>`;
@@ -3236,7 +3276,7 @@ async function loadSquadron() {
         <div class="shop-row" onclick="toggleShop(${s.id})">
           <div class="shop-icon">${initials}</div>
           <div class="shop-meta-wrap">
-            <div class="shop-name">${s.shop}</div>
+            <div class="shop-name">${escapeHtml(s.shop)}</div>
             <div class="shop-sub">${mems} member${mems !== 1 ? 's' : ''} · ${done}/${total} tasks done</div>
           </div>
           <div><div class="shop-pct" style="color:${color}">${p}%</div></div>
@@ -3321,12 +3361,12 @@ async function openAddTask(memberId) {
   const cats = await getCategories();
   const catSel = document.getElementById('at-category');
   catSel.innerHTML = cats.filter(c => c.code !== 'upcoming').map(c =>
-    `<option value="${c.code}">${c.label}</option>`
+    `<option value="${c.code}">${escapeHtml(c.label)}</option>`
   ).join('');
 
   const memSel = document.getElementById('at-member');
   memSel.innerHTML = shopMembers.map(m =>
-    `<option value="${m.id}" ${m.id===memberId?'selected':''}>${m.rank} ${m.last_name}, ${m.first_name}</option>`
+    `<option value="${m.id}" ${m.id===memberId?'selected':''}>${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name)}</option>`
   ).join('');
 
   document.getElementById('at-title').value = '';

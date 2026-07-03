@@ -825,7 +825,9 @@ app.get('/api/squadron/members', requireAuth, requireRole('leadership'), async (
       HAVING COUNT(t.id) FILTER (WHERE NOT t.is_upcoming) > 0
       ORDER BY
         (COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)::float
-          / NULLIF(COUNT(t.id) FILTER (WHERE NOT t.is_upcoming), 0)) ASC NULLS FIRST
+          / NULLIF(COUNT(t.id) FILTER (WHERE NOT t.is_upcoming), 0)) ASC NULLS FIRST,
+        (COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)
+          - COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)) DESC
       LIMIT 10
     `);
     res.json(rows);
