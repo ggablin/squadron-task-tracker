@@ -1005,6 +1005,14 @@ app.post('/api/notifications/read', requireAuth, async (req, res) => {
 // ── Static ────────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Standalone task-builder prototype for review (public, no auth) — clean URL
+// without the .html so it's easy to share. Must sit before the SPA catch-all,
+// or '*' would serve index.html instead.
+app.get('/task-builder-mockup', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'task-builder-mockup.html'))
+);
+
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
