@@ -1416,11 +1416,6 @@
     }
     /* U3: work-order number as a muted label above the title */
     .task-wo-label { font-size: 11px; color: var(--t2); font-weight: 400; margin-bottom: 3px; }
-    /* U4: compact per-category summary for an expanded member on mobile */
-    .mem-cat-summary { display: flex; align-items: center; justify-content: space-between; padding: 6px 2px; border-bottom: 1px solid var(--border); font-size: 13px; }
-    .mem-cat-summary:last-child { border-bottom: none; }
-    .mem-cat-item { color: var(--text); }
-    .summary-pct { color: var(--t2); font-weight: 600; font-variant-numeric: tabular-nums; }
     /* D5: all-clear celebratory state at 100% */
     .all-clear-box {
       text-align: center; padding: 22px 16px; margin-bottom: 16px;
@@ -1580,8 +1575,8 @@
                   <div class="stat-lbl">Flagged</div>
                 </div>
               </div>
-              <button class="hero-bars-toggle" id="hero-bars-toggle" aria-expanded="false" onclick="toggleHeroBars()"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="3 6 6 9 9 6"></polyline></svg> Categories</button>
             </div>
+            <button class="hero-bars-toggle" id="hero-bars-toggle" aria-expanded="false" onclick="toggleHeroBars()"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="3 6 6 9 9 6"></polyline></svg> Categories</button>
           </div>
 
           <div class="hero-section" id="hero-bars-section">
@@ -2974,14 +2969,8 @@ async function renderMemberTasks(memberId) {
       if (!cats[t.category_code]) cats[t.category_code] = { label: t.category_label, tasks: [] };
       cats[t.category_code].tasks.push(t);
     }
-    // U4: on phones show a compact per-category summary; full task list on desktop.
-    const isMobile = window.innerWidth < 768;
     for (const [,cat] of Object.entries(cats)) {
       const d = cat.tasks.filter(t => t.state === 'done').length;
-      if (isMobile) {
-        html += `<div class="mem-cat-summary"><span class="mem-cat-item">${escapeHtml(cat.label)}</span><span class="summary-pct">${d}/${cat.tasks.length}</span></div>`;
-        continue;
-      }
       html += `<div class="mem-task-group">
         <div class="mem-task-cat">${escapeHtml(cat.label)} · ${d}/${cat.tasks.length}</div>`;
       for (const t of cat.tasks) {
