@@ -398,14 +398,14 @@ button { font-family:inherit; cursor:pointer; }
         <div class="sum-row"><span class="k">Category</span><span class="v" id="r-cat">—</span></div>
         <div class="sum-row"><span class="k">Goes to</span><span class="v" id="r-who">—</span></div>
         <div class="sum-row"><span class="k">Urgency</span><span class="v" id="r-urg">—</span></div>
-        <div class="sum-row"><span class="k">Cycle</span><span class="v">July 2026 UTA (draft)</span></div>
+        <div class="sum-row"><span class="k">Cycle</span><span class="v" id="r-cycle">—</span></div>
         <div class="additive-note">
           <span>✓</span>
           <span><strong>Adds only.</strong> Nobody’s existing tasks or checkmarks are touched, and you can undo this batch afterwards from “Added this cycle”.</span>
         </div>
         <div class="builder-foot">
           <button class="btn-secondary" onclick="go('builder')">← Edit</button>
-          <button class="btn-primary" id="btn-add" onclick="go('success')">Add task for <span id="r-n">0</span> members</button>
+          <button class="btn-primary" id="btn-add" onclick="commitNewTask()">Add task for <span id="r-n">0</span> members</button>
         </div>
       </div>
       <div>
@@ -446,19 +446,11 @@ button { font-family:inherit; cursor:pointer; }
 <div id="toast" style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);background:var(--text);color:#fff;font-size:13px;font-weight:600;padding:11px 20px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .18s, transform .18s;max-width:88vw;text-align:center;"></div>
 
 <script>
-/* ── data: real June-cycle shapes ── */
-const ROSTER = [
-  { shop:'Structures', members:[['SMSgt','Gablin'],['TSgt','Ebbert'],['SSgt','Uzoma'],['SrA','Becerra'],['SrA','Fowler'],['SrA','Mesa'],['A1C','Glenn'],['AB','Gradaille'],['AB','DeRose']] },
-  { shop:'Heavy Equipment', members:[['MSgt','Brown'],['TSgt','Fitch'],['SSgt','Ewer'],['SSgt','Sanchez'],['SrA','Farthing'],['A1C','Sandberg'],['A1C','Bernard'],['AB','Allen']] },
-  { shop:'EA', members:[['MSgt','Beljour-Sommer'],['TSgt','Reneau'],['SrA','Mattson'],['SrA','Dunaway'],['AB','Gibbs']] },
-  { shop:'Operations', members:[['SSgt','Cabbler'],['SSgt','Huertas'],['SrA','Jenkins']] },
-  { shop:'WFSM', members:[['MSgt','Fernandez G.'],['TSgt','Grossmick'],['TSgt','Santos'],['SSgt','Charles'],['SSgt','Conard'],['SrA','Blake'],['AB','Williams'],['AB','Kadiri']] },
-  { shop:'HVAC', members:[['MSgt','Green'],['TSgt','Price'],['TSgt','Banks'],['SSgt','Maitima'],['SrA','Torres'],['SrA','Haniffy'],['AB','Neal']] },
-  { shop:'Electrical', members:[['MSgt','Fernandez L.'],['TSgt','Beltran'],['SSgt','Willerscheidt'],['SrA','Palomino'],['AB','Fowler G.'],['AB','Dongmo'],['AB','Galal']] },
-  { shop:'Power Pro', members:[['MSgt','McCullough'],['TSgt','Emerson'],['SSgt','Geant'],['SrA','Hill'],['A1C','Veal'],['A1C','Whittingham']] },
-  { shop:'EM', members:[['MSgt','Tarasewicz'],['TSgt','Schoenfeld'],['TSgt','Long'],['SrA','Vasquez'],['SrA','De La Cruz'],['AMN','Roselli']] },
-  { shop:'C2', members:[['Lt Col','Gorey'],['CMSgt','Romer'],['SMSgt','King'],['SMSgt','Izzo'],['MSgt','McNaughton'],['MSgt','Burton'],['MSgt','Sousa']] },
-];
+/* ── real data (loaded from the API) ── */
+let ROSTER = [];       // [{ shop, members:[{id, rank, last_name}] }]
+let MEMBER_BY_ID = {}; // id -> member (for shop lookups etc.)
+let CATEGORIES = [];   // [{code, label}]
+let WORKING_CYCLE = null; // the draft if one exists, else the live cycle (set by loadHome)
 let CATALOG = [];
 const CF_GROUPS = [
   { title:'Force Protection CBT', sub:'CBT · urgencies carry over as-is', n:23, sel:true },
@@ -471,27 +463,62 @@ const CF_GROUPS = [
   { title:'DFT — Camp Murray, WA', sub:'Mobility · June-specific dates', n:22, sel:false },
 ];
 
+// Mockup urgency labels -> backend urgency codes.
+const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Info':'info' };
+
 let urgency = 'This UTA';
-let urgBatches = [];
-const selected = new Set();
+let urgBatches = []; // [{ urg: label, code, member_ids:[int] }]  ("batches so far", client-side)
+let assignments = []; // [{ member_ids:[int], urgency: code }]  — what actually gets POSTed
+const selected = new Set(); // set of member ids (numbers) currently tapped, not yet saved into a batch
+
+let builderLoaded = false;
+async function loadBuilderRefData() {
+  const [members, cats] = await Promise.all([
+    fetch('/api/squadron/members').then(r => r.json()),
+    fetch('/api/categories').then(r => r.json()),
+  ]);
+  MEMBER_BY_ID = {};
+  const byShop = new Map();
+  members.forEach(m => {
+    MEMBER_BY_ID[m.id] = m;
+    if (!byShop.has(m.shop)) byShop.set(m.shop, []);
+    byShop.get(m.shop).push(m);
+  });
+  ROSTER = [...byShop.entries()].map(([shop, mem]) => ({
+    shop,
+    members: mem.slice().sort((a, b) => a.last_name.localeCompare(b.last_name)),
+  }));
+  CATEGORIES = cats;
+  renderRoster();
+  renderCategoryOptions();
+  builderLoaded = true;
+}
 
 /* ── render roster ── */
-const rosterEl = document.getElementById('roster');
-ROSTER.forEach((g, gi) => {
-  const wrap = document.createElement('div');
-  wrap.className = 'shop-group';
-  const chips = g.members.map(([rk, nm], mi) =>
-    `<button class="mchip" data-id="${gi}-${mi}" onclick="toggleM(this)"><span class="rk">${rk}</span>${nm}</button>`
-  ).join('');
-  wrap.innerHTML = `
-    <div class="shop-group-hd">
-      <span class="sg-name">${g.shop}</span>
-      <span class="sg-count">${g.members.length}</span>
-      <button class="btn-all-shop" onclick="toggleShop(${gi}, this)">Whole shop</button>
-    </div>
-    <div class="member-chips" data-shop="${gi}">${chips}</div>`;
-  rosterEl.appendChild(wrap);
-});
+function renderRoster() {
+  const rosterEl = document.getElementById('roster');
+  rosterEl.innerHTML = '';
+  ROSTER.forEach((g, gi) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'shop-group';
+    const chips = g.members.map(m =>
+      `<button class="mchip" data-id="${m.id}" onclick="toggleM(this)"><span class="rk">${m.rank}</span>${m.last_name}</button>`
+    ).join('');
+    wrap.innerHTML = `
+      <div class="shop-group-hd">
+        <span class="sg-name">${g.shop}</span>
+        <span class="sg-count">${g.members.length}</span>
+        <button class="btn-all-shop" onclick="toggleShop(${gi}, this)">Whole shop</button>
+      </div>
+      <div class="member-chips" data-shop="${gi}">${chips}</div>`;
+    rosterEl.appendChild(wrap);
+  });
+}
+
+function renderCategoryOptions() {
+  const sel = document.getElementById('f-cat');
+  sel.innerHTML = CATEGORIES.map(c => `<option value="${c.code}">${c.label}</option>`).join('');
+}
 
 /* ── home screen: real data ── */
 const CAT_TAGS = {
@@ -514,6 +541,7 @@ async function loadHome() {
   const live = cycles.find(c => c.is_current);
   const draft = cycles.find(c => c.status === 'draft');
   const working = draft || live;
+  WORKING_CYCLE = working || null;
 
   renderCycleBar({ live, draft });
 
@@ -702,32 +730,35 @@ function go(name) {
   const stepFor = { home:'home', copyfwd:'home', builder:'builder', review:'review', success:'review' };
   document.querySelectorAll('.step').forEach(s =>
     s.classList.toggle('active', s.dataset.go === stepFor[name]));
+  if (name === 'builder' && !builderLoaded) loadBuilderRefData();
   window.scrollTo({ top: 0 });
 }
 function toggleM(el) {
-  const id = el.dataset.id;
+  const id = Number(el.dataset.id);
   if (selected.has(id)) { selected.delete(id); el.classList.remove('sel'); }
   else { selected.add(id); el.classList.add('sel'); }
   updateCount();
 }
 function toggleShop(gi, btn) {
   const chips = document.querySelectorAll(`[data-shop="${gi}"] .mchip`);
-  const allSel = [...chips].every(c => selected.has(c.dataset.id));
+  const allSel = [...chips].every(c => selected.has(Number(c.dataset.id)));
   chips.forEach(c => {
-    if (allSel) { selected.delete(c.dataset.id); c.classList.remove('sel'); }
-    else { selected.add(c.dataset.id); c.classList.add('sel'); }
+    const id = Number(c.dataset.id);
+    if (allSel) { selected.delete(id); c.classList.remove('sel'); }
+    else { selected.add(id); c.classList.add('sel'); }
   });
   updateCount();
 }
 function selectAll(on) {
   document.querySelectorAll('.mchip').forEach(c => {
-    if (on) { selected.add(c.dataset.id); c.classList.add('sel'); }
-    else { selected.delete(c.dataset.id); c.classList.remove('sel'); }
+    const id = Number(c.dataset.id);
+    if (on) { selected.add(id); c.classList.add('sel'); }
+    else { selected.delete(id); c.classList.remove('sel'); }
   });
   updateCount();
 }
 function updateCount() {
-  const extra = urgBatches.reduce((a, b) => a + b.n, 0);
+  const extra = urgBatches.reduce((a, b) => a + b.member_ids.length, 0);
   document.getElementById('selcount').textContent =
     `${selected.size} selected` + (extra ? ` · +${extra} batched` : '');
 }
@@ -737,7 +768,9 @@ function setUrg(btn, u) {
 }
 function saveBatch() {
   if (!selected.size) { toast('Tap at least one person first'); return; }
-  urgBatches.push({ urg: urgency, n: selected.size });
+  const member_ids = [...selected];
+  urgBatches.push({ urg: urgency, code: URG_LABEL_TO_CODE[urgency], member_ids });
+  assignments.push({ member_ids, urgency: URG_LABEL_TO_CODE[urgency] });
   selectAll(false);
   renderUrgBatches();
   toast(`Batch saved — now pick the next urgency and tap the next group`);
@@ -750,31 +783,35 @@ function renderUrgBatches() {
   }
   const cls = { 'Overdue':'bp-overdue', 'This UTA':'bp-this', 'Next UTA':'bp-next', 'Info':'bp-next' };
   host.innerHTML = urgBatches.map((b, i) =>
-    `<span class="batch-pill ${cls[b.urg]}">${b.urg} × ${b.n} <span class="x" onclick="dropBatch(${i})">✕</span></span>`).join('');
+    `<span class="batch-pill ${cls[b.urg]}">${b.urg} × ${b.member_ids.length} <span class="x" onclick="dropBatch(${i})">✕</span></span>`).join('');
   updateCount();
 }
-function dropBatch(i) { urgBatches.splice(i, 1); renderUrgBatches(); }
+function dropBatch(i) { urgBatches.splice(i, 1); assignments.splice(i, 1); renderUrgBatches(); }
 
-function totalRecipients() { return selected.size + urgBatches.reduce((a, b) => a + b.n, 0); }
+function totalRecipients() { return selected.size + urgBatches.reduce((a, b) => a + b.member_ids.length, 0); }
 
 function toReview() {
   if (!document.getElementById('f-title').value.trim()) { toast('Give the task a title first'); return; }
   if (!totalRecipients()) { toast('Tap the people this applies to'); return; }
   const t = document.getElementById('f-title').value.trim();
   const det = document.getElementById('f-det').value.trim();
-  const cat = document.getElementById('f-cat').value;
+  const catCode = document.getElementById('f-cat').value;
+  const catLabel = (CATEGORIES.find(c => c.code === catCode) || {}).label || catCode;
   const n = totalRecipients();
   const shopsTouched = new Set();
-  selected.forEach(id => shopsTouched.add(id.split('-')[0]));
+  selected.forEach(id => { const m = MEMBER_BY_ID[id]; if (m) shopsTouched.add(m.shop); });
   document.getElementById('r-title').textContent = t;
-  document.getElementById('r-cat').textContent = cat;
+  document.getElementById('r-cat').textContent = catLabel;
   document.getElementById('r-who').textContent = urgBatches.length
     ? `${n} members in ${urgBatches.length + (selected.size ? 1 : 0)} urgency batches`
     : `${n} members · ${shopsTouched.size} shop${shopsTouched.size === 1 ? '' : 's'}`;
   document.getElementById('r-urg').textContent = urgBatches.length
-    ? urgBatches.map(b => `${b.urg} ×${b.n}`).join(' · ') + (selected.size ? ` · ${urgency} ×${selected.size}` : '')
+    ? urgBatches.map(b => `${b.urg} ×${b.member_ids.length}`).join(' · ') + (selected.size ? ` · ${urgency} ×${selected.size}` : '')
     : urgency;
   document.getElementById('r-n').textContent = n;
+  document.getElementById('r-cycle').textContent = WORKING_CYCLE
+    ? `${WORKING_CYCLE.name}${WORKING_CYCLE.status === 'draft' ? ' (draft)' : ''}`
+    : 'No working cycle';
   document.getElementById('p-title').textContent = t;
   document.getElementById('p-det').textContent = det;
   document.getElementById('p-det').style.display = det ? '' : 'none';
@@ -789,7 +826,43 @@ function useCatalog(i) {
 function prefillBlank() {
   document.getElementById('f-title').value = '';
   document.getElementById('f-det').value = '';
-  urgBatches = []; renderUrgBatches(); selectAll(false);
+  urgBatches = []; assignments = []; renderUrgBatches(); selectAll(false);
+}
+
+async function commitNewTask() {
+  if (!WORKING_CYCLE) { toast('No working cycle — create or select a cycle first'); return; }
+  // Fold any still-tapped-but-unsaved selection into the current urgency as a final batch.
+  const finalAssignments = assignments.slice();
+  if (selected.size) finalAssignments.push({ member_ids: [...selected], urgency: URG_LABEL_TO_CODE[urgency] });
+  if (!finalAssignments.length) { toast('Tap the people this applies to'); return; }
+
+  const body = {
+    title: document.getElementById('f-title').value.trim(),
+    category_code: document.getElementById('f-cat').value,
+    details: document.getElementById('f-det').value.trim(),
+    assignments: finalAssignments,
+  };
+  const btn = document.getElementById('btn-add');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(r.message || r.error || 'Could not add task');
+      return;
+    }
+    toast(`Added for ${r.added} members${r.skipped ? ` (${r.skipped} already had it)` : ''}`);
+    loadHome();
+    go('home');
+  } catch (e) {
+    toast('Could not add task — check your connection');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 let toastTimer = null;
 function toast(msg) {
