@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const batches = require('./lib/batches');
+const records = require('./lib/records');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -265,6 +266,30 @@ app.post('/api/members/:id/reset-password', requireAuth, requireRole('supervisor
       [hash, memberId]
     );
     res.json({ success: true, temp_password: temp });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Member task history (Records) ────────────────────────────────────────────
+// Leadership can view any member's cross-cycle history; a supervisor is limited
+// to members in their own shop (checked via getMemberShopId, same own-shop
+// pattern used elsewhere — e.g. /api/shop/members/:id/tasks); plain members 403.
+app.get('/api/members/:id/history', requireAuth, requireOnboarded, async (req, res) => {
+  try {
+    const targetId = reqId(req.params.id);
+    if (!targetId) return res.status(400).json({ error: 'Invalid member id' });
+
+    if (req.session.role !== 'leadership') {
+      if (req.session.role !== 'supervisor') return res.status(403).json({ error: 'Forbidden' });
+      const theirShop = await records.getMemberShopId(pool, targetId);
+      if (!theirShop || theirShop !== req.session.shopId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
+
+    res.json(await records.memberHistory(pool, targetId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
