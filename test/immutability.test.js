@@ -26,3 +26,17 @@ test('allows completion writes on the live cycle', async () => {
     [live.id, f.m1, f.catId]);
   await assert.doesNotReject(() => assertTaskInLiveCycle(pool, t.id));
 });
+
+test('a draft cycle\'s tasks are invisible to members (is_current filter)', async () => {
+  await resetDb();
+  const f = await seedFixtures();
+  const { rows: [draft] } = await pool.query(
+    `INSERT INTO uta_cycles (name, status, is_current) VALUES ('July 2026','draft',false) RETURNING id`);
+  await pool.query(`INSERT INTO tasks (uta_cycle_id, member_id, category_id, title)
+                    VALUES ($1,$2,$3,'Draft task')`, [draft.id, f.m1, f.catId]);
+  // Mirror the member fetch: only tasks in the current cycle.
+  const { rows } = await pool.query(
+    `SELECT t.id FROM tasks t JOIN uta_cycles c ON c.id = t.uta_cycle_id
+     WHERE t.member_id = $1 AND c.is_current = true`, [f.m1]);
+  assert.strictEqual(rows.length, 0);
+});
