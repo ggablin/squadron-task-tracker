@@ -1173,6 +1173,17 @@ app.get('/task-builder-mockup', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'task-builder-mockup.html'))
 );
 
+// Leadership task-builder page shell. Gated to logged-in members; the APIs it
+// calls enforce requireRole('leadership') so a non-leader just sees 403s/empty
+// state. Must sit before the SPA catch-all, or '*' would serve index.html.
+function requireLeadershipPage(req, res, next) {
+  if (!req.session.memberId) return res.redirect('/');
+  next();
+}
+app.get('/build', requireLeadershipPage, (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'build.html'))
+);
+
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
