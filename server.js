@@ -1209,6 +1209,12 @@ app.get('/build', requireLeadershipPage, (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'build.html'))
 );
 
+// Records page shell (leadership + supervisor member browser / history review).
+// Gated the same way as /build; must sit before the SPA catch-all.
+app.get('/records', requireLeadershipPage, (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'records.html'))
+);
+
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
