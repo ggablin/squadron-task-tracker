@@ -468,21 +468,25 @@ const selected = new Set(); // set of member ids (numbers) currently tapped, not
 
 let builderLoaded = false;
 async function loadBuilderRefData() {
-  const [members, cats] = await Promise.all([
-    fetch('/api/squadron/members').then(r => r.json()),
+  // /api/squadron/members is a "most behind" top-10 list, not a full roster —
+  // build the full grouped roster from /api/squadron (shop list) +
+  // /api/squadron/shops/:id/members (full per-shop roster, unfiltered).
+  const [shops, cats] = await Promise.all([
+    fetch('/api/squadron').then(r => r.json()),
     fetch('/api/categories').then(r => r.json()),
   ]);
+  const perShop = await Promise.all(
+    shops.map(s => fetch(`/api/squadron/shops/${s.id}/members`).then(r => r.json()))
+  );
   MEMBER_BY_ID = {};
-  const byShop = new Map();
-  members.forEach(m => {
-    MEMBER_BY_ID[m.id] = m;
-    if (!byShop.has(m.shop)) byShop.set(m.shop, []);
-    byShop.get(m.shop).push(m);
-  });
-  ROSTER = [...byShop.entries()].map(([shop, mem]) => ({
-    shop,
-    members: mem.slice().sort((a, b) => a.last_name.localeCompare(b.last_name)),
-  }));
+  ROSTER = shops.map((s, i) => {
+    const mem = perShop[i].map(m => ({ ...m, shop: s.shop }));
+    mem.forEach(m => { MEMBER_BY_ID[m.id] = m; });
+    return {
+      shop: s.shop,
+      members: mem.slice().sort((a, b) => a.last_name.localeCompare(b.last_name)),
+    };
+  }).filter(g => g.members.length > 0);
   CATEGORIES = cats;
   renderRoster();
   renderCategoryOptions();
