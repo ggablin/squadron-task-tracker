@@ -1,3 +1,5 @@
 node_modules/
 .env
 .superpowers/
+preview-run.cjs
+.claude/launch.json
