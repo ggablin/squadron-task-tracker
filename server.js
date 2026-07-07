@@ -5,7 +5,7 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
-const { assertTaskInLiveCycle } = require('./lib/tasks');
+const { assertTaskInLiveCycle, listGroups } = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const app = express();
 app.set('trust proxy', 1);
@@ -559,6 +559,11 @@ app.delete('/api/cycles/:id', requireAuth, requireRole('leadership'), requireOnb
     if (e.code === 'NOT_DRAFT') return res.status(409).json({ error: 'Only a draft can be discarded' });
     console.error(e); res.status(500).json({ error: 'Server error' });
   }
+});
+
+app.get('/api/cycles/:sourceId/groups', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try { res.json(await listGroups(pool, +req.params.sourceId)); }
+  catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── My Shop ───────────────────────────────────────────────────────────────────
