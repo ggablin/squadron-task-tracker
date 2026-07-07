@@ -45,3 +45,36 @@ test('listCycles returns cycles with task counts, newest first', async () => {
   assert.strictEqual(list[0].name, 'July 2026');
   assert.strictEqual(Number(list[0].task_count), 1);
 });
+
+test('goLive promotes a draft, archives the prior live, returns members to notify', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const { rows: [live] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('June 2026','live',true) RETURNING id`);
+  const draft = await cycles.createDraft(pool, 'July 2026');
+  await pool.query(`INSERT INTO tasks (uta_cycle_id, member_id, category_id, title)
+                    VALUES ($1,$2,$3,'T')`, [draft.id, f.m1, f.catId]);
+  const r = await cycles.goLive(pool, draft.id, { confirm: false });
+  assert.strictEqual(r.cycle.is_current, true);
+  const { rows } = await pool.query(`SELECT status,is_current FROM uta_cycles WHERE id=$1`, [live.id]);
+  assert.deepStrictEqual(rows[0], { status: 'archived', is_current: false });
+  const { rows: liveCount } = await pool.query(`SELECT COUNT(*)::int n FROM uta_cycles WHERE is_current`);
+  assert.strictEqual(liveCount[0].n, 1);
+  assert.ok(r.notifyMemberIds.includes(f.m1));
+});
+
+test('goLive refuses an empty draft unless confirmed', async () => {
+  await resetDb(); await seedFixtures();
+  const draft = await cycles.createDraft(pool, 'Empty');
+  await assert.rejects(() => cycles.goLive(pool, draft.id, { confirm: false }), (e) => e.code === 'EMPTY_DRAFT');
+});
+
+test('discardDraft removes a draft but refuses a live cycle', async () => {
+  await resetDb(); await seedFixtures();
+  const draft = await cycles.createDraft(pool, 'Scratch');
+  await cycles.discardDraft(pool, draft.id);
+  const { rows } = await pool.query(`SELECT 1 FROM uta_cycles WHERE id=$1`, [draft.id]);
+  assert.strictEqual(rows.length, 0);
+  const { rows: [live] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('Live','live',true) RETURNING id`);
+  await assert.rejects(() => cycles.discardDraft(pool, live.id), (e) => e.code === 'NOT_DRAFT');
+});

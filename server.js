@@ -540,6 +540,26 @@ app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
+app.post('/api/cycles/:id/go-live', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const { cycle, notifyMemberIds } = await cycles.goLive(pool, +req.params.id, { confirm: !!req.body.confirm });
+    await notify(notifyMemberIds, { type: 'tasks_live', title: `Your ${cycle.name} tasks are live`, link: 'member' });
+    res.json(cycle);
+  } catch (e) {
+    if (e.code === 'NOT_DRAFT') return res.status(409).json({ error: 'That cycle is not a draft' });
+    if (e.code === 'EMPTY_DRAFT') return res.status(409).json({ error: 'EMPTY_DRAFT', message: 'This draft has no tasks yet.' });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/cycles/:id', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try { res.json(await cycles.discardDraft(pool, +req.params.id)); }
+  catch (e) {
+    if (e.code === 'NOT_DRAFT') return res.status(409).json({ error: 'Only a draft can be discarded' });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── My Shop ───────────────────────────────────────────────────────────────────
 
 app.get('/api/shop/events', requireAuth, async (req, res) => {
