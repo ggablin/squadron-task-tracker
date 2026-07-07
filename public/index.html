@@ -1651,6 +1651,14 @@
         <select id="shop-switcher" onchange="onShopSwitch(this.value)" aria-label="Switch shop"></select>
       </div>
 
+      <!-- Records link — supervisors (and leadership) only -->
+      <div id="shop-records-link" class="mb-md" style="display:none">
+        <button class="add-btn" onclick="window.location.href='/records'">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h6l2.5 2.5V13a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M6 8h4M6 10.5h4"/></svg>
+          Records
+        </button>
+      </div>
+
       <!-- Members / Work Orders / Schedule pills -->
       <div class="shop-tabs" role="tablist">
         <button class="shop-tab active" data-sp="members" onclick="switchShopPane('members')">Members</button>
@@ -1700,6 +1708,24 @@
         </div>
         <div id="org-staff-banner"></div>
         <div id="org-flights"></div>
+      </div>
+
+      <!-- Leadership-only tools: Task Builder + Records -->
+      <div id="sq-leader-tools" class="card card-pad mb-md" style="display:none">
+        <div class="sec-hd" style="padding:0 0 12px">
+          <div class="sec-title">Leadership Tools</div>
+          <div class="sec-sub">Task Builder &amp; member records</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="add-btn" onclick="window.location.href='/build'">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10v10H3z"/><path d="M6 6h4M6 8.5h4M6 11h2.5"/></svg>
+            Task Builder
+          </button>
+          <button class="add-btn" onclick="window.location.href='/records'">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h6l2.5 2.5V13a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M6 8h4M6 10.5h4"/></svg>
+            Records
+          </button>
+        </div>
       </div>
 
       <!-- Leadership-only rollups -->
@@ -2348,6 +2374,10 @@ function applyRole() {
   // gating below hides leadership-only rollups and supervisor-only edit affordances.
   const rollups = document.getElementById('sq-rollups');
   if (rollups) rollups.style.display = role === 'leadership' ? '' : 'none';
+  const leaderTools = document.getElementById('sq-leader-tools');
+  if (leaderTools) leaderTools.style.display = role === 'leadership' ? '' : 'none';
+  const shopRecords = document.getElementById('shop-records-link');
+  if (shopRecords) shopRecords.style.display = ['supervisor','leadership'].includes(role) ? '' : 'none';
 }
 
 /* ── Shop switcher (My Shop — leadership oversees multiple shops) ── */
