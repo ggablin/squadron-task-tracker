@@ -101,6 +101,7 @@ app.use(session({
           UNIQUE (uta_cycle_id, member_id, category_id, title);
       EXCEPTION WHEN others THEN NULL;
       END $$;
+      CREATE UNIQUE INDEX IF NOT EXISTS uta_cycles_one_current ON uta_cycles (is_current) WHERE is_current;
     `);
     console.log('Migration check complete');
   } catch (e) {

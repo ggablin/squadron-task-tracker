@@ -78,3 +78,25 @@ test('discardDraft removes a draft but refuses a live cycle', async () => {
     `INSERT INTO uta_cycles (name,status,is_current) VALUES ('Live','live',true) RETURNING id`);
   await assert.rejects(() => cycles.discardDraft(pool, live.id), (e) => e.code === 'NOT_DRAFT');
 });
+
+test('goLive works with no prior live cycle (bootstrap) — exactly one live after', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const draft = await cycles.createDraft(pool, 'First Cycle');
+  await pool.query(`INSERT INTO tasks (uta_cycle_id, member_id, category_id, title) VALUES ($1,$2,$3,'T')`, [draft.id, f.m1, f.catId]);
+  await cycles.goLive(pool, draft.id, { confirm: false });
+  const { rows } = await pool.query(`SELECT COUNT(*)::int n FROM uta_cycles WHERE is_current`);
+  assert.strictEqual(rows[0].n, 1);
+});
+
+test('goLive with confirm:true publishes an empty draft', async () => {
+  await resetDb(); await seedFixtures();
+  const draft = await cycles.createDraft(pool, 'Empty but confirmed');
+  const r = await cycles.goLive(pool, draft.id, { confirm: true });
+  assert.strictEqual(r.cycle.is_current, true);
+});
+
+test('goLive refuses a non-draft cycle', async () => {
+  await resetDb(); await seedFixtures();
+  const { rows: [live] } = await pool.query(`INSERT INTO uta_cycles (name,status,is_current) VALUES ('Live','live',true) RETURNING id`);
+  await assert.rejects(() => cycles.goLive(pool, live.id, { confirm: true }), (e) => e.code === 'NOT_DRAFT');
+});

@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS uta_cycles (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uta_cycles_one_current ON uta_cycles (is_current) WHERE is_current;
+
 CREATE TABLE IF NOT EXISTS task_categories (
   id         SERIAL PRIMARY KEY,
   code       VARCHAR(20) UNIQUE NOT NULL,
