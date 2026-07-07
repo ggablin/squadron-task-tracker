@@ -6,6 +6,7 @@ const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
 const { assertTaskInLiveCycle } = require('./lib/tasks');
+const cycles = require('./lib/cycles');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -522,6 +523,21 @@ app.get('/api/categories', requireAuth, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// ── UTA Cycles (leadership only) ─────────────────────────────────────────────
+
+app.get('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try { res.json(await cycles.listCycles(pool)); }
+  catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    res.json(await cycles.createDraft(pool, name));
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── My Shop ───────────────────────────────────────────────────────────────────

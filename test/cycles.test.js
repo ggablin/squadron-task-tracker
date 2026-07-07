@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { pool, applySchema, resetDb } = require('./helpers/db');
+const { pool, applySchema, resetDb, seedFixtures } = require('./helpers/db');
+const cycles = require('../lib/cycles');
 
 test.before(applySchema);
 
@@ -26,4 +27,21 @@ test('backfill is idempotent — a second run is a no-op and leaves values uncha
     { name: 'June 2026', status: 'live' },
     { name: 'May 2026', status: 'archived' },
   ]);
+});
+
+test('createDraft creates a draft that is not current', async () => {
+  await resetDb(); await seedFixtures();
+  const d = await cycles.createDraft(pool, 'July 2026');
+  assert.strictEqual(d.status, 'draft');
+  assert.strictEqual(d.is_current, false);
+});
+
+test('listCycles returns cycles with task counts, newest first', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const d = await cycles.createDraft(pool, 'July 2026');
+  await pool.query(`INSERT INTO tasks (uta_cycle_id, member_id, category_id, title)
+                    VALUES ($1,$2,$3,'T')`, [d.id, f.m1, f.catId]);
+  const list = await cycles.listCycles(pool);
+  assert.strictEqual(list[0].name, 'July 2026');
+  assert.strictEqual(Number(list[0].task_count), 1);
 });
