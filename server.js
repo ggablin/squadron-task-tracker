@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const cycles = require('./lib/cycles');
+const batches = require('./lib/batches');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -592,6 +593,19 @@ app.post('/api/cycles/:id/copy-forward', requireAuth, requireRole('leadership'),
       from_cycle_id, groups, created_by_id: req.session.memberId,
     }));
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.get('/api/cycles/:id/batches', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try { res.json(await batches.listBatches(pool, +req.params.id)); }
+  catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/batches/:id', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try { res.json(await batches.undoBatch(pool, +req.params.id, { force: req.query.force === 'true' })); }
+  catch (e) {
+    if (e.code === 'HAS_COMPLETIONS') return res.status(409).json({ error: 'HAS_COMPLETIONS', checked_off_count: e.checked_off_count });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ── My Shop ───────────────────────────────────────────────────────────────────
