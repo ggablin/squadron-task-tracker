@@ -345,11 +345,7 @@ button { font-family:inherit; cursor:pointer; }
         <div class="field">
           <label class="lbl">Category</label>
           <select id="f-cat">
-            <option>Admin / Records</option>
-            <option>Computer Training (CBTs)</option>
-            <option>Medical / Fitness</option>
-            <option>Upgrade Training</option>
-            <option>Other</option>
+            <option disabled selected>Loading…</option>
           </select>
         </div>
         <div class="field">
@@ -432,7 +428,7 @@ button { font-family:inherit; cursor:pointer; }
         <div class="success-title" id="s-title">Task added</div>
         <div class="success-sub" id="s-sub">It’s on their lists the moment July goes live.<br>Changed your mind? Undo the whole batch from “Added this cycle”.</div>
         <div class="builder-foot" style="justify-content:center">
-          <button class="btn-secondary" onclick="toast('Batch removed — as if it never happened')">Undo this batch</button>
+          <button class="btn-secondary" onclick="undoLastBatchFromSuccess()">Undo this batch</button>
           <button class="btn-primary" onclick="prefillBlank(); go('builder')">Add another</button>
           <button class="btn-secondary" onclick="go('home')">Done</button>
         </div>
@@ -446,6 +442,12 @@ button { font-family:inherit; cursor:pointer; }
 <div id="toast" style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);background:var(--text);color:#fff;font-size:13px;font-weight:600;padding:11px 20px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .18s, transform .18s;max-width:88vw;text-align:center;"></div>
 
 <script>
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /* ── real data (loaded from the API) ── */
 let ROSTER = [];       // [{ shop, members:[{id, rank, last_name}] }]
 let MEMBER_BY_ID = {}; // id -> member (for shop lookups etc.)
@@ -454,6 +456,7 @@ let WORKING_CYCLE = null; // the draft if one exists, else the live cycle (set b
 let CATALOG = [];
 let CF_SOURCE = null;  // the source cycle for copy-forward (set by startCopyForward)
 let CF_GROUPS = [];    // groups fetched from /api/cycles/:id/groups, each with a client-side .sel flag
+let LAST_BATCH_ID = null; // batch_id returned by the most recent commitNewTask, for the success screen's Undo
 
 // Mockup urgency labels -> backend urgency codes.
 const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Info':'info' };
@@ -494,11 +497,11 @@ function renderRoster() {
     const wrap = document.createElement('div');
     wrap.className = 'shop-group';
     const chips = g.members.map(m =>
-      `<button class="mchip" data-id="${m.id}" onclick="toggleM(this)"><span class="rk">${m.rank}</span>${m.last_name}</button>`
+      `<button class="mchip" data-id="${m.id}" onclick="toggleM(this)"><span class="rk">${escapeHtml(m.rank)}</span>${escapeHtml(m.last_name)}</button>`
     ).join('');
     wrap.innerHTML = `
       <div class="shop-group-hd">
-        <span class="sg-name">${g.shop}</span>
+        <span class="sg-name">${escapeHtml(g.shop)}</span>
         <span class="sg-count">${g.members.length}</span>
         <button class="btn-all-shop" onclick="toggleShop(${gi}, this)">Whole shop</button>
       </div>
@@ -593,7 +596,7 @@ function renderCatalog(groups, source) {
   CF_SOURCE = source || null;
   const host = document.getElementById('catalog');
   if (!groups.length) {
-    host.innerHTML = '<div class="cat-item"><div class="cat-meta"><div class="cat-sub">No recurring tasks found in ' + (source ? source.name : 'the prior cycle') + '.</div></div></div>';
+    host.innerHTML = '<div class="cat-item"><div class="cat-meta"><div class="cat-sub">No recurring tasks found in ' + escapeHtml(source ? source.name : 'the prior cycle') + '.</div></div></div>';
   } else {
     host.innerHTML = groups.map((g, i) => {
       const t = tagFor(g.category_code);
@@ -602,7 +605,7 @@ function renderCatalog(groups, source) {
   <div class="cat-item">
     <span class="cat-tag ${t.tag}">${t.name}</span>
     <div class="cat-meta">
-      <div class="cat-title">${g.title}</div>
+      <div class="cat-title">${escapeHtml(g.title)}</div>
       <div class="cat-sub">${n} people</div>
     </div>
     <button class="btn-use" onclick="useCatalog(${i})">Use again</button>
@@ -623,11 +626,11 @@ function renderBatches(cycleBatches) {
   }
   host.innerHTML = cycleBatches.map(b => {
     const when = b.created_at ? new Date(b.created_at).toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' }) : '';
-    const by = b.created_by ? ` by ${b.created_by}` : '';
+    const by = b.created_by ? ` by ${escapeHtml(b.created_by)}` : '';
     return `
   <div class="batch-row">
     <div class="batch-meta">
-      <div class="batch-title">${b.label}</div>
+      <div class="batch-title">${escapeHtml(b.label)}</div>
       <div class="batch-sub">${b.member_count} member${b.member_count === 1 ? '' : 's'}${when ? ` · added ${when}` : ''}${by}</div>
     </div>
     <button class="btn-undo" onclick="undoBatch(${b.id})">Undo</button>
@@ -662,6 +665,15 @@ async function undoBatch(batchId) {
     try { body = await res.json(); } catch (e) {}
     toast(body.message || body.error || 'Could not remove batch');
   }
+}
+
+// Success screen's "Undo this batch" — uses the real undoBatch() against the
+// batch_id captured from the most recent commitNewTask() response.
+async function undoLastBatchFromSuccess() {
+  if (!LAST_BATCH_ID) { go('home'); return; }
+  await undoBatch(LAST_BATCH_ID);
+  LAST_BATCH_ID = null;
+  go('home');
 }
 
 async function createCycle() {
@@ -746,7 +758,7 @@ function renderCF() {
     <div class="cf-group ${g.sel ? 'sel' : ''}" id="cfg-${i}">
       <div class="cf-check" onclick="cfToggle(${i})">${g.sel ? '✓' : ''}</div>
       <div class="cf-meta">
-        <div class="cf-title">${g.title}</div>
+        <div class="cf-title">${escapeHtml(g.title)}</div>
         <div class="cf-sub">${tagFor(g.category_code).name}</div>
       </div>
       <div class="cf-n">${cfCount(g)} people</div>
@@ -989,6 +1001,7 @@ async function commitNewTask() {
       toast(r.message || r.error || 'Could not add task');
       return;
     }
+    LAST_BATCH_ID = r.batch_id || null;
     toast(`Added for ${r.added} members${r.skipped ? ` (${r.skipped} already had it)` : ''}`);
     loadHome();
     go('home');
