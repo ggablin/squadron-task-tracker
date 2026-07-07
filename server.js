@@ -5,6 +5,7 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
+const { assertTaskInLiveCycle } = require('./lib/tasks');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -325,6 +326,13 @@ app.put('/api/tasks/:id', requireAuth, requireOnboarded, async (req, res) => {
     }
     if (tr[0].member_id !== req.session.memberId && !['supervisor', 'leadership'].includes(req.session.role)) {
       return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    try {
+      await assertTaskInLiveCycle(pool, taskId);
+    } catch (e) {
+      if (e.code === 'NOT_LIVE') return res.status(403).json({ error: 'This cycle is closed to changes' });
+      throw e;
     }
 
     await pool.query(`
