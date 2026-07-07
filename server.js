@@ -134,6 +134,9 @@ function requireOnboarded(req, res, next) {
   next();
 }
 
+// Parse a route :id param to a positive integer, or null if malformed.
+function reqId(v) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
+
 // ── Notifications ────────────────────────────────────────────────────────────
 // Single source of truth for both the in-app center and the email channel.
 // One parameterized multi-row INSERT; failures are logged but never block the
@@ -544,7 +547,9 @@ app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded
 
 app.post('/api/cycles/:id/go-live', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
   try {
-    const { cycle, notifyMemberIds } = await cycles.goLive(pool, +req.params.id, { confirm: !!req.body.confirm });
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const { cycle, notifyMemberIds } = await cycles.goLive(pool, id, { confirm: !!req.body.confirm });
     await notify(notifyMemberIds, { type: 'tasks_live', title: `Your ${cycle.name} tasks are live`, link: 'member' });
     res.json(cycle);
   } catch (e) {
@@ -555,7 +560,11 @@ app.post('/api/cycles/:id/go-live', requireAuth, requireRole('leadership'), requ
 });
 
 app.delete('/api/cycles/:id', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
-  try { res.json(await cycles.discardDraft(pool, +req.params.id)); }
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await cycles.discardDraft(pool, id));
+  }
   catch (e) {
     if (e.code === 'NOT_DRAFT') return res.status(409).json({ error: 'Only a draft can be discarded' });
     console.error(e); res.status(500).json({ error: 'Server error' });
@@ -563,17 +572,26 @@ app.delete('/api/cycles/:id', requireAuth, requireRole('leadership'), requireOnb
 });
 
 app.get('/api/cycles/:sourceId/groups', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
-  try { res.json(await listGroups(pool, +req.params.sourceId)); }
+  try {
+    const sourceId = reqId(req.params.sourceId);
+    if (!sourceId) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await listGroups(pool, sourceId));
+  }
   catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
 app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
   try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
     const { title, category_code, details, assignments } = req.body;
     if (!title || !category_code || !Array.isArray(assignments) || !assignments.length) {
       return res.status(400).json({ error: 'title, category_code, and assignments are required' });
     }
-    const r = await addTaskBatch(pool, +req.params.id, {
+    if (!assignments.every(a => Array.isArray(a.member_ids) && a.member_ids.length && a.member_ids.every(Number.isInteger))) {
+      return res.status(400).json({ error: 'each assignment needs a non-empty member_ids array of integers' });
+    }
+    const r = await addTaskBatch(pool, id, {
       title, category_code, details, assignments, created_by_id: req.session.memberId,
     });
     res.json(r);
@@ -585,23 +603,33 @@ app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requir
 
 app.post('/api/cycles/:id/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
   try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
     const { from_cycle_id, groups } = req.body;
     if (!from_cycle_id || !Array.isArray(groups) || !groups.length) {
       return res.status(400).json({ error: 'from_cycle_id and groups are required' });
     }
-    res.json(await copyForward(pool, +req.params.id, {
+    res.json(await copyForward(pool, id, {
       from_cycle_id, groups, created_by_id: req.session.memberId,
     }));
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
 app.get('/api/cycles/:id/batches', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
-  try { res.json(await batches.listBatches(pool, +req.params.id)); }
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await batches.listBatches(pool, id));
+  }
   catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
 app.delete('/api/batches/:id', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
-  try { res.json(await batches.undoBatch(pool, +req.params.id, { force: req.query.force === 'true' })); }
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await batches.undoBatch(pool, id, { force: req.query.force === 'true' }));
+  }
   catch (e) {
     if (e.code === 'HAS_COMPLETIONS') return res.status(409).json({ error: 'HAS_COMPLETIONS', checked_off_count: e.checked_off_count });
     console.error(e); res.status(500).json({ error: 'Server error' });
