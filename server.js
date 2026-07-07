@@ -5,6 +5,10 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
+const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
+const cycles = require('./lib/cycles');
+const batches = require('./lib/batches');
+const records = require('./lib/records');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -42,6 +46,18 @@ app.use(session({
       ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+      ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS status VARCHAR(20) CHECK (status IN ('draft','live','archived'));
+      UPDATE uta_cycles SET status = CASE WHEN is_current THEN 'live' ELSE 'archived' END WHERE status IS NULL;
+      ALTER TABLE uta_cycles ALTER COLUMN status SET DEFAULT 'draft';
+      CREATE TABLE IF NOT EXISTS task_batches (
+        id            SERIAL PRIMARY KEY,
+        uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
+        label         VARCHAR(255) NOT NULL,
+        kind          VARCHAR(20) CHECK (kind IN ('new_task','copy_forward')),
+        created_by_id INTEGER REFERENCES members(id),
+        created_at    TIMESTAMP DEFAULT NOW()
+      );
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS batch_id INTEGER REFERENCES task_batches(id);
       CREATE TABLE IF NOT EXISTS shop_event_status_log (
         id            SERIAL PRIMARY KEY,
         shop_event_id INTEGER REFERENCES shop_events(id) ON DELETE CASCADE,
@@ -87,6 +103,7 @@ app.use(session({
           UNIQUE (uta_cycle_id, member_id, category_id, title);
       EXCEPTION WHEN others THEN NULL;
       END $$;
+      CREATE UNIQUE INDEX IF NOT EXISTS uta_cycles_one_current ON uta_cycles (is_current) WHERE is_current;
     `);
     console.log('Migration check complete');
   } catch (e) {
@@ -117,6 +134,9 @@ function requireOnboarded(req, res, next) {
   if (req.session.mustChange) return res.status(403).json({ error: 'You must change your password before continuing' });
   next();
 }
+
+// Parse a route :id param to a positive integer, or null if malformed.
+function reqId(v) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
 
 // ── Notifications ────────────────────────────────────────────────────────────
 // Single source of truth for both the in-app center and the email channel.
@@ -252,6 +272,30 @@ app.post('/api/members/:id/reset-password', requireAuth, requireRole('supervisor
   }
 });
 
+// ── Member task history (Records) ────────────────────────────────────────────
+// Leadership can view any member's cross-cycle history; a supervisor is limited
+// to members in their own shop (checked via getMemberShopId, same own-shop
+// pattern used elsewhere — e.g. /api/shop/members/:id/tasks); plain members 403.
+app.get('/api/members/:id/history', requireAuth, requireOnboarded, async (req, res) => {
+  try {
+    const targetId = reqId(req.params.id);
+    if (!targetId) return res.status(400).json({ error: 'Invalid member id' });
+
+    if (req.session.role !== 'leadership') {
+      if (req.session.role !== 'supervisor') return res.status(403).json({ error: 'Forbidden' });
+      const theirShop = await records.getMemberShopId(pool, targetId);
+      if (!theirShop || theirShop !== req.session.shopId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
+
+    res.json(await records.memberHistory(pool, targetId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -313,6 +357,13 @@ app.put('/api/tasks/:id', requireAuth, requireOnboarded, async (req, res) => {
     }
     if (tr[0].member_id !== req.session.memberId && !['supervisor', 'leadership'].includes(req.session.role)) {
       return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    try {
+      await assertTaskInLiveCycle(pool, taskId);
+    } catch (e) {
+      if (e.code === 'NOT_LIVE') return res.status(403).json({ error: 'This cycle is closed to changes' });
+      throw e;
     }
 
     await pool.query(`
@@ -501,6 +552,113 @@ app.get('/api/categories', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── UTA Cycles (leadership only) ─────────────────────────────────────────────
+
+app.get('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try { res.json(await cycles.listCycles(pool)); }
+  catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    res.json(await cycles.createDraft(pool, name));
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/cycles/:id/go-live', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const { cycle, notifyMemberIds } = await cycles.goLive(pool, id, { confirm: !!req.body.confirm });
+    await notify(notifyMemberIds, { type: 'tasks_live', title: `Your ${cycle.name} tasks are live`, link: 'member' });
+    res.json(cycle);
+  } catch (e) {
+    if (e.code === 'NOT_DRAFT') return res.status(409).json({ error: 'That cycle is not a draft' });
+    if (e.code === 'EMPTY_DRAFT') return res.status(409).json({ error: 'EMPTY_DRAFT', message: 'This draft has no tasks yet.' });
+    if (e.code === '23505') return res.status(409).json({ error: 'Another cycle just went live — please reload.' });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/cycles/:id', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await cycles.discardDraft(pool, id));
+  }
+  catch (e) {
+    if (e.code === 'NOT_DRAFT') return res.status(409).json({ error: 'Only a draft can be discarded' });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/cycles/:sourceId/groups', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const sourceId = reqId(req.params.sourceId);
+    if (!sourceId) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await listGroups(pool, sourceId));
+  }
+  catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const { title, category_code, details, assignments } = req.body;
+    if (!title || !category_code || !Array.isArray(assignments) || !assignments.length) {
+      return res.status(400).json({ error: 'title, category_code, and assignments are required' });
+    }
+    if (!assignments.every(a => Array.isArray(a.member_ids) && a.member_ids.length && a.member_ids.every(Number.isInteger))) {
+      return res.status(400).json({ error: 'each assignment needs a non-empty member_ids array of integers' });
+    }
+    const r = await addTaskBatch(pool, id, {
+      title, category_code, details, assignments, created_by_id: req.session.memberId,
+    });
+    res.json(r);
+  } catch (e) {
+    if (e.code === 'BAD_CATEGORY') return res.status(400).json({ error: 'Invalid category' });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/cycles/:id/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const { from_cycle_id, groups } = req.body;
+    if (!from_cycle_id || !Array.isArray(groups) || !groups.length) {
+      return res.status(400).json({ error: 'from_cycle_id and groups are required' });
+    }
+    res.json(await copyForward(pool, id, {
+      from_cycle_id, groups, created_by_id: req.session.memberId,
+    }));
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.get('/api/cycles/:id/batches', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await batches.listBatches(pool, id));
+  }
+  catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/batches/:id', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    res.json(await batches.undoBatch(pool, id, { force: req.query.force === 'true' }));
+  }
+  catch (e) {
+    if (e.code === 'HAS_COMPLETIONS') return res.status(409).json({ error: 'HAS_COMPLETIONS', checked_off_count: e.checked_off_count });
+    console.error(e); res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -1039,6 +1197,23 @@ app.use(express.static(path.join(__dirname, 'public')));
 // or '*' would serve index.html instead.
 app.get('/task-builder-mockup', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'task-builder-mockup.html'))
+);
+
+// Leadership task-builder page shell. Gated to logged-in members; the APIs it
+// calls enforce requireRole('leadership') so a non-leader just sees 403s/empty
+// state. Must sit before the SPA catch-all, or '*' would serve index.html.
+function requireLeadershipPage(req, res, next) {
+  if (!req.session.memberId) return res.redirect('/');
+  next();
+}
+app.get('/build', requireLeadershipPage, (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'build.html'))
+);
+
+// Records page shell (leadership + supervisor member browser / history review).
+// Gated the same way as /build; must sit before the SPA catch-all.
+app.get('/records', requireLeadershipPage, (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'records.html'))
 );
 
 app.get('*', (req, res) =>

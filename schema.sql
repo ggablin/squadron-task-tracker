@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS uta_cycles (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uta_cycles_one_current ON uta_cycles (is_current) WHERE is_current;
+
 CREATE TABLE IF NOT EXISTS task_categories (
   id         SERIAL PRIMARY KEY,
   code       VARCHAR(20) UNIQUE NOT NULL,
@@ -117,6 +119,15 @@ CREATE TABLE IF NOT EXISTS squadron_events (
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS task_batches (
+  id            SERIAL PRIMARY KEY,
+  uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
+  label         VARCHAR(255) NOT NULL,
+  kind          VARCHAR(20) CHECK (kind IN ('new_task','copy_forward')),
+  created_by_id INTEGER REFERENCES members(id),
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+
 -- Migration: add columns to existing tables (safe to run multiple times)
 DO $$ BEGIN
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
@@ -127,6 +138,10 @@ DO $$ BEGIN
   ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+  ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS status VARCHAR(20) CHECK (status IN ('draft','live','archived'));
+  UPDATE uta_cycles SET status = CASE WHEN is_current THEN 'live' ELSE 'archived' END WHERE status IS NULL;
+  ALTER TABLE uta_cycles ALTER COLUMN status SET DEFAULT 'draft';
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS batch_id INTEGER REFERENCES task_batches(id);
 EXCEPTION WHEN others THEN NULL;
 END $$;
 

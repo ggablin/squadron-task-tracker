@@ -123,6 +123,29 @@ needs it without going shop by shop.*
 
 ---
 
+### Task Builder (`/build`) — how McNaughton actually builds the month, now (NEW)
+This is the biggest change since the app went live: MSgt McNaughton no longer hands off an Excel workbook for someone else to import. He logs in with his own leadership account, goes to `/build`, and builds the cycle himself, in the browser, start to finish.
+
+**The monthly rhythm:**
+1. **Start a new cycle** — a fresh draft, invisible to members until it's published.
+2. **Copy last cycle forward** — the recurring tasks (CBTs, standing requirements, etc.) show up as a pickable list; he ticks the ones still relevant and copies them into the new cycle in one move. Appointment-specific details (day/time/location) don't carry over, since those change every month.
+3. **Add what's new** — tap the members a new task applies to, set its urgency, and save. He can add several different tasks with different urgency levels in the same pass.
+4. **Review** — a live preview of what each member's list will look like before anything goes out.
+5. **Go live** — one click. The new cycle becomes the one every member sees; the old cycle is archived (not deleted — it's kept as a permanent record); members get notified their tasks are live.
+
+**Mid-month changes** work the same way, against the cycle that's already live — no separate script, no re-running an import that would wipe out everyone's progress. And every add is undoable: if he adds a task by mistake, "Undo" removes it — with a warning if anyone's already checked it off, so nobody's real progress gets erased by accident.
+
+*Why it matters: the tool that used to be his biggest recurring workload — assembling a spreadsheet and handing it to someone to import — is now something he does himself, in minutes, with no risk of wiping out the squadron's progress on an in-progress cycle.*
+
+### Records (`/records`) — the historical view (NEW)
+A read-only leadership tool for looking back. Browse members (grouped by shop, searchable — supervisors see their own shop, leadership sees everyone), pick a member, and see every past UTA cycle they've had tasks in, newest first, with a done/total summary. Drill into any cycle to see the actual tasks, what was marked done, and any notes the member left.
+
+Past cycles are frozen the moment a new one goes live — nobody can edit history after the fact, so what Records shows is a faithful record of exactly where that member stood at the end of that month.
+
+*Why it matters: instead of "I think Airman X finished their CBTs a couple months back," leadership can pull up the actual record in seconds — useful for EPBs, promotion packages, or just settling a "did I do that" question.*
+
+---
+
 ## 5. Navigation walkthrough (how to move around)
 
 1. **Log in** with username + password.
