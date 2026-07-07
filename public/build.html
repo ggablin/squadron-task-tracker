@@ -516,7 +516,7 @@ function renderRoster() {
 
 function renderCategoryOptions() {
   const sel = document.getElementById('f-cat');
-  sel.innerHTML = CATEGORIES.map(c => `<option value="${c.code}">${c.label}</option>`).join('');
+  sel.innerHTML = CATEGORIES.map(c => `<option value="${c.code}">${escapeHtml(c.label)}</option>`).join('');
 }
 
 /* ── home screen: real data ── */
@@ -607,7 +607,7 @@ function renderCatalog(groups, source) {
       const n = g.count || (g.members ? g.members.length : 0);
       return `
   <div class="cat-item">
-    <span class="cat-tag ${t.tag}">${t.name}</span>
+    <span class="cat-tag ${t.tag}">${escapeHtml(t.name)}</span>
     <div class="cat-meta">
       <div class="cat-title">${escapeHtml(g.title)}</div>
       <div class="cat-sub">${n} people</div>
@@ -763,7 +763,7 @@ function renderCF() {
       <div class="cf-check" onclick="cfToggle(${i})">${g.sel ? '✓' : ''}</div>
       <div class="cf-meta">
         <div class="cf-title">${escapeHtml(g.title)}</div>
-        <div class="cf-sub">${tagFor(g.category_code).name}</div>
+        <div class="cf-sub">${escapeHtml(tagFor(g.category_code).name)}</div>
       </div>
       <div class="cf-n">${cfCount(g)} people</div>
     </div>`).join('');

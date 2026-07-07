@@ -580,6 +580,7 @@ app.post('/api/cycles/:id/go-live', requireAuth, requireRole('leadership'), requ
   } catch (e) {
     if (e.code === 'NOT_DRAFT') return res.status(409).json({ error: 'That cycle is not a draft' });
     if (e.code === 'EMPTY_DRAFT') return res.status(409).json({ error: 'EMPTY_DRAFT', message: 'This draft has no tasks yet.' });
+    if (e.code === '23505') return res.status(409).json({ error: 'Another cycle just went live — please reload.' });
     console.error(e); res.status(500).json({ error: 'Server error' });
   }
 });
