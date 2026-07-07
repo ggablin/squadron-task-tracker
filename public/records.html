@@ -90,6 +90,61 @@ input { font-family:inherit; }
 }
 .detail-placeholder .dp-title { font-size:15px; font-weight:700; color:var(--text); margin-bottom:6px; }
 
+/* ── member history drill-down ── */
+.detail-card.has-history { display:block; align-items:initial; justify-content:initial; }
+.hist-header { padding:18px 20px 14px; border-bottom:1px solid var(--border); }
+.hist-name { font-size:16px; font-weight:700; letter-spacing:-.01em; }
+.hist-sub { font-size:12.5px; color:var(--t2); margin-top:3px; }
+.hist-body { padding:10px; }
+
+.cycle { border:2px solid var(--border); border-radius:var(--rs); margin:8px; overflow:hidden; }
+.cycle-summary {
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:13px 14px; border:none; background:var(--bg); font-size:13.5px; color:var(--text);
+}
+.cycle-summary:hover { background:var(--cream); }
+.cycle-summary .cs-chev {
+  width:16px; height:16px; flex-shrink:0; color:var(--t3); transition:transform .15s ease;
+  display:flex; align-items:center; justify-content:center;
+}
+.cycle.open .cycle-summary .cs-chev { transform:rotate(90deg); }
+.cycle-summary .cs-name { font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cycle-summary .cs-badge {
+  font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  padding:3px 9px; border-radius:12px; background:var(--cream); color:var(--t2); flex-shrink:0;
+}
+.cycle-summary .cs-badge.current { background:var(--ok-bg); color:var(--ok); }
+.cycle-summary .cs-count { font-size:12px; color:var(--t2); font-weight:600; flex-shrink:0; }
+
+.cycle-tasks { display:none; border-top:1px solid var(--border); }
+.cycle.open .cycle-tasks { display:block; }
+
+.hist-task {
+  display:flex; align-items:flex-start; gap:11px; padding:11px 14px;
+  border-bottom:1px solid var(--border); background:var(--cream);
+}
+.hist-task:last-child { border-bottom:none; }
+.hist-marker {
+  width:18px; height:18px; border-radius:5px; flex-shrink:0; margin-top:1px;
+  display:flex; align-items:center; justify-content:center; border:1.5px solid var(--t3);
+  background:var(--bg);
+}
+.hist-marker.done { background:var(--ok); border-color:var(--ok); }
+.hist-marker.partial { background:var(--warn); border-color:var(--warn); }
+.hist-task-body { flex:1; min-width:0; }
+.hist-cat {
+  font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  color:var(--t2); margin-bottom:2px;
+}
+.hist-title { font-size:13.5px; color:var(--text); line-height:1.4; }
+.hist-note {
+  margin-top:5px; font-size:12px; color:var(--t2); line-height:1.5; padding:7px 9px;
+  background:var(--bg); border-radius:8px; border:1px solid var(--border);
+}
+.hist-note .hn-lbl { font-weight:700; color:var(--t2); text-transform:uppercase; font-size:9.5px; letter-spacing:.05em; margin-right:5px; }
+
+.hist-empty { padding:40px 24px; text-align:center; color:var(--t2); font-size:13px; line-height:1.6; }
+
 .foot-note { margin-top:34px; font-size:11.5px; color:var(--t3); line-height:1.6; text-align:center; }
 </style>
 </head>
@@ -232,20 +287,107 @@ function filterMembers() {
   renderMemberList(filtered);
 }
 
-/* ── selection / detail pane (history drill-down wired in Task 20) ── */
-function selectMember(id, name) {
+/* ── selection / detail pane: member history drill-down ── */
+async function selectMember(id, name) {
   SELECTED_ID = id;
   document.querySelectorAll('.member-row').forEach(el => {
     el.classList.toggle('sel', parseInt(el.dataset.id) === id);
   });
 
   const detailCard = document.getElementById('detail-card');
+  detailCard.classList.remove('has-history');
   detailCard.innerHTML = `
     <div class="detail-placeholder">
       <div class="dp-icon">&#8987;</div>
       <div class="dp-title">${escapeHtml(name)}</div>
-      <div>Loading&hellip; (history wired in next task)</div>
+      <div>Loading history&hellip;</div>
     </div>`;
+
+  await loadMemberHistory(id, name);
+}
+
+async function loadMemberHistory(memberId, name) {
+  const detailCard = document.getElementById('detail-card');
+  let hist;
+  try {
+    hist = await fetch(`/api/members/${memberId}/history`).then(r => {
+      if (!r.ok) throw new Error('fetch failed');
+      return r.json();
+    });
+  } catch (e) {
+    if (SELECTED_ID !== memberId) return; // stale response after re-selection
+    detailCard.classList.remove('has-history');
+    detailCard.innerHTML = `
+      <div class="detail-placeholder">
+        <div class="dp-icon">&#9888;</div>
+        <div class="dp-title">${escapeHtml(name)}</div>
+        <div>Could not load history. Try again.</div>
+      </div>`;
+    return;
+  }
+
+  if (SELECTED_ID !== memberId) return; // user selected someone else meanwhile
+
+  renderMemberHistory(memberId, name, hist);
+}
+
+function renderMemberHistory(memberId, name, hist) {
+  const detailCard = document.getElementById('detail-card');
+  detailCard.classList.add('has-history');
+
+  const cyclesHtml = !hist.length
+    ? '<div class="hist-empty">No task history for this member yet.</div>'
+    : `<div class="hist-body">${hist.map((h, i) => cycleHTML(h, i)).join('')}</div>`;
+
+  detailCard.innerHTML = `
+    <div class="hist-header">
+      <div class="hist-name">${escapeHtml(name)}</div>
+      <div class="hist-sub">${hist.length} cycle${hist.length === 1 ? '' : 's'} of task history</div>
+    </div>
+    ${cyclesHtml}`;
+}
+
+function cycleHTML(h, idx) {
+  const badgeText = h.cycle.is_current ? 'current' : (h.cycle.status || '');
+  const badgeCls  = h.cycle.is_current ? ' current' : '';
+  const domId = `cyc-${idx}`;
+  return `
+    <div class="cycle" id="${domId}">
+      <button class="cycle-summary" onclick="toggleCycle('${domId}')">
+        <span class="cs-chev">&#9656;</span>
+        <span class="cs-name">${escapeHtml(h.cycle.name)}</span>
+        <span class="cs-badge${badgeCls}">${escapeHtml(badgeText)}</span>
+        <span class="cs-count">${h.done}/${h.total} done</span>
+      </button>
+      <div class="cycle-tasks">
+        ${(h.tasks || []).map(taskHistHTML).join('') || '<div class="hist-task"><div class="hist-task-body">No tasks recorded for this cycle.</div></div>'}
+      </div>
+    </div>`;
+}
+
+function taskHistHTML(t) {
+  const markerCls = t.state === 'done' ? 'done' : t.state === 'partial' ? 'partial' : '';
+  const markerGlyph = t.state === 'done'
+    ? '<svg viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.5 5 4 7.5 8.5 2.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : t.state === 'partial'
+      ? '<svg viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M2.5 5h5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>'
+      : '';
+  const noteHtml = t.note
+    ? `<div class="hist-note"><span class="hn-lbl">Note</span>${escapeHtml(t.note)}</div>`
+    : '';
+  return `
+    <div class="hist-task">
+      <div class="hist-marker ${markerCls}">${markerGlyph}</div>
+      <div class="hist-task-body">
+        <div class="hist-cat">${escapeHtml(t.category_code || '')}</div>
+        <div class="hist-title">${escapeHtml(t.title)}</div>
+        ${noteHtml}
+      </div>
+    </div>`;
+}
+
+function toggleCycle(domId) {
+  document.getElementById(domId)?.classList.toggle('open');
 }
 
 init();
