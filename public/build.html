@@ -289,7 +289,7 @@ button { font-family:inherit; cursor:pointer; }
     </div>
 
     <div class="home-grid">
-      <button class="big-action ba-copy" id="ba-startfrom" onclick="go('copyfwd')">
+      <button class="big-action ba-copy" id="ba-startfrom" onclick="startCopyForward()">
         <div class="ba-icon">⟳</div>
         <div class="ba-title" id="ba-startfrom-title">Start from…</div>
         <div class="ba-sub" id="ba-startfrom-sub">Loading recurring tasks…</div>
@@ -322,14 +322,14 @@ button { font-family:inherit; cursor:pointer; }
   <div class="screen" id="scr-copyfwd">
     <div class="sec-hd">
       <div>
-        <div class="sec-title">Copy from June 2026 → July 2026</div>
+        <div class="sec-title">Copy forward</div>
         <div class="sec-sub">Grouped by task — untick anything that doesn’t recur. Appointment dates/times are never copied.</div>
       </div>
       <button class="btn-secondary" onclick="go('home')">← Back</button>
     </div>
     <div class="card" id="cf-list"></div>
     <div class="builder-foot">
-      <button class="btn-primary" id="cf-apply" onclick="toast('Would add the ticked groups to July — additive only, June untouched')">Copy 6 groups → July</button>
+      <button class="btn-primary" id="cf-apply" onclick="commitCopyForward()">Copy groups</button>
     </div>
   </div>
 
@@ -452,16 +452,8 @@ let MEMBER_BY_ID = {}; // id -> member (for shop lookups etc.)
 let CATEGORIES = [];   // [{code, label}]
 let WORKING_CYCLE = null; // the draft if one exists, else the live cycle (set by loadHome)
 let CATALOG = [];
-const CF_GROUPS = [
-  { title:'Force Protection CBT', sub:'CBT · urgencies carry over as-is', n:23, sel:true },
-  { title:'DAF-Operations Security Awareness', sub:'CBT', n:19, sel:true },
-  { title:'DoD Mandatory CUI CBT', sub:'CBT', n:18, sel:true },
-  { title:'PT Test — schedule in MyFitness', sub:'Medical / Fitness', n:61, sel:true },
-  { title:'Update SGLI in MilConnect', sub:'Admin / Records', n:25, sel:true },
-  { title:'Submit 1206s for Quarterly Awards', sub:'Admin / Records', n:11, sel:true },
-  { title:'Mil Dental Exam — Sat @ 1100', sub:'Medical · has appointment times → left off by default', n:6, sel:false },
-  { title:'DFT — Camp Murray, WA', sub:'Mobility · June-specific dates', n:22, sel:false },
-];
+let CF_SOURCE = null;  // the source cycle for copy-forward (set by startCopyForward)
+let CF_GROUPS = [];    // groups fetched from /api/cycles/:id/groups, each with a client-side .sel flag
 
 // Mockup urgency labels -> backend urgency codes.
 const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Info':'info' };
@@ -598,6 +590,7 @@ function renderCycleBar({ live, draft }) {
 
 function renderCatalog(groups, source) {
   CATALOG = groups;
+  CF_SOURCE = source || null;
   const host = document.getElementById('catalog');
   if (!groups.length) {
     host.innerHTML = '<div class="cat-item"><div class="cat-meta"><div class="cat-sub">No recurring tasks found in ' + (source ? source.name : 'the prior cycle') + '.</div></div></div>';
@@ -706,22 +699,117 @@ async function goLive(force) {
 loadHome();
 
 /* ── render copy-forward ── */
+function cfCount(g) { return g.count || (g.members ? g.members.length : 0); }
+
+// Figure out where a copy-forward would land: the existing draft, or null if
+// the working cycle is live (caller must create a draft first).
+function cfTargetName() {
+  const draft = WORKING_CYCLE && WORKING_CYCLE.status === 'draft' ? WORKING_CYCLE : null;
+  return draft ? draft.name : 'a new draft';
+}
+
 function renderCF() {
-  document.getElementById('cf-list').innerHTML = CF_GROUPS.map((g, i) => `
+  const host = document.getElementById('cf-list');
+  if (!CF_GROUPS.length) {
+    host.innerHTML = '<div class="cf-group"><div class="cf-meta"><div class="cf-sub">No recurring groups found.</div></div></div>';
+  } else {
+    host.innerHTML = CF_GROUPS.map((g, i) => `
     <div class="cf-group ${g.sel ? 'sel' : ''}" id="cfg-${i}">
       <div class="cf-check" onclick="cfToggle(${i})">${g.sel ? '✓' : ''}</div>
       <div class="cf-meta">
         <div class="cf-title">${g.title}</div>
-        <div class="cf-sub">${g.sub}</div>
+        <div class="cf-sub">${tagFor(g.category_code).name}</div>
       </div>
-      <div class="cf-n">${g.n} people</div>
+      <div class="cf-n">${cfCount(g)} people</div>
     </div>`).join('');
+  }
   const on = CF_GROUPS.filter(g => g.sel);
   document.getElementById('cf-apply').textContent =
-    `Copy ${on.length} group${on.length === 1 ? '' : 's'} (${on.reduce((a, g) => a + g.n, 0)} tasks) → July`;
+    `Copy ${on.length} group${on.length === 1 ? '' : 's'} → ${cfTargetName()}`;
 }
 function cfToggle(i) { CF_GROUPS[i].sel = !CF_GROUPS[i].sel; renderCF(); }
-renderCF();
+
+// Entry point for the "Start from {source}" big button — loads the source
+// cycle's recurring groups (ticked by default) into the picker screen.
+async function startCopyForward() {
+  if (!CF_SOURCE) { toast('No prior cycle to copy from'); return; }
+  document.getElementById('cf-list').innerHTML = '<div class="cf-group"><div class="cf-meta"><div class="cf-sub">Loading…</div></div></div>';
+  const headTitle = document.querySelector('#scr-copyfwd .sec-title');
+  if (headTitle) headTitle.textContent = `Copy from ${CF_SOURCE.name} → ${cfTargetName()}`;
+  go('copyfwd');
+  let groups = [];
+  try {
+    groups = await fetch(`/api/cycles/${CF_SOURCE.id}/groups`).then(r => r.json());
+  } catch (e) { groups = []; }
+  CF_GROUPS = groups.map(g => ({ ...g, sel: true }));
+  renderCF();
+}
+
+// Ensures a draft cycle exists to copy into. Returns the draft cycle object,
+// or null if the user declined to create one.
+async function ensureDraftTarget() {
+  if (WORKING_CYCLE && WORKING_CYCLE.status === 'draft') return WORKING_CYCLE;
+  const name = prompt('No draft cycle yet — name the new cycle to copy into', 'Aug 2026 UTA');
+  if (!name || !name.trim()) return null;
+  try {
+    const res = await fetch('/api/cycles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast(body.message || body.error || 'Could not create cycle');
+      return null;
+    }
+    const draft = await res.json();
+    WORKING_CYCLE = draft;
+    return draft;
+  } catch (e) {
+    toast('Could not create cycle — check your connection');
+    return null;
+  }
+}
+
+async function postCopyForward(draftId, sourceId, groups) {
+  const res = await fetch(`/api/cycles/${draftId}/copy-forward`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from_cycle_id: sourceId,
+      groups: groups.map(g => ({ category_code: g.category_code, title: g.title })),
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    toast((body && (body.message || body.error)) || 'Could not copy tasks forward');
+    return null;
+  }
+  return body;
+}
+
+async function commitCopyForward() {
+  const ticked = CF_GROUPS.filter(g => g.sel);
+  if (!ticked.length) { toast('Tick at least one group first'); return; }
+  if (!CF_SOURCE) { toast('No source cycle'); return; }
+
+  const btn = document.getElementById('cf-apply');
+  if (btn) btn.disabled = true;
+  try {
+    const draft = await ensureDraftTarget();
+    if (!draft) return;
+
+    const result = await postCopyForward(draft.id, CF_SOURCE.id, ticked);
+    if (!result) return;
+
+    const total = result.reduce((n, g) => n + (g.added || 0), 0);
+    toast(`Copied ${total} tasks into ${draft.name}`);
+    await loadHome();
+    go('home');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 /* ── interactions ── */
 function go(name) {
@@ -819,9 +907,26 @@ function toReview() {
   document.getElementById('s-title').textContent = `Task added for ${n} members`;
   go('review');
 }
-function useCatalog(i) {
+async function useCatalog(i) {
   const c = CATALOG[i];
-  toast('Use again — wiring this up is coming soon');
+  if (!c) return;
+  if (!CF_SOURCE) { toast('No source cycle'); return; }
+
+  const btn = document.querySelectorAll('#catalog .btn-use')[i];
+  if (btn) btn.disabled = true;
+  try {
+    const draft = await ensureDraftTarget();
+    if (!draft) return;
+
+    const result = await postCopyForward(draft.id, CF_SOURCE.id, [c]);
+    if (!result) return;
+
+    const total = result.reduce((n, g) => n + (g.added || 0), 0);
+    toast(`Copied ${total} tasks into ${draft.name}`);
+    await loadHome();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 function prefillBlank() {
   document.getElementById('f-title').value = '';
