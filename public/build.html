@@ -630,9 +630,38 @@ function renderBatches(cycleBatches) {
       <div class="batch-title">${b.label}</div>
       <div class="batch-sub">${b.member_count} member${b.member_count === 1 ? '' : 's'}${when ? ` · added ${when}` : ''}${by}</div>
     </div>
-    <button class="btn-undo" onclick="toast('Undo is coming soon')">Undo</button>
+    <button class="btn-undo" onclick="undoBatch(${b.id})">Undo</button>
   </div>`;
   }).join('');
+}
+
+async function undoBatch(batchId) {
+  let res;
+  try {
+    res = await fetch(`/api/batches/${batchId}`, { method: 'DELETE' });
+  } catch (e) {
+    toast('Could not remove batch — check your connection');
+    return;
+  }
+  if (res.status === 409) {
+    let checked_off_count = 0;
+    try { ({ checked_off_count } = await res.json()); } catch (e) {}
+    if (!confirm(`${checked_off_count} member(s) already checked this off. Remove anyway?`)) return;
+    try {
+      res = await fetch(`/api/batches/${batchId}?force=true`, { method: 'DELETE' });
+    } catch (e) {
+      toast('Could not remove batch — check your connection');
+      return;
+    }
+  }
+  if (res.ok) {
+    toast('Removed');
+    loadHome();
+  } else {
+    let body = {};
+    try { body = await res.json(); } catch (e) {}
+    toast(body.message || body.error || 'Could not remove batch');
+  }
 }
 
 async function createCycle() {
