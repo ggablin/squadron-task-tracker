@@ -18,3 +18,28 @@ test('listGroups groups a cycle\'s tasks by category+title with members', async 
   assert.strictEqual(groups[0].count, 2);
   assert.strictEqual(groups[0].members.length, 2);
 });
+
+test('addTaskBatch inserts one row per member per assignment, additively', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const { rows: [c] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('July','draft',false) RETURNING id`);
+  const r = await tasks.addTaskBatch(pool, c.id, {
+    title: 'SGLI', category_code: f.catCode, details: null,
+    assignments: [{ member_ids: [f.m1, f.m2], urgency: 'this_uta' }], created_by_id: f.leadId,
+  });
+  assert.strictEqual(r.added, 2);
+  assert.strictEqual(r.skipped, 0);
+  const { rows } = await pool.query(`SELECT COUNT(*)::int n FROM tasks WHERE batch_id=$1`, [r.batch_id]);
+  assert.strictEqual(rows[0].n, 2);
+});
+
+test('addTaskBatch skips duplicates via ON CONFLICT and reports skipped', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const { rows: [c] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('July','draft',false) RETURNING id`);
+  const base = { title: 'SGLI', category_code: f.catCode, details: null, created_by_id: f.leadId };
+  await tasks.addTaskBatch(pool, c.id, { ...base, assignments: [{ member_ids: [f.m1], urgency: 'this_uta' }] });
+  const r = await tasks.addTaskBatch(pool, c.id, { ...base, assignments: [{ member_ids: [f.m1, f.m2], urgency: 'this_uta' }] });
+  assert.strictEqual(r.added, 1);   // m2 only
+  assert.strictEqual(r.skipped, 1); // m1 already existed
+});

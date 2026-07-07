@@ -5,7 +5,7 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
-const { assertTaskInLiveCycle, listGroups } = require('./lib/tasks');
+const { assertTaskInLiveCycle, listGroups, addTaskBatch } = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const app = express();
 app.set('trust proxy', 1);
@@ -564,6 +564,22 @@ app.delete('/api/cycles/:id', requireAuth, requireRole('leadership'), requireOnb
 app.get('/api/cycles/:sourceId/groups', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
   try { res.json(await listGroups(pool, +req.params.sourceId)); }
   catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const { title, category_code, details, assignments } = req.body;
+    if (!title || !category_code || !Array.isArray(assignments) || !assignments.length) {
+      return res.status(400).json({ error: 'title, category_code, and assignments are required' });
+    }
+    const r = await addTaskBatch(pool, +req.params.id, {
+      title, category_code, details, assignments, created_by_id: req.session.memberId,
+    });
+    res.json(r);
+  } catch (e) {
+    if (e.code === 'BAD_CATEGORY') return res.status(400).json({ error: 'Invalid category' });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ── My Shop ───────────────────────────────────────────────────────────────────
