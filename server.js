@@ -5,7 +5,7 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
-const { assertTaskInLiveCycle, listGroups, addTaskBatch } = require('./lib/tasks');
+const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const app = express();
 app.set('trust proxy', 1);
@@ -580,6 +580,18 @@ app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requir
     if (e.code === 'BAD_CATEGORY') return res.status(400).json({ error: 'Invalid category' });
     console.error(e); res.status(500).json({ error: 'Server error' });
   }
+});
+
+app.post('/api/cycles/:id/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const { from_cycle_id, groups } = req.body;
+    if (!from_cycle_id || !Array.isArray(groups) || !groups.length) {
+      return res.status(400).json({ error: 'from_cycle_id and groups are required' });
+    }
+    res.json(await copyForward(pool, +req.params.id, {
+      from_cycle_id, groups, created_by_id: req.session.memberId,
+    }));
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── My Shop ───────────────────────────────────────────────────────────────────
