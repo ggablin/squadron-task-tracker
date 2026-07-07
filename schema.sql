@@ -127,6 +127,9 @@ DO $$ BEGIN
   ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+  ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS status VARCHAR(20) CHECK (status IN ('draft','live','archived'));
+  UPDATE uta_cycles SET status = CASE WHEN is_current THEN 'live' ELSE 'archived' END WHERE status IS NULL;
+  ALTER TABLE uta_cycles ALTER COLUMN status SET DEFAULT 'draft';
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
