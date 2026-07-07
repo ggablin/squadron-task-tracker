@@ -13,10 +13,11 @@ async function applySchema() {
 }
 
 async function resetDb() {
-  await pool.query(`
-    TRUNCATE task_completions, task_batches, tasks, shop_events, squadron_events,
-             members, task_categories, uta_cycles, shops RESTART IDENTITY CASCADE
-  `);
+  const { rows } = await pool.query(
+    `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`);
+  if (!rows.length) return;
+  const list = rows.map(r => `"${r.tablename}"`).join(', ');
+  await pool.query(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
 }
 
 // Inserts a minimal known world; returns ids for assertions.
