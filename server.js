@@ -45,6 +45,15 @@ app.use(session({
       ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS status VARCHAR(20) CHECK (status IN ('draft','live','archived'));
       UPDATE uta_cycles SET status = CASE WHEN is_current THEN 'live' ELSE 'archived' END WHERE status IS NULL;
       ALTER TABLE uta_cycles ALTER COLUMN status SET DEFAULT 'draft';
+      CREATE TABLE IF NOT EXISTS task_batches (
+        id            SERIAL PRIMARY KEY,
+        uta_cycle_id  INTEGER REFERENCES uta_cycles(id),
+        label         VARCHAR(255) NOT NULL,
+        kind          VARCHAR(20) CHECK (kind IN ('new_task','copy_forward')),
+        created_by_id INTEGER REFERENCES members(id),
+        created_at    TIMESTAMP DEFAULT NOW()
+      );
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS batch_id INTEGER REFERENCES task_batches(id);
       CREATE TABLE IF NOT EXISTS shop_event_status_log (
         id            SERIAL PRIMARY KEY,
         shop_event_id INTEGER REFERENCES shop_events(id) ON DELETE CASCADE,
