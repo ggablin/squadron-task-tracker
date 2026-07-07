@@ -15,8 +15,9 @@ async function applySchema() {
 async function resetDb() {
   const { rows } = await pool.query(
     `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`);
+  // Empty public schema means applySchema() hasn't run yet (or TEST_DATABASE_URL points at an empty DB); nothing to truncate.
   if (!rows.length) return;
-  const list = rows.map(r => `"${r.tablename}"`).join(', ');
+  const list = rows.map(r => `"${r.tablename.replace(/"/g, '""')}"`).join(', ');
   await pool.query(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
 }
 
