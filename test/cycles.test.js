@@ -100,3 +100,20 @@ test('goLive refuses a non-draft cycle', async () => {
   const { rows: [live] } = await pool.query(`INSERT INTO uta_cycles (name,status,is_current) VALUES ('Live','live',true) RETURNING id`);
   await assert.rejects(() => cycles.goLive(pool, live.id, { confirm: true }), (e) => e.code === 'NOT_DRAFT');
 });
+
+test('discardDraft removes a draft that has batches (FK-safe)', async () => {
+  await resetDb();
+  const f = await seedFixtures();
+  const draft = await cycles.createDraft(pool, 'Scratch');
+  const { rows: [b] } = await pool.query(
+    `INSERT INTO task_batches (uta_cycle_id, label, kind, created_by_id) VALUES ($1,'B','new_task',$2) RETURNING id`,
+    [draft.id, f.leadId]);
+  await pool.query(
+    `INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, batch_id) VALUES ($1,$2,$3,'T',$4)`,
+    [draft.id, f.m1, f.catId, b.id]);
+  await cycles.discardDraft(pool, draft.id);
+  const { rows: c } = await pool.query('SELECT 1 FROM uta_cycles WHERE id=$1', [draft.id]);
+  assert.strictEqual(c.length, 0);
+  const { rows: bb } = await pool.query('SELECT 1 FROM task_batches WHERE uta_cycle_id=$1', [draft.id]);
+  assert.strictEqual(bb.length, 0);
+});
