@@ -706,13 +706,17 @@
 
     /* ── Org chart ──────────────────────────────── */
     #view-leadership.active { display: flex; flex-direction: column; }  /* .active so id-specificity doesn't override .view hide */
+    /* Desktop makes this view a fixed-height scroll container (.view sets an explicit
+       height + overflow-y:auto). Its sections must keep their natural height and let
+       the container scroll. A .card section (overflow:hidden) otherwise gets an
+       automatic flex min-size of 0 and collapses when total content exceeds the
+       viewport — which crushed #sq-leader-tools to ~48px (invisible) on desktop. */
+    #view-leadership.active > * { flex-shrink: 0; }
     #sq-orgchart { margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
-    /* U5: on mobile, glance-and-go rollups come first; org chart drops below.
-       Desktop keeps source order (org chart first). */
-    @media (max-width: 767px) {
-      #sq-rollups { order: -1; }
-      #sq-orgchart { order: 0; }
-    }
+    /* Glance-and-go: the roll-ups come first at every size — leadership viewers already
+       know the org chart, so it (and the tools) drop below. With the roll-ups first, the
+       hero's margin-top:-32px full-bleeds to the top of the view as intended. */
+    #sq-rollups { order: -1; }
 
     /* Staff banner */
     .org-staff {
