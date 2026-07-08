@@ -162,6 +162,22 @@ button { font-family:inherit; cursor:pointer; }
 }
 .btn-use:hover { background:var(--cream); }
 
+.cat-search { position:relative; display:flex; align-items:center; margin-bottom:10px; }
+.cat-search-icon { position:absolute; left:14px; width:16px; height:16px; color:var(--t3); pointer-events:none; }
+.cat-search input {
+  width:100%; padding:11px 40px; border:2px solid var(--border); border-radius:var(--rs);
+  font-family:inherit; font-size:14px; color:var(--text); background:var(--bg); outline:none;
+}
+.cat-search input::placeholder { color:var(--t3); }
+.cat-search input:focus { border-color:var(--text); }
+.cat-search-clear {
+  position:absolute; right:8px; width:26px; height:26px; border:none; background:none; color:var(--t2);
+  font-size:19px; line-height:1; border-radius:7px; display:flex; align-items:center; justify-content:center;
+}
+.cat-search-clear:hover { background:var(--cream); color:var(--text); }
+.cat-search-clear[hidden] { display:none; }
+.cat-search-empty { padding:14px 18px; font-size:13px; color:var(--t2); }
+
 .batch-row { display:flex; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid var(--border); font-size:13px; }
 .batch-row:last-child { border-bottom:none; }
 .batch-meta { flex:1; min-width:0; }
@@ -363,7 +379,13 @@ button { font-family:inherit; cursor:pointer; }
         <div class="sec-sub">Pulled automatically from past UTAs — “Use again” pre-fills everything, including last time’s people</div>
       </div>
     </div>
+    <div class="cat-search" id="cat-search">
+      <svg class="cat-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" id="cat-search-input" placeholder="Search by task or category…" autocomplete="off" oninput="filterCatalog()" aria-label="Search recurring tasks">
+      <button type="button" class="cat-search-clear" id="cat-search-clear" onclick="clearCatalogSearch()" aria-label="Clear search" hidden>×</button>
+    </div>
     <div class="card" id="catalog"></div>
+    <div class="cat-search-empty" id="cat-search-empty" hidden></div>
 
     <div class="sec-hd">
       <div>
@@ -667,8 +689,9 @@ function renderCatalog(groups, source) {
     host.innerHTML = groups.map((g, i) => {
       const t = tagFor(g.category_code);
       const n = g.count || (g.members ? g.members.length : 0);
+      const search = escapeHtml((t.name + ' ' + g.title + ' ' + (g.category_code || '')).toLowerCase());
       return `
-  <div class="cat-item">
+  <div class="cat-item" data-search="${search}">
     <span class="cat-tag ${t.tag}">${escapeHtml(t.name)}</span>
     <div class="cat-meta">
       <div class="cat-title">${escapeHtml(g.title)}</div>
@@ -682,6 +705,50 @@ function renderCatalog(groups, source) {
   document.getElementById('ba-startfrom-sub').textContent = source
     ? `Copy ${source.name}’s recurring tasks, then edit. ${groups.length} group${groups.length === 1 ? '' : 's'} found — you pick which groups carry over. Nothing is deleted, ever.`
     : 'No prior cycle found yet.';
+
+  // Only show the search bar when there's an actual list to filter, then
+  // re-apply any active query (the input persists across data reloads).
+  const searchWrap = document.getElementById('cat-search');
+  if (searchWrap) searchWrap.style.display = groups.length ? '' : 'none';
+  filterCatalog();
+}
+
+// Live-filter the recurring tasks list against the search box. Rows are shown
+// or hidden in place (never re-indexed) so each "Use again" button keeps its
+// original CATALOG index. Matches on task title, category name, and category code.
+function filterCatalog() {
+  const input = document.getElementById('cat-search-input');
+  const host = document.getElementById('catalog');
+  if (!input || !host) return;
+  const clearBtn = document.getElementById('cat-search-clear');
+  const emptyEl = document.getElementById('cat-search-empty');
+  const q = input.value.trim().toLowerCase();
+  if (clearBtn) clearBtn.hidden = q.length === 0;
+
+  const items = host.querySelectorAll('.cat-item[data-search]');
+  let visible = 0;
+  items.forEach(item => {
+    const match = !q || item.getAttribute('data-search').indexOf(q) !== -1;
+    item.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+
+  if (emptyEl) {
+    if (q && items.length && visible === 0) {
+      emptyEl.textContent = `No recurring tasks match “${input.value.trim()}”.`;
+      emptyEl.hidden = false;
+    } else {
+      emptyEl.hidden = true;
+    }
+  }
+}
+
+function clearCatalogSearch() {
+  const input = document.getElementById('cat-search-input');
+  if (!input) return;
+  input.value = '';
+  filterCatalog();
+  input.focus();
 }
 
 function renderBatches(cycleBatches) {
