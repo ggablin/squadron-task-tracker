@@ -312,6 +312,27 @@ button { font-family:inherit; cursor:pointer; }
 .cf-sub { font-size:11.5px; color:var(--t2); margin-top:1px; }
 .cf-n { font-size:13px; font-weight:700; color:var(--t2); white-space:nowrap; }
 
+/* copy-forward member review */
+.cfr-group { padding:14px 18px; border-bottom:1px solid var(--border); }
+.cfr-group:last-child { border-bottom:none; }
+.cfr-hd { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.cfr-gtitle { flex:1; min-width:0; font-size:14px; font-weight:600; }
+.cfr-n { font-size:12px; font-weight:700; color:var(--t2); white-space:nowrap; }
+.cfr-members { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.cfr-chip {
+  display:inline-flex; align-items:center; gap:6px; padding:5px 6px 5px 10px;
+  border:1px solid var(--bm); border-radius:20px; font-size:12.5px; font-weight:500; background:var(--bg);
+}
+.cfr-chip .rk { font-size:10px; font-weight:600; color:var(--t2); background:var(--cream); border-radius:12px; padding:1px 6px; }
+.cfr-chip .x { cursor:pointer; color:var(--t3); font-size:11px; padding:0 4px; border-radius:50%; }
+.cfr-chip .x:hover { color:var(--urgent); background:var(--urg-bg); }
+.cfr-none { font-size:12.5px; color:var(--t3); }
+.cfr-add {
+  margin-top:10px; padding:8px 11px; border:2px solid var(--border); border-radius:var(--rs);
+  font-family:inherit; font-size:13px; color:var(--t2); background:var(--bg); outline:none; max-width:260px;
+}
+.cfr-add:focus { border-color:var(--text); }
+
 /* success */
 .success-box { text-align:center; padding:56px 24px; }
 .success-ico {
@@ -407,7 +428,22 @@ button { font-family:inherit; cursor:pointer; }
     </div>
     <div class="card" id="cf-list"></div>
     <div class="builder-foot">
-      <button class="btn-primary" id="cf-apply" onclick="commitCopyForward()">Copy groups</button>
+      <button class="btn-primary" id="cf-apply" onclick="startCFReview()">Review members →</button>
+    </div>
+  </div>
+
+  <!-- ═══ SCREEN: COPY FORWARD — MEMBER REVIEW ═══ -->
+  <div class="screen" id="scr-cfreview">
+    <div class="sec-hd">
+      <div>
+        <div class="sec-title" id="cfr-head">Review members</div>
+        <div class="sec-sub">Everyone from last time is carried over. Remove anyone who’s moved on, or add someone new — nothing is copied until you press the button below.</div>
+      </div>
+      <button class="btn-secondary" onclick="go('copyfwd')">← Back</button>
+    </div>
+    <div class="card" id="cfr-list"></div>
+    <div class="builder-foot">
+      <button class="btn-primary" id="cfr-apply" onclick="commitCopyForward()">Copy groups</button>
     </div>
   </div>
 
@@ -544,6 +580,7 @@ let LAST_BATCH_ID = null; // batch_id returned by the most recent commitNewTask,
 
 // Mockup urgency labels -> backend urgency codes.
 const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Info':'info' };
+const URG_CODE_TO_LABEL = { 'overdue':'Overdue', 'this_uta':'This UTA', 'next_uta':'Next UTA', 'info':'Info' };
 
 let urgency = 'This UTA';
 let urgBatches = []; // [{ urg: label, code, member_ids:[int] }]  ("batches so far", client-side)
@@ -697,7 +734,7 @@ function renderCatalog(groups, source) {
       <div class="cat-title">${escapeHtml(g.title)}</div>
       <div class="cat-sub">${n} people</div>
     </div>
-    <button class="btn-use" onclick="useCatalog(${i})">Use again</button>
+    <button class="btn-use" onclick="prefillFromCatalog(${i})">Use again</button>
   </div>`;
     }).join('');
   }
@@ -899,7 +936,7 @@ function renderCF() {
   }
   const on = CF_GROUPS.filter(g => g.sel);
   document.getElementById('cf-apply').textContent =
-    `Copy ${on.length} group${on.length === 1 ? '' : 's'} → ${cfTargetName()}`;
+    `Review ${on.length} group${on.length === 1 ? '' : 's'} →`;
 }
 function cfToggle(i) { CF_GROUPS[i].sel = !CF_GROUPS[i].sel; renderCF(); }
 
@@ -917,6 +954,82 @@ async function startCopyForward() {
   } catch (e) { groups = []; }
   CF_GROUPS = groups.map(g => ({ ...g, sel: true }));
   renderCF();
+}
+
+// ── copy-forward member review ──
+// Display info for a member id, preferring the loaded roster and falling back
+// to the group's own carried-member list.
+function cfrMember(id, g) {
+  return MEMBER_BY_ID[id]
+    || (g.members || []).find(m => Number(m.id) === Number(id))
+    || { rank: '', last_name: '#' + id };
+}
+
+// Group picker → member-review screen. Defaults each ticked group's members to
+// everyone carried forward; the roster loads lazily for the "Add member" picks.
+async function startCFReview() {
+  const ticked = CF_GROUPS.filter(g => g.sel);
+  if (!ticked.length) { toast('Tick at least one group first'); return; }
+  ticked.forEach(g => { if (!g.pick) g.pick = new Set((g.members || []).map(m => Number(m.id))); });
+  go('cfreview');
+  document.getElementById('cfr-list').innerHTML =
+    '<div class="cf-sub" style="padding:16px 18px">Loading roster…</div>';
+  if (!builderLoaded) { try { await loadBuilderRefData(); } catch (e) {} }
+  renderCFReview();
+}
+
+function renderCFReview() {
+  const host = document.getElementById('cfr-list');
+  const ticked = CF_GROUPS.map((g, gi) => ({ g, gi })).filter(x => x.g.sel);
+  document.getElementById('cfr-head').textContent = `Review members → ${cfTargetName()}`;
+  if (!ticked.length) {
+    host.innerHTML = '<div class="cf-sub" style="padding:16px 18px">No groups selected.</div>';
+    return;
+  }
+  host.innerHTML = ticked.map(({ g, gi }) => {
+    const t = tagFor(g.category_code);
+    const ids = [...g.pick];
+    const chips = ids.length
+      ? ids.map(id => {
+          const m = cfrMember(id, g);
+          return `<span class="cfr-chip"><span class="rk">${escapeHtml(m.rank || '')}</span>${escapeHtml(m.last_name || '')}<span class="x" onclick="cfrRemove(${gi}, ${id})">✕</span></span>`;
+        }).join('')
+      : '<span class="cfr-none">No members — this group won’t be copied.</span>';
+    const opts = (ROSTER || []).map(shop => {
+      const avail = shop.members.filter(m => !g.pick.has(Number(m.id)));
+      if (!avail.length) return '';
+      return `<optgroup label="${escapeHtml(shop.shop)}">` +
+        avail.map(m => `<option value="${m.id}">${escapeHtml(m.rank || '')} ${escapeHtml(m.last_name)}</option>`).join('') +
+        `</optgroup>`;
+    }).join('');
+    return `
+    <div class="cfr-group">
+      <div class="cfr-hd">
+        <span class="cat-tag ${t.tag}">${escapeHtml(t.name)}</span>
+        <span class="cfr-gtitle">${escapeHtml(g.title)}</span>
+        <span class="cfr-n">${ids.length}</span>
+      </div>
+      <div class="cfr-members">${chips}</div>
+      <select class="cfr-add" onchange="cfrAdd(${gi}, this.value); this.value=''">
+        <option value="" disabled selected>${opts ? '+ Add member…' : 'Everyone is already added'}</option>
+        ${opts}
+      </select>
+    </div>`;
+  }).join('');
+  const groupsWithPeople = ticked.filter(x => x.g.pick.size).length;
+  const totalPeople = ticked.reduce((n, x) => n + x.g.pick.size, 0);
+  document.getElementById('cfr-apply').textContent =
+    `Copy ${groupsWithPeople} group${groupsWithPeople === 1 ? '' : 's'} · ${totalPeople} task${totalPeople === 1 ? '' : 's'} → ${cfTargetName()}`;
+}
+
+function cfrAdd(gi, id) {
+  id = Number(id); if (!id) return;
+  CF_GROUPS[gi].pick.add(id);
+  renderCFReview();
+}
+function cfrRemove(gi, id) {
+  CF_GROUPS[gi].pick.delete(Number(id));
+  renderCFReview();
 }
 
 // Ensures a draft cycle exists to copy into. Returns the draft cycle object,
@@ -951,7 +1064,13 @@ async function postCopyForward(draftId, sourceId, groups) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from_cycle_id: sourceId,
-      groups: groups.map(g => ({ category_code: g.category_code, title: g.title })),
+      // Send the reviewed member set when present; without it the server falls
+      // back to copying whoever had the task in the source cycle.
+      groups: groups.map(g => ({
+        category_code: g.category_code,
+        title: g.title,
+        ...(g.pick ? { member_ids: [...g.pick] } : {}),
+      })),
     }),
   });
   const body = await res.json().catch(() => ({}));
@@ -963,11 +1082,12 @@ async function postCopyForward(draftId, sourceId, groups) {
 }
 
 async function commitCopyForward() {
-  const ticked = CF_GROUPS.filter(g => g.sel);
-  if (!ticked.length) { toast('Tick at least one group first'); return; }
+  // Only groups that still have at least one member get copied.
+  const ticked = CF_GROUPS.filter(g => g.sel && g.pick && g.pick.size);
+  if (!ticked.length) { toast('Add at least one member to a group first'); return; }
   if (!CF_SOURCE) { toast('No source cycle'); return; }
 
-  const btn = document.getElementById('cf-apply');
+  const btn = document.getElementById('cfr-apply');
   if (btn) btn.disabled = true;
   try {
     const draft = await ensureDraftTarget();
@@ -989,7 +1109,7 @@ async function commitCopyForward() {
 function go(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('scr-' + name).classList.add('active');
-  const stepFor = { home:'home', copyfwd:'home', builder:'builder', review:'review', success:'review' };
+  const stepFor = { home:'home', copyfwd:'home', cfreview:'home', builder:'builder', review:'review', success:'review' };
   document.querySelectorAll('.step').forEach(s =>
     s.classList.toggle('active', s.dataset.go === stepFor[name]));
   if (name === 'builder' && !builderLoaded) loadBuilderRefData();
@@ -1081,26 +1201,28 @@ function toReview() {
   document.getElementById('s-title').textContent = `Task added for ${n} members`;
   go('review');
 }
-async function useCatalog(i) {
+// "Use again" opens the builder pre-filled from last time's task — title,
+// category, details, urgency — but with NO members selected, so the training
+// NCO picks who it applies to this cycle instead of inheriting last cycle's
+// roster.
+function prefillFromCatalog(i) {
   const c = CATALOG[i];
   if (!c) return;
-  if (!CF_SOURCE) { toast('No source cycle'); return; }
+  document.getElementById('f-title').value = c.title || '';
+  document.getElementById('f-det').value = c.details || '';
+  const cat = document.getElementById('f-cat');
+  if (c.category_code) cat.value = c.category_code;
 
-  const btn = document.querySelectorAll('#catalog .btn-use')[i];
-  if (btn) btn.disabled = true;
-  try {
-    const draft = await ensureDraftTarget();
-    if (!draft) return;
+  // Light up the urgency segment matching last time's code (default This UTA).
+  const label = URG_CODE_TO_LABEL[c.urgency] || 'This UTA';
+  const urgBtn = [...document.querySelectorAll('#f-urg button')]
+    .find(b => (b.getAttribute('onclick') || '').includes(`'${label}'`));
+  if (urgBtn) setUrg(urgBtn, label); else urgency = label;
 
-    const result = await postCopyForward(draft.id, CF_SOURCE.id, [c]);
-    if (!result) return;
-
-    const total = result.reduce((n, g) => n + (g.added || 0), 0);
-    toast(`Copied ${total} tasks into ${draft.name}`);
-    await loadHome();
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+  // No members carried over — start from an empty roster.
+  urgBatches = []; assignments = []; selected.clear();
+  renderUrgBatches(); selectAll(false);
+  go('builder');
 }
 function prefillBlank() {
   document.getElementById('f-title').value = '';

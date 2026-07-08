@@ -65,3 +65,47 @@ test('copyForward carries a group to a new cycle, drops appts, skips inactive', 
   assert.strictEqual(rows[0].appt_day, null);
   assert.strictEqual(rows[0].appt_time, null);
 });
+
+test('copyForward honors explicit member_ids and gives added members the group default', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const { rows: [src] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('June','archived',false) RETURNING id`);
+  // Source group has only m1, at 'overdue' with details. m2 was NOT in the source.
+  await pool.query(`INSERT INTO tasks (uta_cycle_id,member_id,category_id,title,details,urgency)
+                    VALUES ($1,$2,$3,'SGLI','do it in MilConnect','overdue')`,
+                   [src.id, f.m1, f.catId]);
+  const { rows: [dst] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('July','draft',false) RETURNING id`);
+  const res = await tasks.copyForward(pool, dst.id, {
+    from_cycle_id: src.id,
+    groups: [{ category_code: f.catCode, title: 'SGLI', member_ids: [f.m1, f.m2] }],
+    created_by_id: f.leadId,
+  });
+  assert.strictEqual(res[0].added, 2); // m1 carried + m2 added
+  const { rows } = await pool.query(
+    `SELECT member_id, urgency, details FROM tasks WHERE uta_cycle_id=$1 ORDER BY member_id`, [dst.id]);
+  const byId = Object.fromEntries(rows.map(r => [r.member_id, r]));
+  assert.strictEqual(byId[f.m1].urgency, 'overdue');            // carried member keeps own urgency
+  assert.strictEqual(byId[f.m2].urgency, 'overdue');            // added member gets group default
+  assert.strictEqual(byId[f.m2].details, 'do it in MilConnect'); // added member gets group default details
+});
+
+test('copyForward with a member_ids subset copies only those members', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const { rows: [src] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('June','archived',false) RETURNING id`);
+  await pool.query(`INSERT INTO tasks (uta_cycle_id,member_id,category_id,title,urgency)
+                    VALUES ($1,$2,$3,'SGLI','this_uta'),($1,$4,$3,'SGLI','this_uta')`,
+                   [src.id, f.m1, f.catId, f.m2]);
+  const { rows: [dst] } = await pool.query(
+    `INSERT INTO uta_cycles (name,status,is_current) VALUES ('July','draft',false) RETURNING id`);
+  const res = await tasks.copyForward(pool, dst.id, {
+    from_cycle_id: src.id,
+    groups: [{ category_code: f.catCode, title: 'SGLI', member_ids: [f.m1] }], // drop m2
+    created_by_id: f.leadId,
+  });
+  assert.strictEqual(res[0].added, 1);
+  const { rows } = await pool.query(`SELECT member_id FROM tasks WHERE uta_cycle_id=$1`, [dst.id]);
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].member_id, f.m1);
+});
