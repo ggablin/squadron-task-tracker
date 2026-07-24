@@ -1064,7 +1064,7 @@
     .add-btn svg { width: 14px; height: 14px; }
 
     /* ── My Tasks sub-tabs (My Tasks | Timeline) ── */
-    .mt-tabs, .shop-tabs {
+    .mt-tabs, .shop-tabs, .res-tabs {
       display: flex; gap: 4px;
       background: var(--cream);
       border-radius: 12px; padding: 4px;
@@ -1072,15 +1072,15 @@
       margin: 0 0 20px;
     }
     #mt-pane-tasks .hero { margin-top: 0; }
-    .mt-tab, .shop-tab {
+    .mt-tab, .shop-tab, .res-tab {
       flex: 1; background: transparent; border: 0;
       padding: 9px 10px; border-radius: 9px;
       font-family: inherit; font-size: 13px; font-weight: 600;
       color: var(--t2); cursor: pointer;
       transition: background .15s, color .15s;
     }
-    .mt-tab:hover, .shop-tab:hover { color: var(--text); }
-    .mt-tab.active, .shop-tab.active { background: var(--text); color: var(--bg); }
+    .mt-tab:hover, .shop-tab:hover, .res-tab:hover { color: var(--text); }
+    .mt-tab.active, .shop-tab.active, .res-tab.active { background: var(--text); color: var(--bg); }
     .mt-tab-badge {
       margin-left: 5px; padding: 1px 6px;
       font-size: 10px; font-weight: 700;
@@ -1088,8 +1088,8 @@
       border-radius: 9px;
     }
     .mt-tab.active .mt-tab-badge { background: rgba(255,255,255,.22); }
-    .mt-pane, .shop-pane { display: none; }
-    .mt-pane.active, .shop-pane.active { display: block; }
+    .mt-pane, .shop-pane, .res-pane { display: none; }
+    .mt-pane.active, .shop-pane.active, .res-pane.active { display: block; }
 
     /* ── Timeline pane ─────────────────────────── */
     #mt-pane-timeline {
@@ -1438,6 +1438,198 @@
     /* D4: staggered tick-gauge reveal on first render only */
     @keyframes gaugeReveal { from { stroke-width: 0; opacity: 0; } to { stroke-width: var(--gauge-sw, 2); opacity: 1; } }
     .gauge-line.animate { animation: gaugeReveal .5s ease-out both; }
+
+    /* ══════════════════════════════════════════════════════════════
+       RESOURCES VIEW — PFRA calculator + useful links
+       Everything here is namespaced `pf-` so it can never collide with
+       the tracker's own component classes (.card, .dot, .bar, …).
+    ══════════════════════════════════════════════════════════════ */
+    #pf-root { max-width: 1080px; }
+    .pf-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+    .pf-h1 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+    .pf-sub { font-size: 13px; color: var(--t2); margin-top: 3px; }
+    .pf-meta { font-size: 12px; color: var(--t3); font-weight: 500; text-align: right; white-space: nowrap; padding-top: 4px; }
+    .pf-tag { display: inline-block; background: var(--bm); color: var(--t2); border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; margin-top: 6px; }
+
+    .pf-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+    .pf-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+    .pf-card { background: var(--bg); border: 2px solid var(--border); border-radius: var(--r); padding: 20px 22px; }
+    .pf-microlabel { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); }
+    .pf-cardhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+    .pf-pts { font-size: 24px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+    .pf-pts .pf-of { font-size: 13px; font-weight: 600; color: var(--t3); }
+    .pf-pts.pf-empty { color: var(--t3); }
+    .pf-bar { height: 5px; background: var(--bm); border-radius: 999px; overflow: hidden; margin: -4px 0 16px; }
+    .pf-bar .pf-fill { height: 100%; background: var(--gon); border-radius: 999px; width: 0%; transition: width .35s ease; }
+    .pf-bar .pf-fill.pf-bad { background: var(--urgent); }
+
+    .pf-seg { display: flex; background: var(--s2); border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 16px; }
+    .pf-seg button {
+      flex: 1; border: none; background: transparent; border-radius: 9px; padding: 9px 8px;
+      font-family: inherit; font-size: 13.5px; font-weight: 500; color: var(--t2); cursor: pointer;
+      transition: background .15s, color .15s; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+    }
+    .pf-seg button:hover { color: var(--text); }
+    .pf-seg button.pf-on { background: var(--gon); color: var(--bg); font-weight: 600; }
+
+    .pf-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pf-pills button {
+      border: 1px solid var(--bm); background: var(--bg); border-radius: 999px; padding: 7px 13px;
+      font-family: inherit; font-size: 13px; font-weight: 500; color: var(--t2); cursor: pointer;
+      transition: all .15s; -webkit-tap-highlight-color: transparent;
+    }
+    .pf-pills button:hover { color: var(--text); }
+    .pf-pills button.pf-on { background: var(--gon); border-color: var(--gon); color: var(--bg); font-weight: 600; }
+
+    .pf-inrow { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .pf-stepper { display: flex; align-items: center; gap: 6px; }
+    .pf-stepper button {
+      width: 42px; height: 42px; border: 1px solid var(--bm); background: var(--bg); border-radius: var(--rs);
+      font-family: inherit; font-size: 19px; font-weight: 500; color: var(--text); cursor: pointer; line-height: 1;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pf-stepper button:active { background: var(--s2); }
+    .pf-numin {
+      width: 96px; border: none; background: transparent; text-align: center;
+      font-family: inherit; font-size: 31px; font-weight: 700; color: var(--text); outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+    #view-resources input::placeholder { color: var(--t3); font-weight: 600; }
+    #view-resources input[type=number]::-webkit-inner-spin-button,
+    #view-resources input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    #view-resources input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+    .pf-timegrp { display: flex; align-items: center; gap: 4px; }
+    .pf-timegrp input {
+      width: 76px; border: none; background: var(--s2); border-radius: var(--rs); padding: 8px 6px; text-align: center;
+      font-family: inherit; font-size: 28px; font-weight: 700; color: var(--text); outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .pf-timegrp input:focus { background: var(--bm); }
+    .pf-colon { font-size: 26px; font-weight: 700; color: var(--t3); }
+    .pf-unit { font-size: 11px; color: var(--t3); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-left: 6px; }
+
+    .pf-dualin { display: flex; gap: 22px; flex-wrap: wrap; }
+    .pf-fld { display: flex; flex-direction: column; gap: 6px; }
+    .pf-fld label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); }
+    .pf-fld input {
+      width: 110px; border: none; background: var(--s2); border-radius: var(--rs); padding: 9px 12px;
+      font-family: inherit; font-size: 24px; font-weight: 700; color: var(--text); outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .pf-fld input:focus { background: var(--bm); }
+    .pf-under { font-size: 11.5px; color: var(--t3); font-weight: 500; min-height: 14px; }
+    .pf-ratio { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .pf-hintrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    .pf-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pf-chip { background: var(--s2); color: var(--t2); border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .pf-chip.pf-pace { background: var(--bm); color: var(--text); font-weight: 600; }
+    .pf-hint { font-size: 12.5px; color: var(--t2); }
+    .pf-hint b { color: var(--text); font-weight: 600; }
+    .pf-hint.pf-max { color: var(--ok); font-weight: 600; }
+    .pf-hint.pf-bad { color: var(--urgent); font-weight: 600; }
+
+    .pf-statuspill {
+      display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 6px 13px;
+      font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+    }
+    .pf-statuspill .pf-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .pf-p-ok   { background: var(--ok-bg);  color: var(--ok); }
+    .pf-p-warn { background: var(--wrn-bg); color: var(--warn); }
+    .pf-p-bad  { background: var(--urg-bg); color: var(--urgent); }
+    .pf-p-mute { background: var(--s2);     color: var(--t3); }
+
+    .pf-score { position: sticky; top: 0; }
+    .pf-gaugebox { display: flex; flex-direction: column; align-items: center; padding: 6px 0 2px; }
+    .pf-gaugebox svg { width: 230px; height: auto; display: block; }
+    .pf-gnum { font-size: 34px; font-weight: 700; letter-spacing: -.02em; fill: var(--text); }
+    .pf-gnum.pf-mute { fill: var(--t3); }
+    .pf-gnum.pf-bad  { fill: var(--urgent); }
+    .pf-gcap { font-size: 8.5px; font-weight: 700; letter-spacing: .22em; fill: var(--t2); }
+    /* Tick colours are CSS-driven so the gauge re-themes on the dark-mode
+       toggle without needing a re-render. */
+    #pf-gticks line            { stroke: var(--goff); }
+    #pf-gticks line.pf-on      { stroke: var(--gon); }
+    #pf-gticks line.pf-on-bad  { stroke: var(--urgent); }
+    .pf-catwrap { display: flex; justify-content: center; margin: 2px 0 16px; }
+    .pf-divider { height: 1px; background: var(--bm); margin: 2px 0 16px; }
+    .pf-brow { display: grid; grid-template-columns: 86px 1fr auto; align-items: center; gap: 10px; margin-bottom: 11px; }
+    .pf-brow .pf-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pf-brow .pf-bar { margin: 0; }
+    .pf-brow .pf-val { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pf-brow .pf-val .pf-of { color: var(--t3); font-weight: 500; }
+    .pf-msgs { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .pf-msg { font-size: 12.5px; color: var(--urgent); display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; }
+    .pf-msg::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--urgent); margin-top: 5px; flex-shrink: 0; }
+    .pf-msg.pf-info { color: var(--t2); }
+    .pf-msg.pf-info::before { background: var(--t3); }
+    .pf-walknote { font-size: 12px; color: var(--t2); background: var(--s2); border-radius: var(--rs); padding: 9px 12px; margin-top: 12px; line-height: 1.45; }
+    .pf-foot { margin-top: 22px; font-size: 12px; color: var(--t3); line-height: 1.55; max-width: 720px; }
+
+    /* Below 941px the score panel stops being a sticky sidebar and stacks under
+       the inputs, so phones get a pinned running-score readout instead. */
+    .pf-mobilebar { display: none; }
+    @media (max-width: 940px) {
+      .pf-grid { grid-template-columns: 1fr; }
+      .pf-score { position: static; }
+      .pf-head { flex-direction: column; gap: 6px; }
+      .pf-meta { text-align: left; padding-top: 0; }
+    }
+    /* Phones only. Deliberately not 940px: between 768 and 940 the desktop shell
+       is active and .view is the scroll container, but sticky pins against that
+       container's CONTENT box — so a pinned bar sits below .view's 32px padding
+       and cards scroll visibly through the gap above it. At ≤767px the PAGE
+       scrolls instead (and .view's own overflow-y:auto makes sticky inert
+       anyway), so the readout is pinned above .mob-nav with position:fixed.
+       72px is .mob-nav's height before the safe-area inset. */
+    @media (max-width: 767px) {
+      .pf-mobilebar {
+        display: flex; justify-content: space-between; align-items: center; gap: 10px;
+        position: fixed; left: 0; right: 0;
+        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        z-index: 190;   /* under .mob-nav (200) */
+        background: var(--bg); border-top: 2px solid var(--border);
+        padding: 9px 20px;
+      }
+      .pf-mnum { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .pf-mnum .pf-of { font-size: 12px; color: var(--t3); font-weight: 600; }
+      #res-pane-pfra { padding-bottom: 56px; }
+    }
+    @media (max-width: 600px) {
+      .pf-seg button { white-space: normal; line-height: 1.25; padding: 8px 5px; font-size: 12.5px; }
+      .pf-card { padding: 18px 16px; }
+    }
+
+    /* ── Resources: useful links ─────────────────── */
+    .pf-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; max-width: 1080px; }
+    .pf-link {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 16px 18px; border-radius: var(--r);
+      border: 2px solid var(--border); background: var(--bg);
+      color: inherit; text-decoration: none;
+      transition: background .15s, border-color .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pf-link:hover { background: var(--cream); border-color: var(--bm); }
+    .pf-link-ic {
+      width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
+      background: var(--cream); color: var(--t2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pf-link:hover .pf-link-ic { background: var(--bg); }
+    .pf-link-ic svg { width: 17px; height: 17px; }
+    .pf-link-body { min-width: 0; flex: 1; }
+    .pf-link-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .pf-link-name svg { width: 12px; height: 12px; color: var(--t3); flex-shrink: 0; }
+    .pf-link-desc { font-size: 12.5px; color: var(--t2); margin-top: 3px; line-height: 1.4; }
+    .pf-link-host { font-size: 11px; color: var(--t3); margin-top: 6px; font-weight: 500; word-break: break-all; }
+    .pf-note {
+      margin-top: 16px; max-width: 1080px;
+      font-size: 12.5px; color: var(--t2); line-height: 1.5;
+      background: var(--s2); border-radius: var(--rs); padding: 12px 14px;
+    }
   </style>
 </head>
 <body>
@@ -1482,6 +1674,10 @@
       <button class="sb-item" data-view="leadership" onclick="switchView(this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
         Squadron
+      </button>
+      <button class="sb-item" data-view="resources" onclick="switchView(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg>
+        Resources
       </button>
       <div class="sb-spacer"></div>
       <button class="theme-toggle notif-btn" onclick="toggleNotifPanel(event)" aria-label="Notifications" title="Notifications">
@@ -1844,6 +2040,293 @@
 
     </div>
 
+    <!-- ═══ RESOURCES VIEW ════════════════════════ -->
+    <div id="view-resources" class="view">
+
+      <div class="res-tabs" role="tablist">
+        <button class="res-tab active" data-rt="pfra" onclick="switchResPane('pfra')">PT Calculator</button>
+        <button class="res-tab" data-rt="links" onclick="switchResPane('links')">Useful Links</button>
+      </div>
+
+      <!-- ── PFRA calculator ──────────────────────── -->
+      <div id="res-pane-pfra" class="res-pane active">
+        <div id="pf-root">
+
+          <div class="pf-mobilebar">
+            <span class="pf-mnum" id="pf-mnum">&mdash;<span class="pf-of"> / 100</span></span>
+            <span id="pf-mcat"><span class="pf-statuspill pf-p-mute"><span class="pf-dot"></span>Awaiting inputs</span></span>
+          </div>
+
+          <div class="pf-head">
+            <div>
+              <div class="pf-h1">PFRA Calculator</div>
+              <div class="pf-sub">USAF Physical Fitness Readiness Assessment</div>
+            </div>
+            <div class="pf-meta">Unofficial aid<br><span class="pf-tag">Standards effective 1 Mar 26</span></div>
+          </div>
+
+          <div class="pf-grid">
+            <div class="pf-col">
+
+              <!-- MEMBER -->
+              <section class="pf-card">
+                <div class="pf-cardhead"><span class="pf-microlabel">Member</span></div>
+                <div class="pf-seg" id="pf-seg-sex" style="max-width:260px">
+                  <button data-v="M">Male</button>
+                  <button data-v="F">Female</button>
+                </div>
+                <div class="pf-pills" id="pf-pills-age"></div>
+              </section>
+
+              <!-- STRENGTH -->
+              <section class="pf-card">
+                <div class="pf-cardhead">
+                  <span class="pf-microlabel">Strength &middot; 15 pts</span>
+                  <span class="pf-pts" id="pf-pts-strength">&mdash;<span class="pf-of"> / 15</span></span>
+                </div>
+                <div class="pf-bar"><div class="pf-fill" id="pf-bar-strength"></div></div>
+                <div class="pf-seg" id="pf-seg-strength">
+                  <button data-v="pushup">Push-ups</button>
+                  <button data-v="hrpu">Hand-Release Push-ups</button>
+                </div>
+                <div class="pf-inrow">
+                  <div class="pf-stepper">
+                    <button id="pf-st-strength-dn" aria-label="Decrease reps">&minus;</button>
+                    <input class="pf-numin" id="pf-in-strength" type="number" inputmode="numeric" min="0" max="200" placeholder="0" aria-label="Strength reps">
+                    <button id="pf-st-strength-up" aria-label="Increase reps">+</button>
+                  </div>
+                  <span class="pf-chip" id="pf-unit-strength">reps in 1 min</span>
+                </div>
+                <div class="pf-hintrow">
+                  <div class="pf-chips"><span class="pf-chip" id="pf-mm-strength"></span></div>
+                  <span class="pf-hint" id="pf-hint-strength"></span>
+                </div>
+              </section>
+
+              <!-- CORE -->
+              <section class="pf-card">
+                <div class="pf-cardhead">
+                  <span class="pf-microlabel">Core &middot; 15 pts</span>
+                  <span class="pf-pts" id="pf-pts-core">&mdash;<span class="pf-of"> / 15</span></span>
+                </div>
+                <div class="pf-bar"><div class="pf-fill" id="pf-bar-core"></div></div>
+                <div class="pf-seg" id="pf-seg-core">
+                  <button data-v="situp">Sit-ups</button>
+                  <button data-v="clrc">Cross-Leg Reverse Crunch</button>
+                  <button data-v="plank">Forearm Plank</button>
+                </div>
+                <div class="pf-inrow">
+                  <div class="pf-stepper" id="pf-core-reps-wrap">
+                    <button id="pf-st-core-dn" aria-label="Decrease reps">&minus;</button>
+                    <input class="pf-numin" id="pf-in-core" type="number" inputmode="numeric" min="0" max="200" placeholder="0" aria-label="Core reps">
+                    <button id="pf-st-core-up" aria-label="Increase reps">+</button>
+                  </div>
+                  <div class="pf-timegrp" id="pf-core-time-wrap" style="display:none">
+                    <input id="pf-in-core-min" type="number" inputmode="numeric" min="0" max="9" placeholder="m" aria-label="Plank minutes">
+                    <span class="pf-colon">:</span>
+                    <input id="pf-in-core-sec" type="number" inputmode="numeric" min="0" max="59" placeholder="ss" aria-label="Plank seconds">
+                    <span class="pf-unit">min : sec</span>
+                  </div>
+                  <span class="pf-chip" id="pf-unit-core">reps in 1 min</span>
+                </div>
+                <div class="pf-hintrow">
+                  <div class="pf-chips"><span class="pf-chip" id="pf-mm-core"></span></div>
+                  <span class="pf-hint" id="pf-hint-core"></span>
+                </div>
+              </section>
+
+              <!-- CARDIO -->
+              <section class="pf-card">
+                <div class="pf-cardhead">
+                  <span class="pf-microlabel" id="pf-lbl-cardio">Cardio &middot; 50 pts</span>
+                  <span class="pf-pts" id="pf-pts-cardio">&mdash;<span class="pf-of"> / 50</span></span>
+                </div>
+                <div class="pf-bar" id="pf-barwrap-cardio"><div class="pf-fill" id="pf-bar-cardio"></div></div>
+                <div class="pf-seg" id="pf-seg-cardio">
+                  <button data-v="run">2-Mile Run</button>
+                  <button data-v="hamr">20m HAMR</button>
+                  <button data-v="walk">2K Walk</button>
+                </div>
+                <div class="pf-inrow">
+                  <div class="pf-timegrp" id="pf-cardio-time-wrap">
+                    <input id="pf-in-cardio-min" type="number" inputmode="numeric" min="0" max="59" placeholder="mm" aria-label="Cardio minutes">
+                    <span class="pf-colon">:</span>
+                    <input id="pf-in-cardio-sec" type="number" inputmode="numeric" min="0" max="59" placeholder="ss" aria-label="Cardio seconds">
+                    <span class="pf-unit">min : sec</span>
+                  </div>
+                  <div class="pf-stepper" id="pf-cardio-shuttle-wrap" style="display:none">
+                    <button id="pf-st-cardio-dn" aria-label="Decrease shuttles">&minus;</button>
+                    <input class="pf-numin" id="pf-in-cardio" type="number" inputmode="numeric" min="0" max="200" placeholder="0" aria-label="HAMR shuttles">
+                    <button id="pf-st-cardio-up" aria-label="Increase shuttles">+</button>
+                  </div>
+                  <span class="pf-chip" id="pf-unit-cardio">total time</span>
+                </div>
+                <div class="pf-hintrow">
+                  <div class="pf-chips"><span class="pf-chip" id="pf-mm-cardio"></span><span class="pf-chip pf-pace" id="pf-pace-cardio" style="display:none"></span></div>
+                  <span class="pf-hint" id="pf-hint-cardio"></span>
+                </div>
+                <div class="pf-walknote" id="pf-walknote" style="display:none">
+                  The 2-kilometer walk is <b>pass / fail</b> &mdash; it earns no points. Your composite is
+                  calculated from the remaining 50 possible points (strength, core, and body composition)
+                  and converted to a 100-point scale.
+                </div>
+              </section>
+
+              <!-- BODY COMP -->
+              <section class="pf-card">
+                <div class="pf-cardhead">
+                  <span class="pf-microlabel">Body Composition &middot; 20 pts</span>
+                  <span class="pf-pts" id="pf-pts-body">&mdash;<span class="pf-of"> / 20</span></span>
+                </div>
+                <div class="pf-bar"><div class="pf-fill" id="pf-bar-body"></div></div>
+                <div class="pf-dualin">
+                  <div class="pf-fld">
+                    <label for="pf-in-height">Height (in)</label>
+                    <input id="pf-in-height" type="number" inputmode="decimal" min="48" max="90" step="0.5" placeholder="69">
+                    <span class="pf-under" id="pf-height-conv"></span>
+                  </div>
+                  <div class="pf-fld">
+                    <label for="pf-in-waist">Waist (in)</label>
+                    <input id="pf-in-waist" type="number" inputmode="decimal" min="20" max="70" step="0.5" placeholder="34">
+                    <span class="pf-under"></span>
+                  </div>
+                  <div class="pf-fld">
+                    <label>Waist-to-Height</label>
+                    <div style="display:flex;align-items:center;gap:10px;min-height:46px">
+                      <span class="pf-ratio" id="pf-ratio-out">&mdash;</span>
+                      <span id="pf-risk-pill"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="pf-hintrow">
+                  <div class="pf-chips"><span class="pf-chip">&le; 0.49 &rarr; 20 pts</span><span class="pf-chip">&ge; 0.60 &rarr; 0 pts</span></div>
+                  <span class="pf-hint" id="pf-hint-body"></span>
+                </div>
+              </section>
+            </div>
+
+            <!-- SCORE PANEL -->
+            <aside class="pf-score">
+              <section class="pf-card">
+                <div class="pf-cardhead"><span class="pf-microlabel">Composite Score</span></div>
+                <div class="pf-gaugebox">
+                  <svg viewBox="0 0 200 118" id="pf-gauge" aria-hidden="true">
+                    <g id="pf-gticks"></g>
+                    <text x="100" y="92" text-anchor="middle" class="pf-gnum pf-mute" id="pf-gnum">&mdash;</text>
+                    <text x="100" y="108" text-anchor="middle" class="pf-gcap" id="pf-gcap">COMPOSITE</text>
+                  </svg>
+                </div>
+                <div class="pf-catwrap" id="pf-catwrap"><span class="pf-statuspill pf-p-mute"><span class="pf-dot"></span>Awaiting inputs</span></div>
+                <div class="pf-divider"></div>
+                <div class="pf-microlabel" style="margin-bottom:12px">Breakdown</div>
+                <div class="pf-brow">
+                  <span class="pf-lbl">Strength</span>
+                  <div class="pf-bar"><div class="pf-fill" id="pf-bbar-strength"></div></div>
+                  <span class="pf-val" id="pf-bval-strength">&mdash;<span class="pf-of">/15</span></span>
+                </div>
+                <div class="pf-brow">
+                  <span class="pf-lbl">Core</span>
+                  <div class="pf-bar"><div class="pf-fill" id="pf-bbar-core"></div></div>
+                  <span class="pf-val" id="pf-bval-core">&mdash;<span class="pf-of">/15</span></span>
+                </div>
+                <div class="pf-brow" id="pf-brow-cardio">
+                  <span class="pf-lbl" id="pf-blbl-cardio">Cardio</span>
+                  <div class="pf-bar"><div class="pf-fill" id="pf-bbar-cardio"></div></div>
+                  <span class="pf-val" id="pf-bval-cardio">&mdash;<span class="pf-of">/50</span></span>
+                </div>
+                <div class="pf-brow">
+                  <span class="pf-lbl">Body Comp</span>
+                  <div class="pf-bar"><div class="pf-fill" id="pf-bbar-body"></div></div>
+                  <span class="pf-val" id="pf-bval-body">&mdash;<span class="pf-of">/20</span></span>
+                </div>
+                <div class="pf-msgs" id="pf-msgs"></div>
+              </section>
+            </aside>
+          </div>
+
+          <div class="pf-foot">
+            Scores are drawn from the Final USAF PFRA Scoring charts (effective 1 Mar 2026).
+            Chart values marked with an asterisk are minimum performance thresholds &mdash; performing below
+            the minimum in any component, or exceeding the 2K-walk maximum time, is a component failure and an
+            Unsatisfactory assessment regardless of total points. Composite categories: Excellent &ge; 90,
+            Satisfactory 75&ndash;89.9, Unsatisfactory &lt; 75. This is an unofficial aid &mdash; always verify
+            against the official charts and your UFPM. Nothing entered here is saved or sent anywhere.
+          </div>
+
+        </div><!-- /#pf-root -->
+      </div><!-- /#res-pane-pfra -->
+
+      <!-- ── Useful links ─────────────────────────── -->
+      <div id="res-pane-links" class="res-pane">
+        <div class="sec-hd" style="padding:0 0 12px">
+          <div class="sec-title">Useful Links</div>
+          <div class="sec-sub">Opens in a new tab</div>
+        </div>
+
+        <div class="pf-links">
+
+          <a class="pf-link" href="https://vmpf.us.af.mil/vMPFNet40/Hub.aspx" target="_blank" rel="noopener noreferrer">
+            <span class="pf-link-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>
+            </span>
+            <span class="pf-link-body">
+              <span class="pf-link-name">Virtual MPF
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3v10h10v-3"/><path d="M9.5 2.5H13.5V6.5"/><path d="M13.5 2.5L7.5 8.5"/></svg>
+              </span>
+              <span class="pf-link-desc">Personnel records self-service &mdash; RIPs, assignments, decorations, and record updates.</span>
+              <span class="pf-link-host">vmpf.us.af.mil</span>
+            </span>
+          </a>
+
+          <a class="pf-link" href="https://myfss.us.af.mil/USAFCommunity/s/" target="_blank" rel="noopener noreferrer">
+            <span class="pf-link-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.7-.9 1.3v.4"/><path d="M12 16.8h.01"/></svg>
+            </span>
+            <span class="pf-link-body">
+              <span class="pf-link-name">MyFSS
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3v10h10v-3"/><path d="M9.5 2.5H13.5V6.5"/><path d="M13.5 2.5L7.5 8.5"/></svg>
+              </span>
+              <span class="pf-link-desc">Force Support self-service &mdash; open a personnel case, track its status, and search AF guidance.</span>
+              <span class="pf-link-host">myfss.us.af.mil</span>
+            </span>
+          </a>
+
+          <a class="pf-link" href="https://my.af.mil/" target="_blank" rel="noopener noreferrer">
+            <span class="pf-link-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M7.5 6.5h.01M10.5 6.5h.01"/></svg>
+            </span>
+            <span class="pf-link-body">
+              <span class="pf-link-name">AF Portal
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3v10h10v-3"/><path d="M9.5 2.5H13.5V6.5"/><path d="M13.5 2.5L7.5 8.5"/></svg>
+              </span>
+              <span class="pf-link-desc">Single sign-on gateway to Air Force applications, ADLS/CBTs, and official news.</span>
+              <span class="pf-link-host">my.af.mil</span>
+            </span>
+          </a>
+
+          <a class="pf-link" href="https://mypay.dfas.mil/mypay.aspx" target="_blank" rel="noopener noreferrer">
+            <span class="pf-link-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 10v4M18 10v4"/></svg>
+            </span>
+            <span class="pf-link-body">
+              <span class="pf-link-name">MyPay
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3v10h10v-3"/><path d="M9.5 2.5H13.5V6.5"/><path d="M13.5 2.5L7.5 8.5"/></svg>
+              </span>
+              <span class="pf-link-desc">DFAS pay account &mdash; LES, W-2, direct deposit, allotments, and tax withholding.</span>
+              <span class="pf-link-host">mypay.dfas.mil</span>
+            </span>
+          </a>
+
+        </div>
+
+        <div class="pf-note">
+          Most of these sites require a CAC or DS Logon, so they generally need a government computer
+          or a card reader &mdash; they will load on a phone but usually stop at the sign-in page.
+        </div>
+      </div><!-- /#res-pane-links -->
+
+    </div><!-- /#view-resources -->
+
   </main>
 
   <!-- ═══ MOBILE NAV ══════════════════════════════ -->
@@ -1862,6 +2345,10 @@
     <button class="mob-btn" data-view="leadership" onclick="switchView(this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
       Squadron
+    </button>
+    <button class="mob-btn" data-view="resources" onclick="switchView(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg>
+      Resources
     </button>
   </nav>
 
@@ -3330,6 +3817,7 @@ function switchView(btn) {
     member:     [utaLabel,            m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
     supervisor: [viewedShop+' Shop',  'Supervisor View'],
     leadership: ['108th CES',         'Leadership View'],
+    resources:  ['Resources',         'PT calculator & useful links'],
   };
   const [t, s] = titles[name] || ['',''];
   document.getElementById('mob-title').textContent  = t;
@@ -3343,6 +3831,17 @@ function switchView(btn) {
     loadOrgChart();
     if (currentMember?.role === 'leadership') loadSquadron();
   }
+  if (name === 'resources') switchResPane('pfra');
+}
+
+/* ── Resources sub-tabs (PT Calculator | Useful Links) ── */
+function switchResPane(name) {
+  document.querySelectorAll('.res-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.rt === name));
+  document.querySelectorAll('.res-pane').forEach(p =>
+    p.classList.toggle('active', p.id === 'res-pane-' + name));
+  // The calculator builds its gauge + age pills on first open only.
+  if (name === 'pfra' && window.pfInit) window.pfInit();
 }
 
 /* ── Modal helpers ──────────────────────────────── */
@@ -3873,6 +4372,382 @@ async function loadTimeline(forceRefresh = false) {
     if (!timelineCache) host.innerHTML = '<div class="tl-empty">Could not load timeline.</div>';
   } finally { _timelineInFlight = false; }
 }
+</script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   PFRA CALCULATOR — Resources view
+   Ported from the standalone PFRA_Calculator_1.html. Wrapped in an IIFE
+   so none of its state, helpers, or the scoring tables leak into the
+   app's global scope; only window.pfInit() is exposed. Colours are
+   CSS-driven (see the .pf-* rules) so the gauge follows the dark-mode
+   toggle without a re-render.
+══════════════════════════════════════════════════════════════════ */
+(function () {
+const D = {"pushup":{"M":[[[15.0,67],[14.5,66],[14.0,64],[13.5,63],[13.0,61],[12.5,60],[12.0,58],[11.5,57],[11.0,55],[10.5,54],[10.0,52],[9.5,51],[9.0,49],[8.5,48],[8.0,46],[7.5,45],[7.0,43],[6.5,42],[6.0,40],[5.5,39],[5.0,37],[4.5,36],[4.0,34],[3.5,33],[3.0,31],[2.5,30]],[[15.0,63],[14.5,62],[14.0,60],[13.5,59],[13.0,57],[12.5,56],[12.0,55],[11.5,53],[11.0,52],[10.5,50],[10.0,49],[9.5,48],[9.0,46],[8.5,45],[8.0,43],[7.5,42],[7.0,41],[6.5,39],[6.0,38],[5.5,36],[5.0,35],[4.5,34],[4.0,32],[3.5,31],[3.0,29],[2.5,28]],[[15.0,60],[14.5,59],[14.0,57],[13.5,56],[13.0,55],[12.5,53],[12.0,52],[11.5,51],[11.0,49],[10.5,48],[10.0,47],[9.5,45],[9.0,44],[8.5,43],[8.0,41],[7.5,40],[7.0,39],[6.5,37],[6.0,36],[5.5,35],[5.0,33],[4.5,32],[4.0,31],[3.5,29],[3.0,26],[2.5,26]],[[15.0,56],[14.5,55],[14.0,53],[13.5,52],[13.0,51],[12.5,49],[12.0,48],[11.5,47],[11.0,45],[10.5,44],[10.0,43],[9.5,41],[9.0,40],[8.5,39],[8.0,38],[7.5,36],[7.0,35],[6.5,34],[6.0,32],[5.5,31],[5.0,30],[4.5,28],[4.0,27],[3.5,26],[3.0,24],[2.5,23]],[[15.0,52],[14.5,51],[14.0,50],[13.5,49],[13.0,48],[12.5,46],[12.0,45],[11.5,44],[11.0,42],[10.5,41],[10.0,40],[9.5,39],[9.0,37],[8.5,36],[8.0,35],[7.5,33],[7.0,32],[6.5,31],[6.0,30],[5.5,28],[5.0,27],[4.5,26],[4.0,24],[3.5,23],[3.0,22],[2.5,21]],[[15.0,49],[14.5,47],[14.0,46],[13.5,45],[13.0,44],[12.5,43],[12.0,42],[11.5,40],[11.0,39],[10.5,38],[10.0,37],[9.5,36],[9.0,35],[8.5,33],[8.0,32],[7.5,31],[7.0,30],[6.5,29],[6.0,28],[5.5,26],[5.0,25],[4.5,24],[4.0,23],[3.5,22],[3.0,21],[2.5,19]],[[15.0,45],[14.5,44],[14.0,43],[13.5,42],[13.0,41],[12.5,39],[12.0,38],[11.5,37],[11.0,36],[10.5,35],[10.0,34],[9.5,33],[9.0,32],[8.5,30],[8.0,29],[7.5,28],[7.0,27],[6.5,26],[6.0,25],[5.5,24],[5.0,23],[4.5,21],[4.0,20],[3.5,19],[3.0,18],[2.5,17]],[[15.0,42],[14.5,41],[14.0,40],[13.5,39],[13.0,38],[12.5,36],[12.0,35],[11.5,34],[11.0,33],[10.5,32],[10.0,31],[9.5,30],[9.0,29],[8.5,27],[8.0,26],[7.5,25],[7.0,24],[6.5,23],[6.0,22],[5.5,21],[5.0,20],[4.5,18],[4.0,17],[3.5,16],[3.0,15],[2.5,14]],[[15.0,38],[14.5,37],[14.0,36],[13.5,35],[13.0,34],[12.5,33],[12.0,32],[11.5,31],[11.0,30],[10.5,29],[10.0,28],[9.5,27],[9.0,26],[8.5,24],[8.0,23],[7.5,22],[7.0,21],[6.5,20],[6.0,19],[5.5,18],[5.0,17],[4.5,16],[4.0,15],[3.5,14],[3.0,13],[2.5,12]]],"F":[[[15.0,50],[14.5,49],[14.0,47],[13.5,46],[13.0,44],[12.5,43],[12.0,42],[11.5,40],[11.0,39],[10.5,37],[10.0,36],[9.5,35],[9.0,33],[8.5,32],[8.0,30],[7.5,29],[7.0,28],[6.5,26],[6.0,25],[5.5,23],[5.0,22],[4.5,21],[4.0,19],[3.5,18],[3.0,16],[2.5,15]],[[15.0,47],[14.5,46],[14.0,44],[13.5,43],[13.0,42],[12.5,40],[12.0,39],[11.5,38],[11.0,36],[10.5,35],[10.0,34],[9.5,32],[9.0,31],[8.5,30],[8.0,29],[7.5,27],[7.0,26],[6.5,25],[6.0,23],[5.5,22],[5.0,21],[4.5,19],[4.0,18],[3.5,17],[3.0,15],[2.5,14]],[[15.0,44],[14.5,42],[14.0,41],[13.5,40],[13.0,39],[12.5,37],[12.0,36],[11.5,35],[11.0,34],[10.5,32],[10.0,31],[9.5,30],[9.0,29],[8.5,27],[8.0,26],[7.5,25],[7.0,24],[6.5,22],[6.0,21],[5.5,20],[5.0,19],[4.5,17],[4.0,16],[3.5,15],[3.0,14],[2.5,12]],[[15.0,42],[14.5,41],[14.0,40],[13.5,38],[13.0,37],[12.5,36],[12.0,35],[11.5,33],[11.0,32],[10.5,31],[10.0,30],[9.5,28],[9.0,27],[8.5,26],[8.0,25],[7.5,23],[7.0,22],[6.5,21],[6.0,20],[5.5,18],[5.0,17],[4.5,16],[4.0,15],[3.5,13],[3.0,12],[2.5,11]],[[15.0,39],[14.5,38],[14.0,37],[13.5,36],[13.0,35],[12.5,33],[12.0,32],[11.5,31],[11.0,30],[10.5,29],[10.0,27],[9.5,26],[9.0,25],[8.5,24],[8.0,23],[7.5,21],[7.0,20],[6.5,19],[6.0,18],[5.5,17],[5.0,15],[4.5,14],[4.0,13],[3.5,12],[3.0,11],[2.5,10]],[[15.0,36],[14.5,35],[14.0,34],[13.5,33],[13.0,32],[12.5,30],[12.0,29],[11.5,28],[11.0,27],[10.5,26],[10.0,25],[9.5,24],[9.0,23],[8.5,21],[8.0,20],[7.5,19],[7.0,18],[6.5,17],[6.0,16],[5.5,15],[5.0,14],[4.5,12],[4.0,11],[3.5,10],[3.0,9],[2.5,8]],[[15.0,34],[14.5,33],[14.0,32],[13.5,31],[13.0,30],[12.5,29],[12.0,28],[11.5,26],[11.0,25],[10.5,24],[10.0,23],[9.5,22],[9.0,21],[8.5,20],[8.0,19],[7.5,18],[7.0,17],[6.5,16],[6.0,15],[5.5,13],[5.0,12],[4.5,11],[4.0,10],[3.5,9],[3.0,8],[2.5,7]],[[15.0,31],[14.5,30],[14.0,29],[13.5,28],[13.0,27],[12.5,26],[12.0,25],[11.5,24],[11.0,23],[10.5,22],[10.0,21],[9.5,20],[9.0,19],[8.5,17],[8.0,16],[7.5,15],[7.0,14],[6.5,13],[6.0,12],[5.5,11],[5.0,10],[4.5,9],[4.0,8],[3.5,7],[3.0,6],[2.5,5]],[[15.0,28],[14.5,27],[14.0,26],[13.5,25],[13.0,24],[12.5,23],[12.0,22],[11.5,21],[11.0,20],[10.5,19],[10.0,18],[9.5,17],[9.0,16],[8.5,15],[8.0,14],[7.5,13],[7.0,12],[6.5,11],[6.0,10],[5.5,9],[5.0,8],[4.5,7],[4.0,6],[3.5,5],[3.0,4],[2.5,3]]]},"hrpu":{"M":[[[15.0,52],[14.5,51],[14.0,50],[13.5,49],[13.0,48],[12.5,47],[12.0,46],[11.5,45],[11.0,44],[10.5,43],[10.0,42],[9.5,41],[9.0,40],[8.5,39],[8.0,38],[7.5,37],[7.0,36],[6.5,35],[6.0,34],[5.5,33],[5.0,32],[4.5,31],[4.0,30],[3.5,29],[3.0,28],[2.5,27]],[[15.0,50],[14.5,49],[14.0,48],[13.5,47],[13.0,46],[12.5,45],[12.0,44],[11.5,43],[11.0,42],[10.5,41],[10.0,40],[9.5,39],[9.0,38],[8.5,37],[8.0,36],[7.5,35],[7.0,34],[6.5,33],[6.0,32],[5.5,31],[5.0,30],[4.5,29],[4.0,28],[3.5,27],[3.0,26],[2.5,25]],[[15.0,48],[14.5,47],[14.0,46],[13.5,45],[13.0,44],[12.5,43],[12.0,42],[11.5,41],[11.0,40],[10.5,39],[10.0,38],[9.5,37],[9.0,36],[8.5,35],[8.0,34],[7.5,33],[7.0,32],[6.5,31],[6.0,30],[5.5,29],[5.0,28],[4.5,27],[4.0,26],[3.5,25],[3.0,24],[2.5,23]],[[15.0,46],[14.5,45],[14.0,44],[13.5,43],[13.0,42],[12.5,41],[12.0,40],[11.5,39],[11.0,38],[10.5,37],[10.0,36],[9.5,35],[9.0,34],[8.5,33],[8.0,32],[7.5,31],[7.0,30],[6.5,29],[6.0,28],[5.5,27],[5.0,26],[4.5,25],[4.0,24],[3.5,23],[3.0,22],[2.5,21]],[[15.0,44],[14.5,43],[14.0,42],[13.5,41],[13.0,40],[12.5,39],[12.0,38],[11.5,37],[11.0,36],[10.5,35],[10.0,34],[9.5,33],[9.0,32],[8.5,31],[8.0,30],[7.5,29],[7.0,28],[6.5,27],[6.0,26],[5.5,25],[5.0,24],[4.5,23],[4.0,22],[3.5,21],[3.0,20],[2.5,19]],[[15.0,42],[14.5,41],[14.0,40],[13.5,39],[13.0,38],[12.5,37],[12.0,36],[11.5,35],[11.0,34],[10.5,33],[10.0,32],[9.5,31],[9.0,30],[8.5,29],[8.0,28],[7.5,27],[7.0,26],[6.5,25],[6.0,24],[5.5,23],[5.0,22],[4.5,21],[4.0,20],[3.5,19],[3.0,18],[2.5,17]],[[15.0,40],[14.5,39],[14.0,38],[13.5,37],[13.0,36],[12.5,35],[12.0,34],[11.5,33],[11.0,32],[10.5,31],[10.0,30],[9.5,29],[9.0,28],[8.5,27],[8.0,26],[7.5,25],[7.0,24],[6.5,23],[6.0,22],[5.5,21],[5.0,20],[4.5,19],[4.0,18],[3.5,17],[3.0,16],[2.5,15]],[[15.0,38],[14.5,37],[14.0,36],[13.5,35],[13.0,34],[12.5,33],[12.0,32],[11.5,31],[11.0,30],[10.5,29],[10.0,28],[9.5,27],[9.0,26],[8.5,25],[8.0,24],[7.5,23],[7.0,22],[6.5,21],[6.0,20],[5.5,19],[5.0,18],[4.5,17],[4.0,16],[3.5,15],[3.0,14],[2.5,13]],[[15.0,36],[14.5,35],[14.0,34],[13.5,33],[13.0,32],[12.5,31],[12.0,30],[11.5,29],[11.0,28],[10.5,27],[10.0,26],[9.5,25],[9.0,24],[8.5,23],[8.0,22],[7.5,21],[7.0,20],[6.5,19],[6.0,18],[5.5,17],[5.0,16],[4.5,15],[4.0,14],[3.5,13],[3.0,12],[2.5,11]]],"F":[[[15.0,42],[14.5,41],[14.0,40],[13.5,39],[13.0,38],[12.5,37],[12.0,36],[11.5,35],[11.0,34],[10.5,33],[10.0,32],[9.5,31],[9.0,30],[8.5,29],[8.0,28],[7.5,27],[7.0,26],[6.5,25],[6.0,24],[5.5,23],[5.0,22],[4.5,21],[4.0,20],[3.5,19],[3.0,18],[2.5,17]],[[15.0,40],[14.5,39],[14.0,38],[13.5,37],[13.0,36],[12.5,35],[12.0,34],[11.5,33],[11.0,32],[10.5,31],[10.0,30],[9.5,29],[9.0,28],[8.5,27],[8.0,26],[7.5,25],[7.0,24],[6.5,23],[6.0,22],[5.5,21],[5.0,20],[4.5,19],[4.0,18],[3.5,17],[3.0,16],[2.5,15]],[[15.0,38],[14.5,37],[14.0,36],[13.5,35],[13.0,34],[12.5,33],[12.0,32],[11.5,31],[11.0,30],[10.5,29],[10.0,28],[9.5,27],[9.0,26],[8.5,25],[8.0,24],[7.5,23],[7.0,22],[6.5,21],[6.0,20],[5.5,19],[5.0,18],[4.5,17],[4.0,16],[3.5,15],[3.0,14],[2.5,13]],[[15.0,36],[14.5,35],[14.0,34],[13.5,33],[13.0,32],[12.5,31],[12.0,30],[11.5,29],[11.0,28],[10.5,27],[10.0,26],[9.5,25],[9.0,24],[8.5,23],[8.0,22],[7.5,21],[7.0,20],[6.5,19],[6.0,18],[5.5,17],[5.0,16],[4.5,15],[4.0,14],[3.5,13],[3.0,12],[2.5,11]],[[15.0,34],[14.5,33],[14.0,32],[13.5,31],[13.0,30],[12.5,29],[12.0,28],[11.5,27],[11.0,26],[10.5,25],[10.0,24],[9.5,23],[9.0,22],[8.5,21],[8.0,20],[7.5,19],[7.0,18],[6.5,17],[6.0,16],[5.5,15],[5.0,14],[4.5,13],[4.0,12],[3.5,11],[3.0,10],[2.5,9]],[[15.0,32],[14.5,31],[14.0,30],[13.5,29],[13.0,28],[12.5,27],[12.0,26],[11.5,25],[11.0,24],[10.5,23],[10.0,22],[9.5,21],[9.0,20],[8.5,19],[8.0,18],[7.5,17],[7.0,16],[6.5,15],[6.0,14],[5.5,13],[5.0,12],[4.5,11],[4.0,10],[3.5,9],[3.0,8],[2.5,7]],[[15.0,30],[14.5,29],[14.0,28],[13.5,27],[13.0,26],[12.5,25],[12.0,24],[11.5,23],[11.0,22],[10.5,21],[10.0,20],[9.5,19],[9.0,18],[8.5,17],[8.0,16],[7.5,15],[7.0,14],[6.5,13],[6.0,12],[5.5,11],[5.0,10],[4.5,9],[4.0,8],[3.5,7],[3.0,6],[2.5,5]],[[15.0,28],[14.5,27],[14.0,26],[13.5,25],[13.0,24],[12.5,23],[12.0,22],[11.5,21],[11.0,20],[10.5,19],[10.0,18],[9.5,17],[9.0,16],[8.5,15],[8.0,14],[7.5,13],[7.0,12],[6.5,11],[6.0,10],[5.5,9],[5.0,8],[4.5,7],[4.0,6],[3.5,5],[3.0,4],[2.5,3]],[[15.0,26],[14.5,25],[14.0,24],[13.5,23],[13.0,22],[12.5,21],[12.0,20],[11.5,19],[11.0,18],[10.5,17],[10.0,16],[9.5,15],[9.0,14],[8.5,13],[8.0,12],[7.5,11],[7.0,10],[6.5,9],[6.0,8],[5.5,7],[5.0,6],[4.5,5],[4.0,4],[3.5,3],[3.0,2],[2.5,1]]]},"situp":{"M":[[[15.0,58],[14.5,57],[14.0,56],[13.5,55],[13.0,54],[12.5,53],[12.0,52],[11.5,51],[11.0,50],[10.5,49],[10.0,48],[9.5,47],[9.0,46],[8.5,45],[8.0,44],[7.5,43],[7.0,42],[6.5,41],[6.0,40],[5.5,39],[5.0,38],[4.5,37],[4.0,36],[3.5,35],[3.0,34],[2.5,33]],[[15.0,56],[14.5,55],[14.0,54],[13.5,53],[13.0,52],[12.5,51],[12.0,50],[11.5,49],[11.0,48],[10.5,47],[10.0,46],[9.5,45],[9.0,44],[8.5,43],[8.0,42],[7.5,41],[7.0,40],[6.5,39],[6.0,38],[5.5,37],[5.0,36],[4.5,35],[4.0,34],[3.5,33],[3.0,32],[2.5,31]],[[15.0,54],[14.5,53],[14.0,52],[13.5,51],[13.0,50],[12.5,49],[12.0,48],[11.5,47],[11.0,46],[10.5,45],[10.0,44],[9.5,43],[9.0,42],[8.5,41],[8.0,40],[7.5,39],[7.0,38],[6.5,37],[6.0,36],[5.5,35],[5.0,34],[4.5,33],[4.0,32],[3.5,31],[3.0,30],[2.5,29]],[[15.0,52],[14.5,51],[14.0,50],[13.5,49],[13.0,48],[12.5,47],[12.0,46],[11.5,45],[11.0,44],[10.5,43],[10.0,42],[9.5,41],[9.0,40],[8.5,39],[8.0,38],[7.5,37],[7.0,36],[6.5,35],[6.0,34],[5.5,33],[5.0,32],[4.5,31],[4.0,30],[3.5,29],[3.0,28],[2.5,27]],[[15.0,50],[14.5,49],[14.0,48],[13.5,47],[13.0,46],[12.5,45],[12.0,44],[11.5,43],[11.0,42],[10.5,41],[10.0,40],[9.5,39],[9.0,38],[8.5,37],[8.0,36],[7.5,35],[7.0,34],[6.5,33],[6.0,32],[5.5,31],[5.0,30],[4.5,29],[4.0,28],[3.5,27],[3.0,26],[2.5,25]],[[15.0,48],[14.5,47],[14.0,46],[13.5,45],[13.0,44],[12.5,43],[12.0,42],[11.5,41],[11.0,40],[10.5,39],[10.0,38],[9.5,37],[9.0,36],[8.5,35],[8.0,34],[7.5,33],[7.0,32],[6.5,31],[6.0,30],[5.5,29],[5.0,28],[4.5,27],[4.0,26],[3.5,25],[3.0,24],[2.5,23]],[[15.0,46],[14.5,45],[14.0,44],[13.5,43],[13.0,42],[12.5,41],[12.0,40],[11.5,39],[11.0,38],[10.5,37],[10.0,36],[9.5,35],[9.0,34],[8.5,33],[8.0,32],[7.5,31],[7.0,30],[6.5,29],[6.0,28],[5.5,27],[5.0,26],[4.5,25],[4.0,24],[3.5,23],[3.0,22],[2.5,21]],[[15.0,44],[14.5,43],[14.0,42],[13.5,41],[13.0,40],[12.5,39],[12.0,38],[11.5,37],[11.0,36],[10.5,35],[10.0,34],[9.5,33],[9.0,32],[8.5,31],[8.0,30],[7.5,29],[7.0,28],[6.5,27],[6.0,26],[5.5,25],[5.0,24],[4.5,23],[4.0,22],[3.5,21],[3.0,20],[2.5,19]],[[15.0,42],[14.5,41],[14.0,40],[13.5,39],[13.0,38],[12.5,37],[12.0,36],[11.5,35],[11.0,34],[10.5,33],[10.0,32],[9.5,31],[9.0,30],[8.5,29],[8.0,28],[7.5,27],[7.0,26],[6.5,25],[6.0,24],[5.5,23],[5.0,22],[4.5,21],[4.0,20],[3.5,19],[3.0,18],[2.5,17]]],"F":[[[15.0,54],[14.5,53],[14.0,52],[13.5,51],[13.0,50],[12.5,49],[12.0,48],[11.5,47],[11.0,46],[10.5,45],[10.0,44],[9.5,43],[9.0,42],[8.5,41],[8.0,40],[7.5,39],[7.0,38],[6.5,37],[6.0,36],[5.5,35],[5.0,34],[4.5,33],[4.0,32],[3.5,31],[3.0,30],[2.5,29]],[[15.0,50],[14.5,49],[14.0,48],[13.5,47],[13.0,46],[12.5,45],[12.0,44],[11.5,43],[11.0,42],[10.5,41],[10.0,40],[9.5,39],[9.0,38],[8.5,37],[8.0,36],[7.5,35],[7.0,34],[6.5,33],[6.0,32],[5.5,31],[5.0,30],[4.5,29],[4.0,28],[3.5,27],[3.0,26],[2.5,25]],[[15.0,45],[14.5,44],[14.0,43],[13.5,42],[13.0,41],[12.5,40],[12.0,39],[11.5,38],[11.0,37],[10.5,36],[10.0,35],[9.5,34],[9.0,33],[8.5,32],[8.0,31],[7.5,30],[7.0,29],[6.5,28],[6.0,27],[5.5,26],[5.0,25],[4.5,24],[4.0,23],[3.5,22],[3.0,21],[2.5,20]],[[15.0,43],[14.5,42],[14.0,41],[13.5,40],[13.0,39],[12.5,38],[12.0,37],[11.5,36],[11.0,35],[10.5,34],[10.0,33],[9.5,32],[9.0,31],[8.5,30],[8.0,29],[7.5,28],[7.0,27],[6.5,26],[6.0,25],[5.5,24],[5.0,23],[4.5,22],[4.0,21],[3.5,20],[3.0,19],[2.5,18]],[[15.0,41],[14.5,40],[14.0,39],[13.5,38],[13.0,37],[12.5,36],[12.0,35],[11.5,34],[11.0,33],[10.5,32],[10.0,31],[9.5,30],[9.0,29],[8.5,28],[8.0,27],[7.5,26],[7.0,25],[6.5,24],[6.0,23],[5.5,22],[5.0,21],[4.5,20],[4.0,19],[3.5,18],[3.0,17],[2.5,16]],[[15.0,35],[14.5,34],[14.0,33],[13.5,32],[13.0,31],[12.5,30],[12.0,29],[11.5,28],[11.0,27],[10.5,26],[10.0,25],[9.5,24],[9.0,23],[8.5,22],[8.0,21],[7.5,20],[7.0,19],[6.5,18],[6.0,17],[5.5,16],[5.0,15],[4.5,14],[4.0,13],[3.5,12],[3.0,11],[2.5,10]],[[15.0,34],[14.5,33],[14.0,32],[13.5,31],[13.0,30],[12.5,29],[12.0,28],[11.5,27],[11.0,26],[10.5,25],[10.0,24],[9.5,23],[9.0,22],[8.5,21],[8.0,20],[7.5,19],[7.0,18],[6.5,17],[6.0,16],[5.5,15],[5.0,14],[4.5,13],[4.0,12],[3.5,11],[3.0,10],[2.5,9]],[[15.0,32],[14.5,31],[14.0,30],[13.5,29],[13.0,28],[12.5,27],[12.0,26],[11.5,25],[11.0,24],[10.5,23],[10.0,22],[9.5,21],[9.0,20],[8.5,19],[8.0,18],[7.5,17],[7.0,16],[6.5,15],[6.0,14],[5.5,13],[5.0,12],[4.5,11],[4.0,10],[3.5,9],[3.0,8],[2.5,7]],[[15.0,31],[14.5,30],[14.0,29],[13.5,28],[13.0,27],[12.5,26],[12.0,25],[11.5,24],[11.0,23],[10.5,22],[10.0,21],[9.5,20],[9.0,19],[8.5,18],[8.0,17],[7.5,16],[7.0,15],[6.5,14],[6.0,13],[5.5,12],[5.0,11],[4.5,10],[4.0,9],[3.5,8],[3.0,7],[2.5,6]]]},"clrc":{"M":[[[15.0,60],[14.5,59],[14.0,58],[13.5,57],[13.0,56],[12.5,55],[12.0,54],[11.5,53],[11.0,52],[10.5,51],[10.0,50],[9.5,49],[9.0,48],[8.5,47],[8.0,46],[7.5,45],[7.0,44],[6.5,43],[6.0,42],[5.5,41],[5.0,40],[4.5,39],[4.0,38],[3.5,37],[3.0,36],[2.5,35]],[[15.0,58],[14.5,57],[14.0,56],[13.5,55],[13.0,54],[12.5,53],[12.0,52],[11.5,51],[11.0,50],[10.5,49],[10.0,48],[9.5,47],[9.0,46],[8.5,45],[8.0,44],[7.5,43],[7.0,42],[6.5,41],[6.0,40],[5.5,39],[5.0,38],[4.5,37],[4.0,36],[3.5,35],[3.0,34],[2.5,33]],[[15.0,56],[14.5,55],[14.0,54],[13.5,53],[13.0,52],[12.5,51],[12.0,50],[11.5,49],[11.0,48],[10.5,47],[10.0,46],[9.5,45],[9.0,44],[8.5,43],[8.0,42],[7.5,41],[7.0,40],[6.5,39],[6.0,38],[5.5,37],[5.0,36],[4.5,35],[4.0,34],[3.5,33],[3.0,32],[2.5,31]],[[15.0,54],[14.5,53],[14.0,52],[13.5,51],[13.0,50],[12.5,49],[12.0,48],[11.5,47],[11.0,46],[10.5,45],[10.0,44],[9.5,43],[9.0,42],[8.5,41],[8.0,40],[7.5,39],[7.0,38],[6.5,37],[6.0,36],[5.5,35],[5.0,34],[4.5,33],[4.0,32],[3.5,31],[3.0,30],[2.5,29]],[[15.0,52],[14.5,51],[14.0,50],[13.5,49],[13.0,48],[12.5,47],[12.0,46],[11.5,45],[11.0,44],[10.5,43],[10.0,42],[9.5,41],[9.0,40],[8.5,39],[8.0,38],[7.5,37],[7.0,36],[6.5,35],[6.0,34],[5.5,33],[5.0,32],[4.5,31],[4.0,30],[3.5,29],[3.0,28],[2.5,27]],[[15.0,50],[14.5,49],[14.0,48],[13.5,47],[13.0,46],[12.5,45],[12.0,44],[11.5,43],[11.0,42],[10.5,41],[10.0,40],[9.5,39],[9.0,38],[8.5,37],[8.0,36],[7.5,35],[7.0,34],[6.5,33],[6.0,32],[5.5,31],[5.0,30],[4.5,29],[4.0,28],[3.5,27],[3.0,26],[2.5,25]],[[15.0,48],[14.5,47],[14.0,46],[13.5,45],[13.0,44],[12.5,43],[12.0,42],[11.5,41],[11.0,40],[10.5,39],[10.0,38],[9.5,37],[9.0,36],[8.5,35],[8.0,34],[7.5,33],[7.0,32],[6.5,31],[6.0,30],[5.5,29],[5.0,28],[4.5,27],[4.0,26],[3.5,25],[3.0,24],[2.5,23]],[[15.0,46],[14.5,45],[14.0,44],[13.5,43],[13.0,42],[12.5,41],[12.0,40],[11.5,39],[11.0,38],[10.5,37],[10.0,36],[9.5,35],[9.0,34],[8.5,33],[8.0,32],[7.5,31],[7.0,30],[6.5,29],[6.0,28],[5.5,27],[5.0,26],[4.5,25],[4.0,24],[3.5,23],[3.0,22],[2.5,21]],[[15.0,44],[14.5,43],[14.0,42],[13.5,41],[13.0,40],[12.5,39],[12.0,38],[11.5,37],[11.0,36],[10.5,35],[10.0,34],[9.5,33],[9.0,32],[8.5,31],[8.0,30],[7.5,29],[7.0,28],[6.5,27],[6.0,26],[5.5,25],[5.0,24],[4.5,23],[4.0,22],[3.5,21],[3.0,20],[2.5,19]]],"F":[[[15.0,58],[14.5,57],[14.0,56],[13.5,55],[13.0,54],[12.5,53],[12.0,52],[11.5,51],[11.0,50],[10.5,49],[10.0,48],[9.5,47],[9.0,46],[8.5,45],[8.0,44],[7.5,43],[7.0,42],[6.5,41],[6.0,40],[5.5,39],[5.0,38],[4.5,37],[4.0,36],[3.5,35],[3.0,34],[2.5,33]],[[15.0,56],[14.5,55],[14.0,54],[13.5,53],[13.0,52],[12.5,51],[12.0,50],[11.5,49],[11.0,48],[10.5,47],[10.0,46],[9.5,45],[9.0,44],[8.5,43],[8.0,42],[7.5,41],[7.0,40],[6.5,39],[6.0,38],[5.5,37],[5.0,36],[4.5,35],[4.0,34],[3.5,33],[3.0,32],[2.5,31]],[[15.0,54],[14.5,53],[14.0,52],[13.5,51],[13.0,50],[12.5,49],[12.0,48],[11.5,47],[11.0,46],[10.5,45],[10.0,44],[9.5,43],[9.0,42],[8.5,41],[8.0,40],[7.5,39],[7.0,38],[6.5,37],[6.0,36],[5.5,35],[5.0,34],[4.5,33],[4.0,32],[3.5,31],[3.0,30],[2.5,29]],[[15.0,52],[14.5,51],[14.0,50],[13.5,49],[13.0,48],[12.5,47],[12.0,46],[11.5,45],[11.0,44],[10.5,43],[10.0,42],[9.5,41],[9.0,40],[8.5,39],[8.0,38],[7.5,37],[7.0,36],[6.5,35],[6.0,34],[5.5,33],[5.0,32],[4.5,31],[4.0,30],[3.5,29],[3.0,28],[2.5,27]],[[15.0,50],[14.5,49],[14.0,48],[13.5,47],[13.0,46],[12.5,45],[12.0,44],[11.5,43],[11.0,42],[10.5,41],[10.0,40],[9.5,39],[9.0,38],[8.5,37],[8.0,36],[7.5,35],[7.0,34],[6.5,33],[6.0,32],[5.5,31],[5.0,30],[4.5,29],[4.0,28],[3.5,27],[3.0,26],[2.5,25]],[[15.0,48],[14.5,47],[14.0,46],[13.5,45],[13.0,44],[12.5,43],[12.0,42],[11.5,41],[11.0,40],[10.5,39],[10.0,38],[9.5,37],[9.0,36],[8.5,35],[8.0,34],[7.5,33],[7.0,32],[6.5,31],[6.0,30],[5.5,29],[5.0,28],[4.5,27],[4.0,26],[3.5,25],[3.0,24],[2.5,23]],[[15.0,46],[14.5,45],[14.0,44],[13.5,43],[13.0,42],[12.5,41],[12.0,40],[11.5,39],[11.0,38],[10.5,37],[10.0,36],[9.5,35],[9.0,34],[8.5,33],[8.0,32],[7.5,31],[7.0,30],[6.5,29],[6.0,28],[5.5,27],[5.0,26],[4.5,25],[4.0,24],[3.5,23],[3.0,22],[2.5,21]],[[15.0,44],[14.5,43],[14.0,42],[13.5,41],[13.0,40],[12.5,39],[12.0,38],[11.5,37],[11.0,36],[10.5,35],[10.0,34],[9.5,33],[9.0,32],[8.5,31],[8.0,30],[7.5,29],[7.0,28],[6.5,27],[6.0,26],[5.5,25],[5.0,24],[4.5,23],[4.0,22],[3.5,21],[3.0,20],[2.5,19]],[[15.0,42],[14.5,41],[14.0,40],[13.5,39],[13.0,38],[12.5,37],[12.0,36],[11.5,35],[11.0,34],[10.5,33],[10.0,32],[9.5,31],[9.0,30],[8.5,29],[8.0,28],[7.5,27],[7.0,26],[6.5,25],[6.0,24],[5.5,23],[5.0,22],[4.5,21],[4.0,20],[3.5,19],[3.0,18],[2.5,17]]]},"plank":{"M":[[[15.0,220],[14.5,215],[14.0,210],[13.5,205],[13.0,200],[12.5,195],[12.0,190],[11.5,185],[11.0,180],[10.5,175],[10.0,170],[9.5,165],[9.0,160],[8.5,155],[8.0,150],[7.5,145],[7.0,140],[6.5,135],[6.0,130],[5.5,125],[5.0,120],[4.5,115],[4.0,110],[3.5,105],[3.0,100],[2.5,95]],[[15.0,215],[14.5,210],[14.0,205],[13.5,200],[13.0,195],[12.5,190],[12.0,185],[11.5,180],[11.0,175],[10.5,170],[10.0,165],[9.5,160],[9.0,155],[8.5,150],[8.0,145],[7.5,140],[7.0,135],[6.5,130],[6.0,125],[5.5,120],[5.0,115],[4.5,110],[4.0,105],[3.5,100],[3.0,95],[2.5,90]],[[15.0,210],[14.5,205],[14.0,200],[13.5,195],[13.0,190],[12.5,185],[12.0,180],[11.5,175],[11.0,170],[10.5,165],[10.0,160],[9.5,155],[9.0,150],[8.5,145],[8.0,140],[7.5,135],[7.0,130],[6.5,125],[6.0,120],[5.5,115],[5.0,110],[4.5,105],[4.0,100],[3.5,95],[3.0,90],[2.5,85]],[[15.0,205],[14.5,200],[14.0,195],[13.5,190],[13.0,185],[12.5,180],[12.0,175],[11.5,170],[11.0,165],[10.5,160],[10.0,155],[9.5,150],[9.0,145],[8.5,140],[8.0,135],[7.5,130],[7.0,125],[6.5,120],[6.0,115],[5.5,110],[5.0,105],[4.5,100],[4.0,95],[3.5,90],[3.0,85],[2.5,80]],[[15.0,200],[14.5,195],[14.0,190],[13.5,185],[13.0,180],[12.5,175],[12.0,170],[11.5,165],[11.0,160],[10.5,155],[10.0,150],[9.5,145],[9.0,140],[8.5,135],[8.0,130],[7.5,125],[7.0,120],[6.5,115],[6.0,110],[5.5,105],[5.0,100],[4.5,95],[4.0,90],[3.5,85],[3.0,80],[2.5,75]],[[15.0,195],[14.5,190],[14.0,185],[13.5,180],[13.0,175],[12.5,170],[12.0,165],[11.5,160],[11.0,155],[10.5,150],[10.0,145],[9.5,140],[9.0,135],[8.5,130],[8.0,125],[7.5,120],[7.0,115],[6.5,110],[6.0,105],[5.5,100],[5.0,95],[4.5,90],[4.0,85],[3.5,80],[3.0,75],[2.5,70]],[[15.0,190],[14.5,185],[14.0,180],[13.5,175],[13.0,170],[12.5,165],[12.0,160],[11.5,155],[11.0,150],[10.5,145],[10.0,140],[9.5,135],[9.0,130],[8.5,125],[8.0,120],[7.5,115],[7.0,110],[6.5,105],[6.0,100],[5.5,95],[5.0,90],[4.5,85],[4.0,80],[3.5,75],[3.0,70],[2.5,65]],[[15.0,185],[14.5,180],[14.0,175],[13.5,170],[13.0,165],[12.5,160],[12.0,155],[11.5,150],[11.0,145],[10.5,140],[10.0,135],[9.5,130],[9.0,125],[8.5,120],[8.0,115],[7.5,110],[7.0,105],[6.5,100],[6.0,95],[5.5,90],[5.0,85],[4.5,80],[4.0,75],[3.5,70],[3.0,65],[2.5,60]],[[15.0,180],[14.5,175],[14.0,170],[13.5,165],[13.0,160],[12.5,155],[12.0,150],[11.5,145],[11.0,140],[10.5,135],[10.0,130],[9.5,125],[9.0,120],[8.5,115],[8.0,110],[7.5,105],[7.0,100],[6.5,95],[6.0,90],[5.5,85],[5.0,80],[4.5,75],[4.0,70],[3.5,65],[3.0,60],[2.5,55]]],"F":[[[15.0,215],[14.5,210],[14.0,205],[13.5,200],[13.0,195],[12.5,190],[12.0,185],[11.5,180],[11.0,175],[10.5,170],[10.0,165],[9.5,160],[9.0,155],[8.5,150],[8.0,145],[7.5,140],[7.0,135],[6.5,130],[6.0,125],[5.5,120],[5.0,115],[4.5,110],[4.0,105],[3.5,100],[3.0,95],[2.5,90]],[[15.0,210],[14.5,205],[14.0,200],[13.5,195],[13.0,190],[12.5,185],[12.0,180],[11.5,175],[11.0,170],[10.5,165],[10.0,160],[9.5,155],[9.0,150],[8.5,145],[8.0,140],[7.5,135],[7.0,130],[6.5,125],[6.0,120],[5.5,115],[5.0,110],[4.5,105],[4.0,100],[3.5,95],[3.0,90],[2.5,85]],[[15.0,205],[14.5,200],[14.0,195],[13.5,190],[13.0,185],[12.5,180],[12.0,175],[11.5,170],[11.0,165],[10.5,160],[10.0,155],[9.5,150],[9.0,145],[8.5,140],[8.0,135],[7.5,130],[7.0,125],[6.5,120],[6.0,115],[5.5,110],[5.0,105],[4.5,100],[4.0,95],[3.5,90],[3.0,85],[2.5,80]],[[15.0,200],[14.5,195],[14.0,190],[13.5,185],[13.0,180],[12.5,175],[12.0,170],[11.5,165],[11.0,160],[10.5,155],[10.0,150],[9.5,145],[9.0,140],[8.5,135],[8.0,130],[7.5,125],[7.0,120],[6.5,115],[6.0,110],[5.5,105],[5.0,100],[4.5,95],[4.0,90],[3.5,85],[3.0,80],[2.5,75]],[[15.0,195],[14.5,190],[14.0,185],[13.5,180],[13.0,175],[12.5,170],[12.0,165],[11.5,160],[11.0,155],[10.5,150],[10.0,145],[9.5,140],[9.0,135],[8.5,130],[8.0,125],[7.5,120],[7.0,115],[6.5,110],[6.0,105],[5.5,100],[5.0,95],[4.5,90],[4.0,85],[3.5,80],[3.0,75],[2.5,70]],[[15.0,190],[14.5,185],[14.0,180],[13.5,175],[13.0,170],[12.5,165],[12.0,160],[11.5,155],[11.0,150],[10.5,145],[10.0,140],[9.5,135],[9.0,130],[8.5,125],[8.0,120],[7.5,115],[7.0,110],[6.5,105],[6.0,100],[5.5,95],[5.0,90],[4.5,85],[4.0,80],[3.5,75],[3.0,70],[2.5,65]],[[15.0,185],[14.5,180],[14.0,175],[13.5,170],[13.0,165],[12.5,160],[12.0,155],[11.5,150],[11.0,145],[10.5,140],[10.0,135],[9.5,130],[9.0,125],[8.5,120],[8.0,115],[7.5,110],[7.0,105],[6.5,100],[6.0,95],[5.5,90],[5.0,85],[4.5,80],[4.0,75],[3.5,70],[3.0,65],[2.5,60]],[[15.0,180],[14.5,175],[14.0,170],[13.5,165],[13.0,160],[12.5,155],[12.0,150],[11.5,145],[11.0,140],[10.5,135],[10.0,130],[9.5,125],[9.0,120],[8.5,115],[8.0,110],[7.5,105],[7.0,100],[6.5,95],[6.0,90],[5.5,85],[5.0,80],[4.5,75],[4.0,70],[3.5,65],[3.0,60],[2.5,55]],[[15.0,175],[14.5,170],[14.0,165],[13.5,160],[13.0,155],[12.5,150],[12.0,145],[11.5,140],[11.0,135],[10.5,130],[10.0,125],[9.5,120],[9.0,115],[8.5,110],[8.0,105],[7.5,100],[7.0,95],[6.5,90],[6.0,85],[5.5,80],[5.0,75],[4.5,70],[4.0,65],[3.5,60],[3.0,55],[2.5,50]]]},"run":{"M":[[[50.0,805],[49.5,824],[49.0,843],[48.0,862],[47.0,881],[46.0,900],[45.0,919],[44.0,938],[43.0,957],[42.0,976],[41.0,995],[40.0,1014],[39.0,1033],[38.5,1052],[38.0,1071],[37.5,1090],[37.0,1109],[36.5,1128],[36.0,1147],[35.5,1176],[35.0,1185]],[[50.0,815],[49.5,834],[49.0,853],[48.0,872],[47.0,891],[46.0,910],[45.0,929],[44.0,948],[43.0,967],[42.0,986],[41.0,1005],[40.0,1024],[39.0,1043],[38.5,1062],[38.0,1081],[37.5,1100],[37.0,1119],[36.5,1138],[36.0,1157],[35.5,1176],[35.0,1195]],[[50.0,822],[49.5,843],[49.0,864],[48.0,885],[47.0,906],[46.0,928],[45.0,949],[44.0,970],[43.0,991],[42.0,1012],[41.0,1033],[40.0,1054],[39.0,1075],[38.5,1096],[38.0,1117],[37.5,1139],[37.0,1160],[36.5,1181],[36.0,1202],[35.5,1223],[35.0,1244]],[[50.0,836],[49.5,858],[49.0,880],[48.0,902],[47.0,924],[46.0,946],[45.0,968],[44.0,990],[43.0,1012],[42.0,1034],[41.0,1056],[40.0,1078],[39.0,1100],[38.5,1122],[38.0,1144],[37.5,1166],[37.0,1188],[36.5,1210],[36.0,1232],[35.5,1254],[35.0,1276]],[[50.0,845],[49.5,869],[49.0,893],[48.0,917],[47.0,941],[46.0,965],[45.0,989],[44.0,1013],[43.0,1037],[42.0,1061],[41.0,1085],[40.0,1108],[39.0,1132],[38.5,1156],[38.0,1180],[37.5,1204],[37.0,1228],[36.5,1252],[36.0,1276],[35.5,1300],[35.0,1324]],[[50.0,870],[49.5,894],[49.0,918],[48.0,942],[47.0,965],[46.0,989],[45.0,1013],[44.0,1037],[43.0,1061],[42.0,1085],[41.0,1109],[40.0,1132],[39.0,1156],[38.5,1180],[38.0,1204],[37.5,1228],[37.0,1252],[36.5,1275],[36.0,1299],[35.5,1323],[35.0,1347]],[[50.0,909],[49.5,932],[49.0,955],[48.0,978],[47.0,1001],[46.0,1024],[45.0,1047],[44.0,1070],[43.0,1093],[42.0,1116],[41.0,1140],[40.0,1163],[39.0,1186],[38.5,1209],[38.0,1232],[37.5,1255],[37.0,1278],[36.5,1301],[36.0,1324],[35.5,1347],[35.0,1370]],[[50.0,928],[49.5,952],[49.0,977],[48.0,1001],[47.0,1026],[46.0,1050],[45.0,1074],[44.0,1099],[43.0,1123],[42.0,1148],[41.0,1172],[40.0,1196],[39.0,1221],[38.5,1245],[38.0,1270],[37.5,1294],[37.0,1318],[36.5,1343],[36.0,1367],[35.5,1392],[35.0,1416]],[[50.0,1018],[49.5,1039],[49.0,1060],[48.0,1081],[47.0,1102],[46.0,1124],[45.0,1145],[44.0,1166],[43.0,1187],[42.0,1208],[41.0,1229],[40.0,1250],[39.0,1271],[38.5,1292],[38.0,1313],[37.5,1335],[37.0,1347],[36.5,1356],[36.0,1398],[35.5,1419],[35.0,1440]]],"F":[[[50.0,930],[49.5,960],[49.0,989],[48.0,1019],[47.0,1049],[46.0,1078],[45.0,1108],[44.0,1138],[43.0,1167],[42.0,1197],[41.0,1227],[40.0,1256],[39.0,1286],[38.5,1315],[38.0,1345],[37.5,1375],[37.0,1404],[36.5,1434],[36.0,1464],[35.5,1493],[35.0,1523]],[[50.0,955],[49.5,984],[49.0,1014],[48.0,1043],[47.0,1072],[46.0,1101],[45.0,1131],[44.0,1160],[43.0,1189],[42.0,1218],[41.0,1248],[40.0,1277],[39.0,1306],[38.5,1335],[38.0,1365],[37.5,1394],[37.0,1423],[36.5,1452],[36.0,1482],[35.5,1511],[35.0,1540]],[[50.0,970],[49.5,1000],[49.0,1031],[48.0,1061],[47.0,1091],[46.0,1121],[45.0,1152],[44.0,1182],[43.0,1212],[42.0,1242],[41.0,1273],[40.0,1303],[39.0,1333],[38.5,1363],[38.0,1394],[37.5,1424],[37.0,1454],[36.5,1484],[36.0,1515],[35.5,1545],[35.0,1575]],[[50.0,972],[49.5,1003],[49.0,1034],[48.0,1065],[47.0,1096],[46.0,1127],[45.0,1157],[44.0,1188],[43.0,1219],[42.0,1250],[41.0,1281],[40.0,1312],[39.0,1343],[38.5,1374],[38.0,1405],[37.5,1436],[37.0,1466],[36.5,1497],[36.0,1528],[35.5,1559],[35.0,1590]],[[50.0,1005],[49.5,1035],[49.0,1066],[48.0,1096],[47.0,1126],[46.0,1157],[45.0,1187],[44.0,1217],[43.0,1248],[42.0,1278],[41.0,1309],[40.0,1339],[39.0,1369],[38.5,1400],[38.0,1430],[37.5,1460],[37.0,1491],[36.5,1521],[36.0,1551],[35.5,1582],[35.0,1612]],[[50.0,1015],[49.5,1046],[49.0,1077],[48.0,1108],[47.0,1139],[46.0,1170],[45.0,1201],[44.0,1232],[43.0,1263],[42.0,1294],[41.0,1325],[40.0,1356],[39.0,1387],[38.5,1418],[38.0,1449],[37.5,1480],[37.0,1511],[36.5,1542],[36.0,1573],[35.5,1604],[35.0,1635]],[[50.0,1030],[49.5,1063],[49.0,1096],[48.0,1128],[47.0,1161],[46.0,1194],[45.0,1227],[44.0,1259],[43.0,1292],[42.0,1325],[41.0,1358],[40.0,1390],[39.0,1423],[38.5,1456],[38.0,1489],[37.5,1521],[37.0,1554],[36.5,1587],[36.0,1620],[35.5,1652],[35.0,1685]],[[50.0,1063],[49.5,1096],[49.0,1129],[48.0,1162],[47.0,1194],[46.0,1227],[45.0,1260],[44.0,1293],[43.0,1326],[42.0,1359],[41.0,1392],[40.0,1424],[39.0,1457],[38.5,1490],[38.0,1523],[37.5,1556],[37.0,1589],[36.5,1621],[36.0,1654],[35.5,1687],[35.0,1720]],[[50.0,1100],[49.5,1134],[49.0,1168],[48.0,1202],[47.0,1236],[46.0,1270],[45.0,1304],[44.0,1338],[43.0,1372],[42.0,1406],[41.0,1440],[40.0,1474],[39.0,1508],[38.5,1542],[38.0,1576],[37.5,1610],[37.0,1644],[36.5,1678],[36.0,1712],[35.5,1746],[35.0,1780]]]},"hamr":{"M":[[[50.0,87],[49.5,84],[49.0,81],[48.0,78],[47.0,75],[46.0,72],[45.0,70],[44.0,67],[43.0,65],[42.0,63],[41.0,60],[40.0,58],[39.0,56],[38.5,54],[38.0,52],[37.5,51],[37.0,49],[36.5,47],[36.0,46],[35.5,44],[35.0,42]],[[50.0,85],[49.5,82],[49.0,79],[48.0,76],[47.0,74],[46.0,71],[45.0,69],[44.0,66],[43.0,64],[42.0,62],[41.0,59],[40.0,57],[39.0,55],[38.5,53],[38.0,52],[37.5,50],[37.0,48],[36.5,46],[36.0,45],[35.5,43],[35.0,42]],[[50.0,84],[49.5,81],[49.0,78],[48.0,75],[47.0,72],[46.0,69],[45.0,66],[44.0,63],[43.0,61],[42.0,59],[41.0,56],[40.0,54],[39.0,52],[38.5,50],[38.0,48],[37.5,46],[37.0,44],[36.5,43],[36.0,41],[35.5,39],[35.0,38]],[[50.0,82],[49.5,79],[49.0,75],[48.0,72],[47.0,69],[46.0,66],[45.0,64],[44.0,61],[43.0,59],[42.0,56],[41.0,54],[40.0,52],[39.0,50],[38.5,48],[38.0,46],[37.5,44],[37.0,42],[36.5,40],[36.0,39],[35.5,37],[35.0,36]],[[50.0,81],[49.5,77],[49.0,73],[48.0,70],[47.0,67],[46.0,64],[45.0,61],[44.0,58],[43.0,56],[42.0,53],[41.0,51],[40.0,49],[39.0,47],[38.5,45],[38.0,43],[37.5,41],[37.0,39],[36.5,37],[36.0,36],[35.5,34],[35.0,32]],[[50.0,77],[49.5,73],[49.0,70],[48.0,67],[47.0,64],[46.0,61],[45.0,58],[44.0,56],[43.0,53],[42.0,51],[41.0,49],[40.0,47],[39.0,45],[38.5,43],[38.0,41],[37.5,39],[37.0,37],[36.5,36],[36.0,34],[35.5,32],[35.0,31]],[[50.0,71],[49.5,68],[49.0,65],[48.0,62],[47.0,60],[46.0,57],[45.0,55],[44.0,53],[43.0,50],[42.0,48],[41.0,46],[40.0,44],[39.0,42],[38.5,40],[38.0,39],[37.5,37],[37.0,35],[36.5,34],[36.0,32],[35.5,31],[35.0,30]],[[50.0,69],[49.5,66],[49.0,63],[48.0,60],[47.0,57],[46.0,55],[45.0,52],[44.0,50],[43.0,48],[42.0,45],[41.0,43],[40.0,41],[39.0,40],[38.5,38],[38.0,36],[37.5,34],[37.0,33],[36.5,31],[36.0,30],[35.5,28],[35.0,27]],[[50.0,65],[49.5,62],[49.0,59],[48.0,56],[47.0,54],[46.0,52],[45.0,49],[44.0,47],[43.0,45],[42.0,43],[41.0,41],[40.0,39],[39.0,38],[38.5,36],[38.0,34],[37.5,33],[37.0,31],[36.5,30],[36.0,28],[35.5,27],[35.0,26]]],"F":[[[50.0,68],[49.5,65],[49.0,61],[48.0,58],[47.0,55],[46.0,52],[45.0,49],[44.0,46],[43.0,44],[42.0,41],[41.0,39],[40.0,37],[39.0,35],[38.5,33],[38.0,31],[37.5,29],[37.0,28],[36.5,26],[36.0,24],[35.5,23],[35.0,21]],[[50.0,65],[49.5,62],[49.0,58],[48.0,55],[47.0,52],[46.0,50],[45.0,47],[44.0,44],[43.0,42],[42.0,40],[41.0,38],[40.0,36],[39.0,34],[38.5,32],[38.0,30],[37.5,28],[37.0,26],[36.5,25],[36.0,23],[35.5,22],[35.0,20]],[[50.0,63],[49.5,60],[49.0,57],[48.0,53],[47.0,51],[46.0,48],[45.0,45],[44.0,43],[43.0,40],[42.0,38],[41.0,36],[40.0,34],[39.0,32],[38.5,30],[38.0,28],[37.5,26],[37.0,25],[36.5,23],[36.0,22],[35.5,20],[35.0,19]],[[50.0,63],[49.5,60],[49.0,56],[48.0,53],[47.0,50],[46.0,47],[45.0,45],[44.0,42],[43.0,40],[42.0,37],[41.0,35],[40.0,33],[39.0,31],[38.5,29],[38.0,28],[37.5,26],[37.0,24],[36.5,23],[36.0,21],[35.5,20],[35.0,18]],[[50.0,59],[49.5,56],[49.0,53],[48.0,50],[47.0,47],[46.0,45],[45.0,42],[44.0,40],[43.0,38],[42.0,35],[41.0,33],[40.0,31],[39.0,30],[38.5,28],[38.0,26],[37.5,24],[37.0,23],[36.5,21],[36.0,20],[35.5,19],[35.0,17]],[[50.0,58],[49.5,55],[49.0,52],[48.0,49],[47.0,46],[46.0,44],[45.0,41],[44.0,39],[43.0,37],[42.0,34],[41.0,32],[40.0,30],[39.0,29],[38.5,27],[38.0,25],[37.5,23],[37.0,22],[36.5,20],[36.0,19],[35.5,18],[35.0,16]],[[50.0,57],[49.5,53],[49.0,50],[48.0,47],[47.0,44],[46.0,42],[45.0,39],[44.0,37],[43.0,35],[42.0,32],[41.0,30],[40.0,28],[39.0,26],[38.5,25],[38.0,23],[37.5,21],[37.0,20],[36.5,18],[36.0,17],[35.5,16],[35.0,14]],[[50.0,53],[49.5,50],[49.0,47],[48.0,44],[47.0,42],[46.0,39],[45.0,37],[44.0,34],[43.0,32],[42.0,30],[41.0,28],[40.0,26],[39.0,25],[38.5,23],[38.0,21],[37.5,20],[37.0,18],[36.5,17],[36.0,15],[35.5,14],[35.0,13]],[[50.0,50],[49.5,47],[49.0,44],[48.0,41],[47.0,38],[46.0,36],[45.0,34],[44.0,32],[43.0,29],[42.0,27],[41.0,26],[40.0,24],[39.0,22],[38.5,20],[38.0,19],[37.5,18],[37.0,17],[36.5,14],[36.0,13],[35.5,12],[35.0,11]]]},"whtr":[[0.49,20.0],[0.5,19.0],[0.51,18.0],[0.52,17.0],[0.53,16.0],[0.54,15.0],[0.55,12.5],[0.56,10.0],[0.57,7.5],[0.58,5.0],[0.59,2.5]],"walk":{"M":[976,978,983,1000,1018],"F":[1042,1048,1069,1091,1133]}};
+const AGES = ['Under 25','25–29','30–34','35–39','40–44','45–49','50–54','55–59','60+'];
+const EVENT_NAMES = {pushup:'Push-ups', hrpu:'Hand-release push-ups', situp:'Sit-ups', clrc:'Cross-leg reverse crunches', plank:'Forearm plank', run:'2-mile run', hamr:'20m HAMR', walk:'2K walk'};
+
+const state = {
+  sex:'M', age:0,
+  strengthEv:'pushup', coreEv:'situp', cardioEv:'run',
+  vals:{pushup:null, hrpu:null, situp:null, clrc:null, hamr:null},
+  plankMin:null, plankSec:null,
+  runMin:null, runSec:null,
+  walkMin:null, walkSec:null,
+  heightIn:null, waistIn:null
+};
+
+const $ = id => document.getElementById(id);
+const fmtT = s => { if(s==null) return '—'; const m=Math.floor(s/60); return m+':'+String(s%60).padStart(2,'0'); };
+const fmtP = p => (p===Math.floor(p)? p.toFixed(0): p.toFixed(1));
+
+/* ---------- scoring ---------- */
+function rows(ev){ return D[ev][state.sex][state.age]; }
+
+function scoreHigher(ev, n){       // reps, shuttles, plank seconds: more is better
+  if(n==null) return {state:'empty'};
+  const R = rows(ev), min = R[R.length-1][1];
+  for(const [p,v] of R){ if(n >= v) return {state:'ok', pts:p, min}; }
+  return {state:'fail', pts:0, min};
+}
+function scoreRun(sec){            // less is better
+  if(sec==null) return {state:'empty'};
+  const R = rows('run'), max = R[R.length-1][1];
+  for(const [p,v] of R){ if(sec <= v) return {state:'ok', pts:p, max}; }
+  return {state:'fail', pts:0, max};
+}
+function walkBand(){ const g = state.age; return g<=1?0 : g<=3?1 : g<=5?2 : g<=7?3 : 4; }
+function scoreWalk(sec){
+  if(sec==null) return {state:'empty'};
+  const max = D.walk[state.sex][walkBand()];
+  return sec <= max ? {state:'pass', max} : {state:'fail', max};
+}
+function scoreWhtr(){
+  const h = state.heightIn, w = state.waistIn;
+  if(h==null || w==null || h<=0) return {state:'empty'};
+  const r = Math.round(w/h*100)/100;
+  let pts = 0;
+  if(r <= 0.49) pts = 20;
+  else { const hit = D.whtr.find(x => Math.abs(x[0]-r) < 1e-9); pts = hit ? hit[1] : 0; }
+  const risk = r <= 0.49 ? 'low' : r <= 0.54 ? 'moderate' : 'high';
+  return {state:'ok', pts, r, risk};
+}
+
+/* next-threshold hints */
+function nextHigher(ev, n){        // smallest threshold strictly above n
+  let best = null;
+  for(const [p,v] of rows(ev)){ if(v > n) best = [p,v]; else break; }
+  return best;
+}
+function nextFaster(sec){          // next faster run bracket
+  const R = rows('run');
+  let idx = R.findIndex(([p,v]) => sec <= v);
+  if(idx === -1) idx = R.length;   // failing: next target is the last row
+  if(idx === 0) return null;
+  return R[idx-1];
+}
+
+/* ---------- gauge ---------- */
+const NT = 36, CX=100, CY=96, R1=68, R2=88;
+function buildGauge(){
+  const g = $('pf-gticks'); let html='';
+  for(let i=0;i<NT;i++){
+    const a = Math.PI * (1 - i/(NT-1));
+    const x1=CX+R1*Math.cos(a), y1=CY-R1*Math.sin(a), x2=CX+R2*Math.cos(a), y2=CY-R2*Math.sin(a);
+    html += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke-width="3.6" stroke-linecap="round" data-i="${i}"/>`;
+  }
+  g.innerHTML = html;
+}
+/* tone: 'on' (normal) | 'bad' (unsatisfactory). Stroke colours come from CSS. */
+function setGauge(pct, tone){
+  $('pf-gticks').querySelectorAll('line').forEach(l=>{
+    const i = +l.dataset.i;
+    const on = pct!=null && (i/(NT-1))*100 <= pct+0.001;
+    l.classList.toggle('pf-on',     on && tone!=='bad');
+    l.classList.toggle('pf-on-bad', on && tone==='bad');
+  });
+}
+
+/* ---------- helpers ---------- */
+function pill(cls, txt){ return `<span class="pf-statuspill ${cls}"><span class="pf-dot"></span>${txt}</span>`; }
+function setSeg(id, val){ $(id).querySelectorAll('button').forEach(b=>b.classList.toggle('pf-on', b.dataset.v===val)); }
+function intOrNull(el, lo, hi){
+  if(el.value === '') return null;
+  let n = parseInt(el.value,10); if(isNaN(n)) return null;
+  n = Math.max(lo, Math.min(hi, n)); return n;
+}
+function timeVal(minV, secV){
+  if(minV==null && secV==null) return null;
+  return (minV||0)*60 + (secV||0);
+}
+function rawFloat(str){
+  if(str.trim()==='') return null;
+  const n = parseFloat(str); return isNaN(n)? null : n;
+}
+/* write to an input without clobbering what the user is actively typing —
+   preserves in-progress decimals like "69." (parses to 69, same as target) */
+function setVal(el, v){
+  const s = v==null ? '' : String(v);
+  if(el.value === s) return;
+  if(document.activeElement === el && el.value !== '' && parseFloat(el.value) === parseFloat(s)) return;
+  el.value = s;
+}
+
+/* ---------- render ---------- */
+function renderComponentCard(res, maxPts, barEl, ptsEl){
+  const bar = $(barEl), pts = $(ptsEl);
+  if(res.state==='empty'){
+    pts.innerHTML = `&mdash;<span class="pf-of"> / ${maxPts}</span>`; pts.classList.add('pf-empty');
+    bar.style.width='0%'; bar.classList.remove('pf-bad');
+  } else {
+    pts.innerHTML = `${fmtP(res.pts)}<span class="pf-of"> / ${maxPts}</span>`; pts.classList.remove('pf-empty');
+    bar.style.width = (res.pts/maxPts*100)+'%';
+    bar.classList.toggle('pf-bad', res.state==='fail');
+  }
+}
+
+function render(){
+  /* member controls */
+  setSeg('pf-seg-sex', state.sex);
+  $('pf-pills-age').querySelectorAll('button').forEach((b,i)=>b.classList.toggle('pf-on', i===state.age));
+  setSeg('pf-seg-strength', state.strengthEv);
+  setSeg('pf-seg-core', state.coreEv);
+  setSeg('pf-seg-cardio', state.cardioEv);
+
+  /* strength */
+  const sEv = state.strengthEv;
+  const sVal = state.vals[sEv];
+  setVal($('pf-in-strength'), sVal);
+  const sRes = scoreHigher(sEv, sVal);
+  renderComponentCard(sRes, 15, 'pf-bar-strength', 'pf-pts-strength');
+  const sR = rows(sEv);
+  $('pf-mm-strength').textContent = `Min ${sR[sR.length-1][1]} · Max ${sR[0][1]}`;
+  $('pf-hint-strength').className = 'pf-hint';
+  if(sRes.state==='empty') $('pf-hint-strength').textContent = 'Enter your reps';
+  else if(sRes.state==='fail'){ $('pf-hint-strength').className='pf-hint pf-bad'; $('pf-hint-strength').innerHTML = `Below minimum — need <b>${sRes.min}</b> to pass`; }
+  else { const nx = nextHigher(sEv, sVal);
+    if(!nx){ $('pf-hint-strength').className='pf-hint pf-max'; $('pf-hint-strength').textContent='Max points'; }
+    else $('pf-hint-strength').innerHTML = `+<b>${nx[1]-sVal}</b> rep${nx[1]-sVal>1?'s':''} → ${fmtP(nx[0])} pts`; }
+
+  /* core */
+  const cEv = state.coreEv;
+  const isPlank = cEv==='plank';
+  $('pf-core-reps-wrap').style.display = isPlank? 'none':'flex';
+  $('pf-core-time-wrap').style.display = isPlank? 'flex':'none';
+  $('pf-unit-core').textContent = isPlank? 'hold time' : 'reps in 1 min';
+  let cVal, cRes;
+  if(isPlank){
+    setVal($('pf-in-core-min'), state.plankMin);
+    setVal($('pf-in-core-sec'), state.plankSec);
+    cVal = timeVal(state.plankMin, state.plankSec);
+    cRes = scoreHigher('plank', cVal);
+  } else {
+    cVal = state.vals[cEv];
+    setVal($('pf-in-core'), cVal);
+    cRes = scoreHigher(cEv, cVal);
+  }
+  renderComponentCard(cRes, 15, 'pf-bar-core', 'pf-pts-core');
+  const cR = rows(cEv);
+  $('pf-mm-core').textContent = isPlank
+    ? `Min ${fmtT(cR[cR.length-1][1])} · Max ${fmtT(cR[0][1])}`
+    : `Min ${cR[cR.length-1][1]} · Max ${cR[0][1]}`;
+  $('pf-hint-core').className='pf-hint';
+  if(cRes.state==='empty') $('pf-hint-core').textContent = isPlank? 'Enter your hold time' : 'Enter your reps';
+  else if(cRes.state==='fail'){ $('pf-hint-core').className='pf-hint pf-bad'; $('pf-hint-core').innerHTML = `Below minimum — need <b>${isPlank? fmtT(cRes.min): cRes.min}</b> to pass`; }
+  else { const nx = nextHigher(cEv, cVal);
+    if(!nx){ $('pf-hint-core').className='pf-hint pf-max'; $('pf-hint-core').textContent='Max points'; }
+    else $('pf-hint-core').innerHTML = isPlank
+      ? `+<b>${nx[1]-cVal}</b> sec (${fmtT(nx[1])}) → ${fmtP(nx[0])} pts`
+      : `+<b>${nx[1]-cVal}</b> rep${nx[1]-cVal>1?'s':''} → ${fmtP(nx[0])} pts`; }
+
+  /* cardio */
+  const kEv = state.cardioEv;
+  const isWalk = kEv==='walk', isHamr = kEv==='hamr';
+  $('pf-cardio-time-wrap').style.display = isHamr? 'none':'flex';
+  $('pf-cardio-shuttle-wrap').style.display = isHamr? 'flex':'none';
+  $('pf-unit-cardio').textContent = isHamr? 'shuttles' : 'total time';
+  $('pf-walknote').style.display = isWalk? 'block':'none';
+  $('pf-lbl-cardio').innerHTML = isWalk? 'Cardio &middot; pass / fail' : 'Cardio &middot; 50 pts';
+  $('pf-pace-cardio').style.display='none';
+  let kRes;
+  if(isHamr){
+    setVal($('pf-in-cardio'), state.vals.hamr);
+    kRes = scoreHigher('hamr', state.vals.hamr);
+  } else if(isWalk){
+    setVal($('pf-in-cardio-min'), state.walkMin);
+    setVal($('pf-in-cardio-sec'), state.walkSec);
+    kRes = scoreWalk(timeVal(state.walkMin, state.walkSec));
+  } else {
+    setVal($('pf-in-cardio-min'), state.runMin);
+    setVal($('pf-in-cardio-sec'), state.runSec);
+    kRes = scoreRun(timeVal(state.runMin, state.runSec));
+  }
+  const kPts = $('pf-pts-cardio');
+  if(isWalk){
+    $('pf-barwrap-cardio').style.visibility='hidden';
+    if(kRes.state==='empty'){ kPts.innerHTML='&mdash;'; kPts.classList.add('pf-empty'); }
+    else if(kRes.state==='pass'){ kPts.innerHTML=pill('pf-p-ok','Pass'); kPts.classList.remove('pf-empty'); }
+    else { kPts.innerHTML=pill('pf-p-bad','Fail'); kPts.classList.remove('pf-empty'); }
+  } else {
+    $('pf-barwrap-cardio').style.visibility='visible';
+    renderComponentCard(kRes, 50, 'pf-bar-cardio', 'pf-pts-cardio');
+  }
+  const kHint = $('pf-hint-cardio'); kHint.className='pf-hint';
+  if(isWalk){
+    const max = D.walk[state.sex][walkBand()];
+    $('pf-mm-cardio').textContent = `Max time ${fmtT(max)}`;
+    if(kRes.state==='empty') kHint.textContent = 'Enter your walk time';
+    else if(kRes.state==='fail'){ kHint.className='pf-hint pf-bad'; kHint.innerHTML=`Over the max by <b>${fmtT(timeVal(state.walkMin,state.walkSec)-max)}</b>`; }
+    else { kHint.className='pf-hint pf-max'; kHint.innerHTML=`Under max by ${fmtT(max-timeVal(state.walkMin,state.walkSec))}`; }
+  } else if(isHamr){
+    const R = rows('hamr');
+    $('pf-mm-cardio').textContent = `Min ${R[R.length-1][1]} · Max ${R[0][1]}`;
+    if(kRes.state==='empty') kHint.textContent = 'Enter your shuttles';
+    else if(kRes.state==='fail'){ kHint.className='pf-hint pf-bad'; kHint.innerHTML=`Below minimum — need <b>${kRes.min}</b> to pass`; }
+    else { const nx = nextHigher('hamr', state.vals.hamr);
+      if(!nx){ kHint.className='pf-hint pf-max'; kHint.textContent='Max points'; }
+      else kHint.innerHTML = `+<b>${nx[1]-state.vals.hamr}</b> shuttle${nx[1]-state.vals.hamr>1?'s':''} → ${fmtP(nx[0])} pts`; }
+  } else {
+    const R = rows('run');
+    $('pf-mm-cardio').textContent = `Max pts ≤ ${fmtT(R[0][1])} · Min ${fmtT(R[R.length-1][1])}`;
+    const rsec = timeVal(state.runMin, state.runSec);
+    if(rsec){ const pc=$('pf-pace-cardio'); pc.style.display=''; pc.innerHTML = `<b>${fmtT(Math.round(rsec/2))}</b> / mi pace`; }
+    if(kRes.state==='empty') kHint.textContent = 'Enter your run time';
+    else if(kRes.state==='fail'){ kHint.className='pf-hint pf-bad'; kHint.innerHTML=`Over the slowest passing time (<b>${fmtT(kRes.max)}</b>)`; }
+    else { const sec = timeVal(state.runMin,state.runSec); const nx = nextFaster(sec);
+      if(!nx){ kHint.className='pf-hint pf-max'; kHint.textContent='Max points'; }
+      else kHint.innerHTML = `Run ≤ <b>${fmtT(nx[1])}</b> (−${sec-nx[1]}s) → ${fmtP(nx[0])} pts`; }
+  }
+
+  /* body comp */
+  const bRes = scoreWhtr();
+  renderComponentCard(bRes.state==='empty'? bRes : {state:'ok', pts:bRes.pts}, 20, 'pf-bar-body', 'pf-pts-body');
+  setVal($('pf-in-height'), state.heightIn);
+  setVal($('pf-in-waist'), state.waistIn);
+  $('pf-height-conv').textContent = state.heightIn? `${Math.floor(state.heightIn/12)}′${(state.heightIn%12).toFixed(state.heightIn%12%1?1:0)}″` : '';
+  if(bRes.state==='empty'){ $('pf-ratio-out').textContent='—'; $('pf-risk-pill').innerHTML=''; $('pf-hint-body').textContent='Enter height and waist'; $('pf-hint-body').className='pf-hint'; }
+  else {
+    $('pf-ratio-out').textContent = bRes.r.toFixed(2);
+    $('pf-risk-pill').innerHTML = bRes.risk==='low'? pill('pf-p-ok','Low risk') : bRes.risk==='moderate'? pill('pf-p-warn','Moderate risk') : pill('pf-p-bad','High risk');
+    $('pf-hint-body').className='pf-hint';
+    if(bRes.pts===20){ $('pf-hint-body').className='pf-hint pf-max'; $('pf-hint-body').textContent='Max points'; }
+    else if(state.heightIn){
+      const rowsAbove = D.whtr.filter(x=>x[1]>bRes.pts+0.001);
+      const nxt = rowsAbove.length? rowsAbove[rowsAbove.length-1] : null;
+      if(nxt){
+        const targetR = bRes.pts===0? 0.59 : nxt[0];
+        const maxWaist = Math.floor((targetR+0.004999)*state.heightIn*2)/2;
+        $('pf-hint-body').innerHTML = `Waist ≤ <b>${maxWaist}″</b> → ${fmtP(nxt[1])} pts`;
+      } else $('pf-hint-body').textContent='';
+    }
+  }
+
+  /* ---------- composite ---------- */
+  const comps = [
+    {key:'strength', res:sRes, max:15, name:EVENT_NAMES[sEv]},
+    {key:'core', res:cRes, max:15, name:EVENT_NAMES[cEv]},
+    {key:'cardio', res:kRes, max:isWalk? 0:50, name:EVENT_NAMES[kEv], walk:isWalk},
+    {key:'body', res:bRes, max:20, name:'body composition'}
+  ];
+  const missing = [], fails = [];
+  let earned = 0, possible = isWalk? 50 : 100, allIn = true;
+  for(const c of comps){
+    if(c.res.state==='empty'){ allIn=false; missing.push(c.name); continue; }
+    if(c.walk){ if(c.res.state==='fail') fails.push('2K walk over the maximum time'); continue; }
+    earned += c.res.pts || 0;
+    if(c.res.state==='fail') fails.push(`${c.name} below the component minimum`);
+  }
+
+  /* breakdown rows */
+  const bd = [['strength',sRes,15],['core',cRes,15],['cardio',kRes,50],['body',bRes,20]];
+  for(const [k,res,max] of bd){
+    if(k==='cardio' && isWalk){
+      $('pf-blbl-cardio').textContent='2K Walk';
+      $('pf-bbar-cardio').parentElement.style.visibility='hidden';
+      $('pf-bval-cardio').innerHTML = res.state==='empty'? '<span class="pf-of">—</span>'
+        : res.state==='pass'? '<span style="color:var(--ok)">PASS</span>' : '<span style="color:var(--urgent)">FAIL</span>';
+      continue;
+    }
+    if(k==='cardio'){ $('pf-blbl-cardio').textContent='Cardio'; $('pf-bbar-cardio').parentElement.style.visibility='visible'; }
+    const bar = $('pf-bbar-'+k), val = $('pf-bval-'+k);
+    if(res.state==='empty'){ bar.style.width='0%'; bar.classList.remove('pf-bad'); val.innerHTML = `—<span class="pf-of">/${max}</span>`; }
+    else { bar.style.width=(res.pts/max*100)+'%'; bar.classList.toggle('pf-bad', res.state==='fail');
+      val.innerHTML = `${fmtP(res.pts)}<span class="pf-of">/${max}</span>`; }
+  }
+
+  /* gauge + category */
+  const pct = allIn? Math.round(earned/possible*1000)/10 : null;
+  const failed = fails.length>0;
+  let cat, catCls, tone;
+  if(!allIn){ cat='Awaiting inputs'; catCls='pf-p-mute'; tone='on'; }
+  else if(failed){ cat='Unsatisfactory'; catCls='pf-p-bad'; tone='bad'; }
+  else if(pct>=90){ cat='Excellent'; catCls='pf-p-ok'; tone='on'; }
+  else if(pct>=75){ cat='Satisfactory'; catCls='pf-p-warn'; tone='on'; }
+  else { cat='Unsatisfactory'; catCls='pf-p-bad'; tone='bad'; }
+  const gn = $('pf-gnum');
+  gn.textContent = pct==null? '—' : fmtP(pct);
+  gn.classList.toggle('pf-mute', pct==null);
+  gn.classList.toggle('pf-bad', pct!=null && tone==='bad');
+  $('pf-gcap').textContent = isWalk? 'COMPOSITE (SCALED)' : 'COMPOSITE / 100';
+  setGauge(pct, tone);
+  $('pf-catwrap').innerHTML = pill(catCls, cat);
+
+  /* messages */
+  let msgs='';
+  for(const f of fails) msgs += `<div class="pf-msg">${f} — automatic Unsatisfactory.</div>`;
+  if(!allIn) msgs += `<div class="pf-msg pf-info">Waiting on: ${missing.join(' · ')}.</div>`;
+  $('pf-msgs').innerHTML = msgs;
+
+  /* sticky mobile readout */
+  $('pf-mnum').innerHTML = (pct==null? '—' : fmtP(pct)) + '<span class="pf-of"> / 100</span>';
+  $('pf-mcat').innerHTML = pill(catCls, cat);
+}
+
+/* ---------- wire up ---------- */
+let booted = false;
+window.pfInit = function () {
+  if (booted) return;
+  booted = true;
+
+  buildGauge();
+  const ap = $('pf-pills-age');
+  AGES.forEach((a,i)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=a; b.onclick=()=>{state.age=i; render();}; ap.appendChild(b); });
+  $('pf-seg-sex').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.sex=b.dataset.v; render();});
+  $('pf-seg-strength').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.strengthEv=b.dataset.v; render();});
+  $('pf-seg-core').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.coreEv=b.dataset.v; render();});
+  $('pf-seg-cardio').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.cardioEv=b.dataset.v; render();});
+
+  $('pf-in-strength').addEventListener('input', e=>{ state.vals[state.strengthEv]=intOrNull(e.target,0,200); render(); });
+  $('pf-st-strength-up').onclick=()=>{ const k=state.strengthEv; state.vals[k]=(state.vals[k]||0)+1; render(); };
+  $('pf-st-strength-dn').onclick=()=>{ const k=state.strengthEv; state.vals[k]=Math.max(0,(state.vals[k]||0)-1); render(); };
+
+  $('pf-in-core').addEventListener('input', e=>{ state.vals[state.coreEv]=intOrNull(e.target,0,200); render(); });
+  $('pf-st-core-up').onclick=()=>{ const k=state.coreEv; state.vals[k]=(state.vals[k]||0)+1; render(); };
+  $('pf-st-core-dn').onclick=()=>{ const k=state.coreEv; state.vals[k]=Math.max(0,(state.vals[k]||0)-1); render(); };
+  $('pf-in-core-min').addEventListener('input', e=>{ state.plankMin=intOrNull(e.target,0,9); render(); });
+  $('pf-in-core-sec').addEventListener('input', e=>{ state.plankSec=intOrNull(e.target,0,59); render(); });
+
+  $('pf-in-cardio').addEventListener('input', e=>{ state.vals.hamr=intOrNull(e.target,0,200); render(); });
+  $('pf-st-cardio-up').onclick=()=>{ state.vals.hamr=(state.vals.hamr||0)+1; render(); };
+  $('pf-st-cardio-dn').onclick=()=>{ state.vals.hamr=Math.max(0,(state.vals.hamr||0)-1); render(); };
+  $('pf-in-cardio-min').addEventListener('input', e=>{
+    const v=intOrNull(e.target,0,59);
+    if(state.cardioEv==='walk') state.walkMin=v; else state.runMin=v; render();
+  });
+  $('pf-in-cardio-sec').addEventListener('input', e=>{
+    const v=intOrNull(e.target,0,59);
+    if(state.cardioEv==='walk') state.walkSec=v; else state.runSec=v; render();
+  });
+
+  $('pf-in-height').addEventListener('input', e=>{ state.heightIn=rawFloat(e.target.value); render(); });
+  $('pf-in-waist').addEventListener('input', e=>{ state.waistIn=rawFloat(e.target.value); render(); });
+  $('pf-in-height').addEventListener('blur', ()=>{ if(state.heightIn!=null){ state.heightIn=Math.max(48,Math.min(90,state.heightIn)); render(); } });
+  $('pf-in-waist').addEventListener('blur', ()=>{ if(state.waistIn!=null){ state.waistIn=Math.max(20,Math.min(70,state.waistIn)); render(); } });
+
+  render();
+};
+})();
 </script>
 </body>
 </html>
