@@ -340,6 +340,38 @@
     .hero-bar-count .hbc-tot { color: var(--t2); font-weight: 500; }
     .hero-bar-row.overall .hero-bar-count { font-size: 13px; }
 
+    /* ──────────────────────────────────────────────
+       Category breakdown (Squadron → Stats)
+       Label and figures share a line, the track spans the full width beneath.
+       Replaces a vertical bar chart stacked on a mini-grid that showed the same
+       four numbers twice: the chart truncated its labels while the grid wrapped
+       them over three lines, and a 4th category orphaned onto its own row.
+       Giving the label the whole width fixes both, and rows stack cleanly at
+       any category count.
+    ────────────────────────────────────────────── */
+    .cat-list { display: flex; flex-direction: column; gap: 17px; }
+    .cat-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin-bottom: 7px;
+    }
+    .cat-name {
+      font-size: 12.5px; font-weight: 600; color: var(--text); min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cat-nums {
+      display: flex; align-items: baseline; gap: 9px; flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .cat-frac { font-size: 12px; font-weight: 500; color: var(--t2); }
+    /* Fixed width so the percentages align into a scannable column. */
+    .cat-pct { font-size: 13px; font-weight: 700; min-width: 38px; text-align: right; }
+    .cat-track { height: 8px; background: var(--bm); border-radius: 4px; overflow: hidden; }
+    .cat-fill {
+      height: 100%; border-radius: 4px; background: var(--text);
+      transition: width .35s ease;
+    }
+    .cat-empty { font-size: 12.5px; color: var(--t2); }
+
     /* My Tasks gauge — larger than supervisor/leadership variants.
        Scoped to #hero-member, not #mt-pane-tasks: the hero now sits above the
        sub-tabs as a direct child of the view (matching My Shop), so it is no
@@ -388,7 +420,6 @@
     .mini-cell:last-child { padding-right: 0; }
     .mini-num { font-size: 22px; font-weight: 700; letter-spacing: -.025em; line-height: 1; }
     .mini-lbl { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--t2); margin-top: 6px; }
-    .mini-frac { font-size: 10.5px; color: var(--t2); margin-top: 3px; }
 
     /* ──────────────────────────────────────────────
        Tasks
@@ -687,20 +718,15 @@
       .mini-grid {
         grid-template-columns: repeat(3, 1fr);
       }
-      .mini-grid > .mini-cell:nth-child(n+4) {
-        border-top: 1px solid var(--bm);
-        padding-top: 14px;
-        margin-top: 14px;
-      }
-      .mini-grid > .mini-cell:nth-child(4) { border-right: 1px solid var(--bm); }
-      .mini-grid > .mini-cell:nth-child(n+4):last-child { border-right: none; }
+      /* The nth-child(n+4) wrap rules that lived here existed only to patch a
+         4th category orphaning onto a second row in the category card. That card
+         no longer uses .mini-grid, and the sole remaining consumer has two cells,
+         so the rules could never match again. */
     }
 
     /* Squadron breakdown cards — full width since the two-column grid was
        dissolved (Members Most Behind is now a collapsible section of its own). */
-    .sq-breakdown .bar-chart { height: 100px; }
-    .sq-breakdown .chart-label-row { margin-bottom: 10px; }
-    .mini-num .mini-frac { margin-top: 0; margin-left: 1px; }
+    .sq-breakdown .chart-label-row { margin-bottom: 16px; }
 
     /* ── Org chart ──────────────────────────────── */
     /* #view-leadership used to be a flex column purely so #sq-rollups could take
@@ -1441,6 +1467,12 @@
     /* D4: staggered tick-gauge reveal on first render only */
     @keyframes gaugeReveal { from { stroke-width: 0; opacity: 0; } to { stroke-width: var(--gauge-sw, 2); opacity: 1; } }
     .gauge-line.animate { animation: gaugeReveal .5s ease-out both; }
+    /* The reveal staggers across 52 ticks, so it runs over a second end to end.
+       Honour a stated preference for less motion: the gauge still draws, just
+       without the sweep. */
+    @media (prefers-reduced-motion: reduce) {
+      .gauge-line.animate { animation: none; }
+    }
 
     /* ══════════════════════════════════════════════════════════════
        RESOURCES VIEW — PFRA calculator + useful links
@@ -2174,8 +2206,7 @@
           <div class="chart-label">Squadron by Category</div>
           <div class="chart-meta" id="sq-cat-meta">All — members</div>
         </div>
-        <div class="bar-chart" id="sq-cat-chart"></div>
-        <div class="mini-grid" id="sq-cat-mini"></div>
+        <div class="cat-list" id="sq-cat-list"></div>
       </div>
 
       <!-- Collapsed by default: it's a drill-down, not a headline. #sq-alerts is
@@ -3185,14 +3216,22 @@ function gauge(id, pct) {
   if (!svg) return;
   const cx=80,cy=90,ir=55,or=69,n=52;
   const filled = Math.round(n*pct/100);
-  const animate = !svg.dataset.rendered;   // D4: staggered reveal on first paint only
+  // D4: staggered reveal on first paint only — but a paint only counts as
+  // "used" if the gauge was actually on screen for it. showApp() primes every
+  // view at startup, so the shop and squadron gauges used to spend their one
+  // animation inside a display:none view and then render flat when the member
+  // finally navigated there. Deferring the flag lets each gauge animate on the
+  // first paint the user can actually see; switchView re-runs the loaders, so
+  // that paint always happens.
+  const onScreen = svg.getBoundingClientRect().width > 0;
+  const animate = !svg.dataset.rendered && onScreen;
   svg.innerHTML = Array.from({length:n},(_,i)=>{
     const rad=(180+180*i/(n-1))*Math.PI/180, c=Math.cos(rad), s=Math.sin(rad);
     const sw = i<filled?'2.6':'2';
     const anim = animate ? ` class="gauge-line animate" style="animation-delay:${i*15}ms;--gauge-sw:${sw}"` : '';
     return `<line${anim} x1="${(cx+ir*c).toFixed(2)}" y1="${(cy+ir*s).toFixed(2)}" x2="${(cx+or*c).toFixed(2)}" y2="${(cy+or*s).toFixed(2)}" stroke="${i<filled?'var(--gon)':'var(--goff)'}" stroke-width="${sw}" stroke-linecap="round"/>`;
   }).join('');
-  svg.dataset.rendered = 'true';
+  if (onScreen) svg.dataset.rendered = 'true';
 }
 
 /* ── Bar chart ──────────────────────────────────── */
@@ -3981,18 +4020,28 @@ async function loadSquadron() {
       pct:   s.total_tasks ? Math.round(parseInt(s.done_tasks) / parseInt(s.total_tasks) * 100) : 0,
     })));
 
-    // Squadron by category bar chart
-    if (Array.isArray(cats) && cats.length) {
-      barChart('sq-cat-chart', cats.map(c => ({
-        label: c.label,
-        pct:   c.total ? Math.round(parseInt(c.done) / parseInt(c.total) * 100) : 0,
-      })));
-      document.getElementById('sq-cat-mini').innerHTML = cats.map(c => {
-        return `<div class="mini-cell">
-          <div class="mini-num">${c.done}<span class="mini-frac">/${c.total}</span></div>
-          <div class="mini-lbl">${escapeHtml(c.label)}</div>
-        </div>`;
-      }).join('');
+    // Squadron by category — one row per category carrying label, count and
+    // percentage together, so nothing has to be cross-referenced between two
+    // charts. Percentage takes the health colour, matching the shop list.
+    const catList = document.getElementById('sq-cat-list');
+    if (catList) {
+      catList.innerHTML = (Array.isArray(cats) && cats.length)
+        ? cats.map(c => {
+            const done = parseInt(c.done)  || 0;
+            const tot  = parseInt(c.total) || 0;
+            const pct  = tot ? Math.round(done / tot * 100) : 0;
+            return `<div class="cat-row">
+              <div class="cat-head">
+                <div class="cat-name" title="${escapeHtml(c.label)}">${escapeHtml(c.label)}</div>
+                <div class="cat-nums">
+                  <span class="cat-frac">${done}/${tot}</span>
+                  <span class="cat-pct" style="color:${healthColor(pct)}">${pct}%</span>
+                </div>
+              </div>
+              <div class="cat-track"><div class="cat-fill" style="width:${pct}%"></div></div>
+            </div>`;
+          }).join('')
+        : '<div class="cat-empty">No categories in this cycle yet.</div>';
     }
 
     // Members most behind
