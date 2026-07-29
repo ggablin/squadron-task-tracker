@@ -172,6 +172,8 @@ npm start         # http://localhost:3000
 ```
 Seeded test accounts (local): members `becerra`/`derose`/`fowler`/`glenn`/`gradaille`/`mesa`, supervisors `ebbert`/`uzoma`, leadership `gablin`/`mcnaughton` — password = the slug, then forced change on first login. (Do NOT run `seed.js` or `import-tasks.js` against production — both are destructive.)
 
+**The preview DB is multi-shop as of 2026-07-28.** `seed.js` alone builds a *single-shop* fixture (Structures only, 10 members) — its header says as much. That shape silently hides every multi-shop bug: the leadership shop switcher has nothing to switch to, roll-up ordering can't be distinguished, and cross-shop authorization can't be exercised without hand-built scaffolding. The preview DB has since had `import-members.js` run over the top of the seed (`DATABASE_URL=<preview> node import-members.js`, reading `../Members.xlsx`), giving **10 shops / 61 active members**. Keep it that way; re-running bare `seed.js` reverts to the one-shop fixture. The 51 imported accounts got random one-time passwords printed only to that run's stdout — use the ten seeded accounts above for testing, whose passwords the import preserved.
+
 **Note on the SSL heuristic:** `server.js`/scripts enable Postgres SSL only when `DATABASE_URL` includes the substring `railway`. Railway's public proxy host is `*.rlwy.net` (no "railway"), so connecting a local process to the Railway DB can hit an SSL mismatch — a local Postgres (SSL off) is the clean path.
 
 ---
