@@ -29,7 +29,7 @@ Attendance is the first thing in My Shop that is both **supervisor-only** and an
 | Decision | Choice |
 |---|---|
 | Record role | **Both** — tally for transcription *and* squadron historical reference |
-| Granularity | **Per UTA period**, count varies by cycle (4 for a two-day UTA, 6 for Fri–Sun) |
+| Granularity | **Per UTA period**, count varies by cycle: 4 for a two-day UTA, 6 for Fri–Sun, 8 for an occasional four-day drill. Read from the cycle, never assumed |
 | Status set | `present`, `excused`, `unexcused`, `ruta`, `at`, `deployed` |
 | Unmarked state | **No row = unmarked.** There is no `unmarked` status and no implicit "present" |
 | Placement | **Button row in My Shop**, beside Records — *not* a fourth sub-tab |
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS attendance (
   uta_cycle_id  INTEGER NOT NULL REFERENCES uta_cycles(id),
   member_id     INTEGER NOT NULL REFERENCES members(id),
   shop_id       INTEGER REFERENCES shops(id),
-  period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 6),
+  period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 12),
   status        VARCHAR(12) NOT NULL CHECK (status IN
                   ('present','excused','unexcused','ruta','at','deployed')),
   note          TEXT,
@@ -98,7 +98,9 @@ Goes in the existing idempotent `DO $$ ... EXCEPTION WHEN others THEN NULL; END 
 
 **No row means unmarked.** There is deliberately no `unmarked` enum value. If an unmarked period defaulted to "present," a supervisor who never opened the app would generate a clean full-attendance record for their entire shop, and nobody could tell the difference between "everyone showed up" and "nobody reported." Row-presence-as-marked is also what makes the leadership coverage card (§7.4) possible.
 
-**`period_count` on the cycle.** UTAs are not uniformly two days. A Fri–Sun drill has six periods. Nothing in the schema, API, or UI may hard-code 4 — the count is read from the cycle everywhere. The `BETWEEN 1 AND 6` check is a sanity ceiling, not a statement that six is the true maximum; a longer drill means raising that bound and `period`'s upper limit in one place.
+**`period_count` on the cycle.** UTAs are not a fixed length: two days is four periods, Fri–Sun is six, and an occasional four-day drill is eight. Nothing in the schema, API, or UI may hard-code any of those — the count is read from the cycle everywhere, and every loop, denominator, and export column derives from it.
+
+The two-layer validation matters here. The `CHECK (period BETWEEN 1 AND 12)` is only a garbage guard, deliberately loose enough that no realistic drill length ever requires a migration; it is **not** the real limit. The real limit is enforced in the API, which rejects any `period > cycle.period_count`. Putting the true bound in the database would mean a schema change every time drill length varies, which is precisely the trap this design exists to avoid.
 
 **`shop_id` snapshotted.** Deriving the shop by joining through `members` would silently re-attribute a member's past attendance to their new shop the day they transfer. One column preserves correct history, which the "reference later" requirement depends on.
 
@@ -139,7 +141,7 @@ Replaces the My Shop content area; back chevron returns to the tabs.
 - **Mark all present** — one tap, fills unmarked rows for the visible period only.
 - **Member list** — one full-width row per active shop member, status shown as a colored chip. Colour encodes *whether it needs follow-up*, not merely whether the member was there: quiet/`--ok` for `present`; amber/`--warn` for `excused`, `ruta`, `at`, `deployed` (absent but authorized); red/`--urgent` for `unexcused` alone; outline for unmarked. Ten identical dropdowns communicate nothing at a glance; ten chips make the exceptions visible without reading.
 - **Status sheet** — tapping a chip opens the existing `.modal-sheet` with the six statuses and an optional note field.
-- **Summary grid** — read-only members × periods with single-letter codes, for confirming nothing is missing and for reading across during transcription.
+- **Summary grid** — read-only members × periods with single-letter codes, for confirming nothing is missing and for reading across during transcription. It must sit in its own `overflow-x: auto` container: a name column plus eight single-character columns still fits a 375px screen, but only just, and the grid is the one element here whose width grows with drill length. Scoping the scroll to the grid means a longer drill degrades into a swipeable table instead of making the whole page scroll sideways.
 - **Export** — Copy (TSV to clipboard, pastes straight into Excel) and Download CSV. Both generated client-side from data already loaded; no endpoint.
 
 ### 7.3 Why per-period rather than a grid
@@ -174,8 +176,8 @@ One card on the Squadron tab, inside the existing leadership-gated `#sq-rollups`
 
 Following the split already in the repo:
 
-- **`lib/attendance.js` (pure, unit-tested):** period-label derivation from `start_date` + `period_count` (covering both 4- and 6-period cycles and a non-Friday start), coverage math, and the "fill unmarked only" set logic.
-- **Endpoint tests** via the existing `test/helpers/db.js` harness: supervisor cannot write outside their shop; leadership can; archived cycles reject writes; upsert is idempotent; bulk present does not overwrite an existing exception.
+- **`lib/attendance.js` (pure, unit-tested):** period-label derivation from `start_date` + `period_count` — covering 4-, 6-, and 8-period cycles and a non-Friday start, since drill length is the one input most likely to be assumed constant by mistake — plus coverage math and the "fill unmarked only" set logic.
+- **Endpoint tests** via the existing `test/helpers/db.js` harness: supervisor cannot write outside their shop; leadership can; archived cycles reject writes; upsert is idempotent; bulk present does not overwrite an existing exception; **a period above the cycle's `period_count` is rejected, and period 8 is accepted on an 8-period cycle.** That last pair is the regression guard against re-introducing a fixed period ceiling.
 
 **Prerequisite:** the suite requires `TEST_DATABASE_URL`, which is currently unset — `npm test` fails on import for every file today, on master as well as any branch. This must be set before implementation, since unlike the PFRA work this feature has real server-side logic worth testing.
 
@@ -189,7 +191,7 @@ Following the split already in the repo:
 ## 12. Confirmed assumptions (approved 2026-07-28)
 
 1. The Excel is both a tally for official transcription and a squadron historical reference.
-2. Attendance is recorded per UTA period; a cycle has 4 or 6 periods depending on whether the drill is two or three days.
+2. Attendance is recorded per UTA period at two periods per day, so a cycle has 4, 6, or occasionally 8 periods for a two-, three-, or four-day drill. Any even count is supported without a schema change; only the API's `period <= period_count` check bounds it.
 3. The status vocabulary is exactly: present, excused, unexcused, RUTA, AT, deployed.
 4. Supervisors mark their own shop; leadership may mark any shop via the existing switcher.
 5. Members do not see their own attendance in v1.
