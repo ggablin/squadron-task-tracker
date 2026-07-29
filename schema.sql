@@ -145,8 +145,19 @@ DO $$ BEGIN
   -- Drill length in half-days. Derived from start_date/end_date on write, never
   -- typed. Default 4 covers legacy rows whose dates were never captured.
   ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS period_count SMALLINT DEFAULT 4;
+  -- A scheduled event authored for N shops writes N rows. event_group_id ties
+  -- them together so it can be edited or deleted as the one event it is;
+  -- without it, dropping a shop from an event's audience is unexpressible.
+  -- Legacy rows keep NULL and behave as standalone, which is what they are.
+  ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS event_group_id INTEGER;
+  -- squadron_events already carries kind and the timeline renders it as a pill.
+  -- Mirroring it here means switching an event's audience from All to a shop
+  -- no longer silently discards the value.
+  ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS kind VARCHAR(20);
 EXCEPTION WHEN others THEN NULL;
 END $$;
+
+CREATE INDEX IF NOT EXISTS idx_shop_events_group ON shop_events (event_group_id);
 
 -- C7/TB1: dedupe constraint for additive task sync. Idempotent/collision-safe —
 -- skips silently if it already exists OR if legacy duplicate (member, category,
