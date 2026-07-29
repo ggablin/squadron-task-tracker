@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const cycles = require('./lib/cycles');
+const attendance = require('./lib/attendance');
 const batches = require('./lib/batches');
 const records = require('./lib/records');
 const app = express();
@@ -104,6 +105,21 @@ app.use(session({
       EXCEPTION WHEN others THEN NULL;
       END $$;
       CREATE UNIQUE INDEX IF NOT EXISTS uta_cycles_one_current ON uta_cycles (is_current) WHERE is_current;
+      ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS period_count SMALLINT DEFAULT 4;
+      CREATE TABLE IF NOT EXISTS attendance (
+        id            SERIAL PRIMARY KEY,
+        uta_cycle_id  INTEGER NOT NULL REFERENCES uta_cycles(id),
+        member_id     INTEGER NOT NULL REFERENCES members(id),
+        shop_id       INTEGER REFERENCES shops(id),
+        period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 12),
+        status        VARCHAR(12) NOT NULL CHECK (status IN
+                        ('present','excused','unexcused','ruta','at','deployed')),
+        note          TEXT,
+        marked_by_id  INTEGER REFERENCES members(id),
+        updated_at    TIMESTAMP DEFAULT NOW(),
+        UNIQUE (uta_cycle_id, member_id, period)
+      );
+      CREATE INDEX IF NOT EXISTS idx_attendance_cycle_shop ON attendance (uta_cycle_id, shop_id);
     `);
     console.log('Migration check complete');
   } catch (e) {
@@ -566,8 +582,31 @@ app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded
   try {
     const name = (req.body.name || '').trim();
     if (!name) return res.status(400).json({ error: 'name is required' });
-    res.json(await cycles.createDraft(pool, name));
+    const { start_date, end_date } = req.body;
+    if ((start_date && !end_date) || (end_date && !start_date)) {
+      return res.status(400).json({ error: 'Provide both drill dates, or neither' });
+    }
+    if (start_date && end_date && !attendance.periodCountFromDates(start_date, end_date)) {
+      return res.status(400).json({ error: 'End date must be on or after the start date' });
+    }
+    res.json(await cycles.createDraft(pool, name, start_date, end_date));
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Set/correct a cycle's drill dates; period_count is recomputed from the span.
+app.patch('/api/cycles/:id/dates', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const { start_date, end_date } = req.body;
+    if (start_date && end_date && !attendance.periodCountFromDates(start_date, end_date)) {
+      return res.status(400).json({ error: 'End date must be on or after the start date' });
+    }
+    res.json(await cycles.setCycleDates(pool, id, start_date, end_date));
+  } catch (e) {
+    if (e.code === 'NO_CYCLE') return res.status(404).json({ error: 'No such cycle' });
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.post('/api/cycles/:id/go-live', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
@@ -892,6 +931,143 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+/* ── Attendance ──────────────────────────────────────────────────────────────
+   Supervisors mark their own shop; leadership may target any shop via the
+   ?shop_id / shop_id switcher, exactly as the shop task routes already do.
+   Writes are confined to the LIVE cycle so archived history can't be quietly
+   rewritten by a stray tap months later. */
+
+// Resolve the shop a request may act on, or null if it isn't allowed to.
+function attendanceShopId(req, requested) {
+  if (req.session.role === 'leadership') {
+    const asked = requested ? parseInt(requested, 10) : null;
+    return Number.isInteger(asked) && asked > 0 ? asked : req.session.shopId;
+  }
+  // Supervisors are pinned to their own shop; an explicit mismatch is a 403.
+  const asked = requested ? parseInt(requested, 10) : null;
+  if (asked && asked !== req.session.shopId) return null;
+  return req.session.shopId;
+}
+
+async function loadCurrentCycle() {
+  const { rows } = await pool.query(
+    `SELECT id, name, start_date, end_date, period_count, status
+     FROM uta_cycles WHERE is_current = true LIMIT 1`);
+  return rows[0] || null;
+}
+
+app.get('/api/shop/attendance', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const shopId = attendanceShopId(req, req.query.shop_id);
+    if (!shopId) return res.status(403).json({ error: 'Forbidden' });
+    const cycle = await loadCurrentCycle();
+    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+
+    const { rows: shopRows } = await pool.query('SELECT name FROM shops WHERE id = $1', [shopId]);
+    const { rows: members } = await pool.query(
+      `SELECT id, last_name, first_name, rank FROM members
+       WHERE shop_id = $1 AND active = true ORDER BY last_name, first_name`, [shopId]);
+    const { rows } = await pool.query(
+      `SELECT member_id, period, status, note, updated_at FROM attendance
+       WHERE uta_cycle_id = $1 AND member_id = ANY($2::int[])`,
+      [cycle.id, members.map(m => m.id)]);
+
+    const periodCount = attendance.periodCountFor(cycle);
+    const memberIds = members.map(m => m.id);
+    res.json({
+      cycle: { id: cycle.id, name: cycle.name, status: cycle.status, period_count: periodCount },
+      shop_id: shopId,
+      shop_name: shopRows[0]?.name || '',
+      editable: cycle.status === 'live',
+      periods: attendance.periodLabels(cycle.start_date, periodCount),
+      members,
+      rows,
+      coverage: attendance.coverage(rows, memberIds, periodCount),
+      first_incomplete: attendance.firstIncompletePeriod(rows, memberIds, periodCount),
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.put('/api/shop/attendance', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
+  try {
+    const { member_id, period, status } = req.body;
+    const note = (req.body.note || '').trim() || null;
+    if (!attendance.isValidStatus(status)) return res.status(400).json({ error: 'Invalid status' });
+
+    const cycle = await loadCurrentCycle();
+    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+    if (cycle.status !== 'live') return res.status(403).json({ error: 'This cycle is not live' });
+    if (!attendance.isValidPeriod(period, attendance.periodCountFor(cycle))) {
+      return res.status(400).json({ error: 'Period is outside this drill' });
+    }
+
+    // Authorize against the MEMBER's shop, not a client-supplied one.
+    const { rows: mr } = await pool.query(
+      'SELECT shop_id FROM members WHERE id = $1 AND active = true', [member_id]);
+    if (!mr.length) return res.status(404).json({ error: 'Member not found' });
+    if (req.session.role !== 'leadership' && mr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO attendance (uta_cycle_id, member_id, shop_id, period, status, note, marked_by_id, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       ON CONFLICT (uta_cycle_id, member_id, period) DO UPDATE
+         SET status = EXCLUDED.status, note = EXCLUDED.note,
+             marked_by_id = EXCLUDED.marked_by_id, updated_at = NOW()
+       RETURNING member_id, period, status, note, updated_at`,
+      [cycle.id, member_id, mr[0].shop_id, period, status, note, req.session.memberId]);
+    res.json(rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Fill one period's UNMARKED members with 'present'. Never overwrites an
+// exception already recorded — that's what ON CONFLICT DO NOTHING buys us.
+app.post('/api/shop/attendance/present', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
+  try {
+    const shopId = attendanceShopId(req, req.body.shop_id);
+    if (!shopId) return res.status(403).json({ error: 'Forbidden' });
+    const cycle = await loadCurrentCycle();
+    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+    if (cycle.status !== 'live') return res.status(403).json({ error: 'This cycle is not live' });
+    const period = Number(req.body.period);
+    if (!attendance.isValidPeriod(period, attendance.periodCountFor(cycle))) {
+      return res.status(400).json({ error: 'Period is outside this drill' });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO attendance (uta_cycle_id, member_id, shop_id, period, status, marked_by_id, updated_at)
+       SELECT $1, m.id, m.shop_id, $2, 'present', $3, NOW()
+       FROM members m WHERE m.shop_id = $4 AND m.active = true
+       ON CONFLICT (uta_cycle_id, member_id, period) DO NOTHING
+       RETURNING member_id, period, status, note, updated_at`,
+      [cycle.id, period, req.session.memberId, shopId]);
+    res.json({ created: rows.length, rows });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Which shops still owe attendance for the live cycle.
+app.get('/api/squadron/attendance', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const cycle = await loadCurrentCycle();
+    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+    const periodCount = attendance.periodCountFor(cycle);
+    const { rows } = await pool.query(
+      `SELECT s.id, s.name,
+              COUNT(DISTINCT m.id)::int AS member_count,
+              COUNT(DISTINCT (a.member_id, a.period))
+                FILTER (WHERE a.period <= $2)::int AS marked
+       FROM shops s
+       LEFT JOIN members m ON m.shop_id = s.id AND m.active = true
+       LEFT JOIN attendance a ON a.member_id = m.id AND a.uta_cycle_id = $1
+       GROUP BY s.id, s.name ORDER BY s.name`, [cycle.id, periodCount]);
+    res.json({
+      cycle: { id: cycle.id, name: cycle.name, period_count: periodCount },
+      shops: rows.map(r => ({ ...r, total: r.member_count * periodCount }))
+                 .sort((x, y) => (x.marked / (x.total || 1)) - (y.marked / (y.total || 1))),
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── Squadron Timeline (all members) ──────────────────────────────────────────

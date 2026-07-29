@@ -846,21 +846,45 @@ async function undoLastBatchFromSuccess() {
   go('home');
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 async function createCycle() {
   const name = prompt('New cycle name', 'Aug 2026 UTA');
   if (!name || !name.trim()) return;
+
+  // Drill dates drive the attendance period count (two periods per drill day)
+  // and the period labels. They're optional — skip both and the cycle falls
+  // back to a 4-period drill with unnamed periods — but entering them is what
+  // makes a 3- or 4-day UTA work correctly.
+  const start = prompt('Drill START date (YYYY-MM-DD) — leave blank to skip', '');
+  let startDate = (start || '').trim() || null;
+  let endDate = null;
+  if (startDate) {
+    if (!ISO_DATE.test(startDate)) { toast('Start date must look like 2026-08-07'); return; }
+    const end = prompt('Drill END date (YYYY-MM-DD)', startDate);
+    endDate = (end || '').trim() || null;
+    if (!endDate || !ISO_DATE.test(endDate)) { toast('End date must look like 2026-08-09'); return; }
+    if (endDate < startDate) { toast('End date must be on or after the start date'); return; }
+  }
+
   try {
     const res = await fetch('/api/cycles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim() }),
+      body: JSON.stringify({ name: name.trim(), start_date: startDate, end_date: endDate }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       toast(body.message || body.error || 'Could not create cycle');
       return;
     }
-    toast(`${name.trim()} created as a draft`);
+    // Echo the derived drill length back so a mistyped date is obvious now,
+    // rather than at drill when a period is missing from attendance.
+    const cyc = await res.json().catch(() => ({}));
+    const periods = cyc && cyc.period_count;
+    toast(startDate && periods
+      ? `${name.trim()} created as a draft · ${periods} periods (${periods / 2} drill days)`
+      : `${name.trim()} created as a draft`);
     loadHome();
   } catch (e) {
     toast('Could not create cycle — check your connection');
