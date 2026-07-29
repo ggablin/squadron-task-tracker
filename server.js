@@ -9,6 +9,7 @@ const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require
 const cycles = require('./lib/cycles');
 const attendance = require('./lib/attendance');
 const schedule = require('./lib/schedule');
+const events = require('./lib/events');
 const batches = require('./lib/batches');
 const records = require('./lib/records');
 const app = express();
@@ -713,6 +714,77 @@ app.post('/api/cycles/:id/schedule/copy-forward', requireAuth, requireRole('lead
       createdById: req.session.memberId,
     }));
     res.json(out);
+  } catch (e) { scheduleError(res, e); }
+});
+
+/* ── Work-order authoring ────────────────────────────────────────────────────
+   Same cycle-targeting and write window as the schedule routes. Work orders are
+   one row per shop, so plain ids address them; no group ref is needed. */
+
+app.get('/api/cycles/:id/work-orders', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const { rows: cyc } = await pool.query(
+      'SELECT id, name, status FROM uta_cycles WHERE id = $1', [id]);
+    if (!cyc.length) return res.status(404).json({ error: 'No such cycle' });
+    // Compare against the live cycle so rows that arrived via carry-forward can
+    // be flagged, and McNaughton doesn't re-add a job that came across already.
+    const { rows: live } = await pool.query(
+      'SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1');
+    const compareTo = live.length && live[0].id !== id ? live[0].id : null;
+    const { rows: shops } = await pool.query('SELECT id, name FROM shops ORDER BY name');
+    res.json({
+      cycle: cyc[0], shops,
+      work_orders: await events.listWorkOrders(pool, id, compareTo),
+    });
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.post('/api/cycles/:id/work-orders', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    res.json(await inTransaction(c => events.createWorkOrder(c, id, req.body, req.session.memberId)));
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.put('/api/cycles/:id/work-orders/:woId', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id), woId = reqId(req.params.woId);
+    if (!id || !woId) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    res.json(await inTransaction(c => events.updateWorkOrder(c, id, woId, req.body)));
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.delete('/api/cycles/:id/work-orders/:woId', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id), woId = reqId(req.params.woId);
+    if (!id || !woId) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    const removed = await inTransaction(c => events.deleteWorkOrder(c, id, woId));
+    if (!removed) return res.status(404).json({ error: 'No such work order' });
+    res.json({ deleted: removed });
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.post('/api/cycles/:id/work-orders/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    const from = reqId(req.body.from_cycle_id);
+    if (!from) return res.status(400).json({ error: 'from_cycle_id is required' });
+    // Same rule as the automatic carry at cycle creation: unfinished only.
+    res.json(await inTransaction(c => events.carryOpenWorkOrders(c, {
+      fromCycleId: from, toCycleId: id, createdById: req.session.memberId,
+    })));
   } catch (e) { scheduleError(res, e); }
 });
 

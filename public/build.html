@@ -436,6 +436,7 @@ button { font-family:inherit; cursor:pointer; }
     <div class="sect-tabs" role="tablist">
       <button class="sect-tab active" data-sect="tasks" onclick="switchSect('tasks')">Tasks</button>
       <button class="sect-tab" data-sect="schedule" onclick="switchSect('schedule')">Schedule</button>
+      <button class="sect-tab" data-sect="workorders" onclick="switchSect('workorders')">Work Orders</button>
     </div>
 
     <div class="sect active" id="sect-tasks">
@@ -555,6 +556,74 @@ button { font-family:inherit; cursor:pointer; }
 
       <div id="sched-list"></div>
     </div><!-- /#sect-schedule -->
+
+    <!-- ═══ SECTION: WORK ORDERS ═══
+         Open work orders arrive automatically when a cycle is created, since
+         unfinished work is outstanding either way. Those are marked so they
+         don't get added a second time by hand. -->
+    <div class="sect" id="sect-workorders">
+
+      <div class="sec-hd">
+        <div>
+          <div class="sec-title">Work Orders</div>
+          <div class="sec-sub">Unfinished work follows a new cycle automatically — add anything new here</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="chip-quick" onclick="woCopyForward()">⟳ Pull open WOs</button>
+          <button class="btn-secondary" style="padding:8px 16px" onclick="woOpenForm()">+ Add work order</button>
+        </div>
+      </div>
+
+      <div class="card card-pad" id="wo-form-card" hidden>
+        <div class="sched-form">
+          <div class="f2">
+            <div>
+              <label class="lbl" for="wf-shop">Shop</label>
+              <select id="wf-shop"></select>
+            </div>
+            <div>
+              <label class="lbl" for="wf-status">Status</label>
+              <select id="wf-status">
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="complete">Complete</option>
+              </select>
+            </div>
+          </div>
+          <div class="f2">
+            <div>
+              <label class="lbl" for="wf-num">WO number (optional)</label>
+              <input type="text" id="wf-num" placeholder="e.g. WO# 202600443">
+            </div>
+            <div>
+              <label class="lbl" for="wf-day">Day (optional)</label>
+              <select id="wf-day">
+                <option value="">— none —</option>
+                <option value="Friday">Friday</option>
+                <option value="Friday/Saturday">Friday/Saturday</option>
+                <option value="Saturday">Saturday</option>
+                <option value="Sunday">Sunday</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="lbl" for="wf-title">Title</label>
+            <input type="text" id="wf-title" placeholder="e.g. Replace bay door seal">
+          </div>
+          <div>
+            <label class="lbl" for="wf-det">Details (optional)</label>
+            <textarea id="wf-det" placeholder="What the shop needs to know"></textarea>
+          </div>
+          <div id="wo-form-err" class="hint" style="color:var(--urgent)" hidden></div>
+          <div class="builder-foot">
+            <button class="btn-primary" id="wf-save" onclick="woSave()">Save work order</button>
+            <button class="btn-secondary" onclick="woCloseForm()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="wo-list"></div>
+    </div><!-- /#sect-workorders -->
 
   </div>
 
@@ -1450,6 +1519,7 @@ function switchSect(name) {
   document.querySelectorAll('.sect').forEach(s =>
     s.classList.toggle('active', s.id === 'sect-' + name));
   if (name === 'schedule') schedLoad();
+  if (name === 'workorders') woLoad();
 }
 
 function schedCycleId() { return WORKING_CYCLE ? WORKING_CYCLE.id : null; }
@@ -1635,6 +1705,171 @@ async function schedCopyForward() {
     const out = await res.json();
     await schedLoad();
     toast(out.copied ? `${out.copied} event${out.copied !== 1 ? 's' : ''} copied from ${source.name}` : 'Nothing new to copy');
+  } catch (e) { toast(e.message); }
+}
+
+/* ══ WORK ORDERS ════════════════════════════════════════════════════════════
+   Open and in-progress work orders arrive automatically when a cycle is
+   created. They are flagged here so McNaughton doesn't add the same job twice. */
+let WO_SHOPS = [];
+let WO_ITEMS = [];
+let WO_EDIT_ID = null;
+
+const WO_STATUS_LABEL = { open: 'Open', in_progress: 'In progress', complete: 'Complete' };
+const WO_STATUS_CLASS = { open: 'bp-this', in_progress: 'bp-next', complete: 'bp-overdue' };
+
+async function woLoad() {
+  const id = schedCycleId();
+  const host = document.getElementById('wo-list');
+  if (!id) { host.innerHTML = '<div class="card sched-empty">Create a cycle first.</div>'; return; }
+  try {
+    const res = await fetch(`/api/cycles/${id}/work-orders`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not load');
+    const data = await res.json();
+    WO_SHOPS = data.shops || [];
+    WO_ITEMS = data.work_orders || [];
+    woRender();
+  } catch (e) {
+    host.innerHTML = `<div class="card sched-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function woRender() {
+  const host = document.getElementById('wo-list');
+  if (!WO_ITEMS.length) {
+    host.innerHTML = `<div class="card sched-empty">
+      No work orders on this cycle yet. Pull the open ones forward, or add one.
+    </div>`;
+    return;
+  }
+  // Grouped by shop: a supervisor owns their shop's list, so it reads that way.
+  const byShop = new Map();
+  for (const w of WO_ITEMS) {
+    const key = w.shop_name || ('Shop ' + w.shop_id);
+    if (!byShop.has(key)) byShop.set(key, []);
+    byShop.get(key).push(w);
+  }
+  let html = '';
+  for (const [shop, list] of [...byShop.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const carried = list.filter(w => w.carried).length;
+    html += `<div class="sched-day">
+      <div class="sched-day-hd">
+        <div class="sched-day-name">${escapeHtml(shop)}</div>
+        <div class="sched-day-count">${list.length} order${list.length !== 1 ? 's' : ''}${carried ? ` · ${carried} carried forward` : ''}</div>
+      </div>
+      <div class="card">${list.map(woRowHTML).join('')}</div>
+    </div>`;
+  }
+  host.innerHTML = html;
+}
+
+function woRowHTML(w) {
+  const st = WO_STATUS_LABEL[w.status] || w.status;
+  const cls = WO_STATUS_CLASS[w.status] || 'bp-this';
+  return `<div class="sched-row">
+    <div class="sched-time">${w.wo_number ? escapeHtml(w.wo_number) : '<span class="st-none">no number</span>'}</div>
+    <div class="sched-main">
+      <div class="sched-title">${escapeHtml(w.title)}</div>
+      ${w.details ? `<div class="sched-det">${escapeHtml(w.details)}</div>` : ''}
+      <div class="sched-aud">
+        <span class="batch-pill ${cls}" style="padding:3px 10px;font-size:11px">${escapeHtml(st)}</span>
+        ${w.carried ? '<span class="aud-chip">carried forward</span>' : ''}
+      </div>
+    </div>
+    <div class="sched-acts">
+      <button onclick="woOpenForm(${w.id})">Edit</button>
+      <button onclick="woDelete(${w.id})">Remove</button>
+    </div>
+  </div>`;
+}
+
+function woOpenForm(id) {
+  WO_EDIT_ID = id || null;
+  const w = id ? WO_ITEMS.find(x => x.id === id) : null;
+  const shopSel = document.getElementById('wf-shop');
+  shopSel.innerHTML = WO_SHOPS.map(s =>
+    `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  shopSel.value = w ? w.shop_id : (WO_SHOPS[0] ? WO_SHOPS[0].id : '');
+  document.getElementById('wf-status').value = w ? w.status : 'open';
+  document.getElementById('wf-num').value    = w ? (w.wo_number || '') : '';
+  document.getElementById('wf-day').value    = w && w.day ? w.day : '';
+  document.getElementById('wf-title').value  = w ? (w.title || '') : '';
+  document.getElementById('wf-det').value    = w ? (w.details || '') : '';
+  document.getElementById('wo-form-err').hidden = true;
+  document.getElementById('wf-save').textContent = id ? 'Save changes' : 'Save work order';
+  document.getElementById('wo-form-card').hidden = false;
+  document.getElementById('wf-title').focus();
+}
+function woCloseForm() {
+  document.getElementById('wo-form-card').hidden = true;
+  WO_EDIT_ID = null;
+}
+function woFormError(msg) {
+  const el = document.getElementById('wo-form-err');
+  el.textContent = msg; el.hidden = false;
+}
+
+async function woSave() {
+  const id = schedCycleId();
+  if (!id) return;
+  const title = document.getElementById('wf-title').value.trim();
+  if (!title) return woFormError('Give the work order a title.');
+  const body = {
+    shop_id: parseInt(document.getElementById('wf-shop').value, 10),
+    status: document.getElementById('wf-status').value,
+    wo_number: document.getElementById('wf-num').value.trim() || null,
+    day: document.getElementById('wf-day').value || null,
+    title,
+    details: document.getElementById('wf-det').value.trim() || null,
+  };
+  const btn = document.getElementById('wf-save');
+  btn.disabled = true;
+  try {
+    const url = WO_EDIT_ID
+      ? `/api/cycles/${id}/work-orders/${WO_EDIT_ID}`
+      : `/api/cycles/${id}/work-orders`;
+    const res = await fetch(url, {
+      method: WO_EDIT_ID ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save');
+    woCloseForm();
+    await woLoad();
+    toast(WO_EDIT_ID ? 'Work order updated' : 'Work order added');
+  } catch (e) { woFormError(e.message); }
+  finally { btn.disabled = false; }
+}
+
+async function woDelete(woId) {
+  const w = WO_ITEMS.find(x => x.id === woId);
+  if (!confirm(`Remove “${w ? w.title : 'this work order'}” from this cycle?`)) return;
+  const id = schedCycleId();
+  try {
+    const res = await fetch(`/api/cycles/${id}/work-orders/${woId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not remove');
+    await woLoad();
+    toast('Work order removed');
+  } catch (e) { toast(e.message); }
+}
+
+async function woCopyForward() {
+  const id = schedCycleId();
+  if (!id) return;
+  let cycles = [];
+  try { cycles = await fetch('/api/cycles').then(r => r.json()); } catch (e) { return toast('Could not load cycles'); }
+  const source = cycles.filter(c => c.id !== id)[0];
+  if (!source) return toast('No earlier cycle to pull from');
+  if (!confirm(`Pull open work orders forward from ${source.name}? Completed ones stay behind.`)) return;
+  try {
+    const res = await fetch(`/api/cycles/${id}/work-orders/copy-forward`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_cycle_id: source.id }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not pull');
+    const out = await res.json();
+    await woLoad();
+    toast(out.carried ? `${out.carried} work order${out.carried !== 1 ? 's' : ''} pulled forward` : 'Nothing new to pull');
   } catch (e) { toast(e.message); }
 }
 

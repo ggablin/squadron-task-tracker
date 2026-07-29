@@ -109,6 +109,42 @@ test('status is preserved on the rows selected to carry', () => {
   assert.strictEqual(e.pendingCarry(source, [])[0].status, 'in_progress');
 });
 
+// ── carried-forward marking ────────────────────────────────────────────────
+
+test('rows matching the source cycle are flagged as carried', () => {
+  // Derived by comparing carry keys, so no column and no backfill are needed.
+  const rows = [wo({ wo_number: 'WO-1' }), wo({ wo_number: 'WO-2' })];
+  const source = [{ shop_id: 1, wo_number: 'WO-1', title: 'Replace bay door seal' }];
+  const marked = e.markCarried(rows, source);
+  assert.deepStrictEqual(marked.map(r => [r.wo_number, r.carried]), [['WO-1', true], ['WO-2', false]]);
+});
+
+test('marking preserves every other field', () => {
+  const [m] = e.markCarried([wo({ status: 'in_progress', details: 'x' })], []);
+  assert.strictEqual(m.status, 'in_progress');
+  assert.strictEqual(m.details, 'x');
+  assert.strictEqual(m.carried, false);
+});
+
+test('marking with no source cycle flags nothing', () => {
+  assert.deepStrictEqual(e.markCarried([wo()], []).map(r => r.carried), [false]);
+  assert.deepStrictEqual(e.markCarried([wo()], null).map(r => r.carried), [false]);
+  assert.deepStrictEqual(e.markCarried(null, null), []);
+});
+
+// ── status validation ──────────────────────────────────────────────────────
+
+test('only the three real statuses are writable', () => {
+  for (const s of ['open', 'in_progress', 'complete']) assert.ok(e.isValidStatus(s), s);
+  for (const s of ['Open', 'done', 'closed', '', null, undefined]) assert.ok(!e.isValidStatus(s), String(s));
+});
+
+test('complete is writable even though it never carries', () => {
+  // Marking a job finished is the whole point; it just does not follow forward.
+  assert.ok(e.isValidStatus('complete'));
+  assert.ok(!e.isCarryableWorkOrder(wo({ status: 'complete' })));
+});
+
 // ── guard rails on the DB helper ───────────────────────────────────────────
 
 test('carryOpenWorkOrders refuses degenerate cycle pairs without touching the db', async () => {
