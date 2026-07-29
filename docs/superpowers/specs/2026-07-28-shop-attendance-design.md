@@ -49,7 +49,8 @@ Attendance is the first thing in My Shop that is both **supervisor-only** and an
 
 **In scope**
 - `attendance` table, `uta_cycles.period_count`, and migrations.
-- Period-label derivation from `start_date` + `period_count`.
+- **Task Builder drill-date capture (§5.2.1)** — a blocking prerequisite, not an optional extra: `createDraft` must persist `start_date`/`end_date` and derive `period_count`, or neither the count nor the period labels can be computed for any builder-created cycle.
+- Period-label derivation from `start_date` + `period_count`, with a fallback for undated cycles.
 - Attendance takeover view in My Shop: period switcher, member list, chip + sheet picker, per-period "Mark all present", read-only summary grid.
 - `.shop-tool-btn` styling; Records and Attendance as an equal-width pair on phones.
 - Four endpoints (§6), all reusing existing auth middleware.
@@ -94,6 +95,23 @@ ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS period_count SMALLINT DEFAULT 4;
 
 Goes in the existing idempotent `DO $$ ... EXCEPTION WHEN others THEN NULL; END $$;` migration block in `schema.sql`, matching how every prior column was added.
 
+**`period_count` is derived, never typed.** Drill days run two periods each, so the count is `(end_date − start_date + 1) × 2`. It is computed when the cycle's dates are set and stored on the row; no one is ever asked "how many periods does this UTA have," because a field somebody has to remember to change from 4 to 8 is a footgun that fails silently — the eight-period drill would simply show four periods and nobody would notice until attendance was already half-marked.
+
+### 5.2.1 Prerequisite: the Task Builder must capture drill dates
+
+This is a **blocking dependency discovered during design, not an enhancement.**
+
+`lib/cycles.js → createDraft(db, name)` accepts only a name and never writes `start_date` or `end_date`. A repo-wide search confirms `seed.js` is the only code path that has ever populated them. Every cycle created through `/build` therefore has NULL dates, which breaks two things in this spec:
+
+- `period_count` cannot be derived, because there is no span to derive it from.
+- Period **labels** cannot be derived either — §7.2's "UTA 3 · Saturday AM" comes from `start_date` and would render blank.
+
+The codebase already treats NULL dates as a live condition (`notify-digests.js` falls back to `new Date(0)`, `public/index.html` null-guards `uta.start_date`, and `newsletter/from-db.js`'s `fmtRange` returns `''`, meaning the generated newsletter silently prints an empty date range for builder-created cycles today).
+
+**Required change:** extend `createDraft` to accept and persist `start_date` and `end_date`, add the two date inputs to the cycle-creation form in `public/build.html`, and compute `period_count` from the span on write. This is small, it removes the hand-set footgun entirely, and it repairs the newsletter's empty date range as a side effect.
+
+**Fallback for legacy cycles.** Rows with NULL dates keep `period_count = 4` (the column default) and fall back to bare `UTA 1 … UTA n` labels with no day name. Attendance stays fully usable on an undated cycle; it just loses the "Saturday AM" affordance. No backfill is attempted, since the true dates of past cycles are not recoverable from the data.
+
 ### 5.3 Rationale for the four non-obvious choices
 
 **No row means unmarked.** There is deliberately no `unmarked` enum value. If an unmarked period defaulted to "present," a supervisor who never opened the app would generate a clean full-attendance record for their entire shop, and nobody could tell the difference between "everyone showed up" and "nobody reported." Row-presence-as-marked is also what makes the leadership coverage card (§7.4) possible.
@@ -137,7 +155,7 @@ All changes are in `public/index.html`, following the file's existing convention
 
 Replaces the My Shop content area; back chevron returns to the tabs.
 
-- **Period switcher** — prev/next through periods 1..`period_count`, labelled from `start_date` (e.g. "UTA 3 · Saturday AM"), with an `n/total marked` coverage readout.
+- **Period switcher** — prev/next through periods 1..`period_count`, labelled from `start_date` (e.g. "UTA 3 · Saturday AM"), degrading to bare "UTA 3" when the cycle has no dates (§5.2.1), with an `n/total marked` coverage readout.
 - **Mark all present** — one tap, fills unmarked rows for the visible period only.
 - **Member list** — one full-width row per active shop member, status shown as a colored chip. Colour encodes *whether it needs follow-up*, not merely whether the member was there: quiet/`--ok` for `present`; amber/`--warn` for `excused`, `ruta`, `at`, `deployed` (absent but authorized); red/`--urgent` for `unexcused` alone; outline for unmarked. Ten identical dropdowns communicate nothing at a glance; ten chips make the exceptions visible without reading.
 - **Status sheet** — tapping a chip opens the existing `.modal-sheet` with the six statuses and an optional note field.
@@ -171,12 +189,14 @@ One card on the Squadron tab, inside the existing leadership-gated `#sq-rollups`
 | Write fails (no signal) | Chip reverts, `showToast` reports it. Idempotent upsert means retry is safe. |
 | No signal at all | **Not handled in v1.** No offline queue. A shop bay with no bars is a walk-ten-feet problem, not an architecture problem. Revisit only if it actually bites. |
 | `period_count` changed after marking | Rows above the new count are retained but hidden; no destructive cleanup. |
+| Cycle has NULL `start_date` (legacy, or built before §5.2.1 lands) | `period_count` stays 4; labels degrade to bare "UTA n". Marking, export, and coverage all work normally. |
+| Drill dates edited after marking | `period_count` recomputes. If it shrinks, existing rows above it are hidden, not deleted, so restoring the dates restores the marks. |
 
 ## 10. Testing
 
 Following the split already in the repo:
 
-- **`lib/attendance.js` (pure, unit-tested):** period-label derivation from `start_date` + `period_count` — covering 4-, 6-, and 8-period cycles and a non-Friday start, since drill length is the one input most likely to be assumed constant by mistake — plus coverage math and the "fill unmarked only" set logic.
+- **`lib/attendance.js` (pure, unit-tested):** period-label derivation from `start_date` + `period_count` — covering 4-, 6-, and 8-period cycles and a non-Friday start, since drill length is the one input most likely to be assumed constant by mistake — plus **the NULL-`start_date` fallback to bare "UTA n"**, `period_count` derivation from a date span, coverage math, and the "fill unmarked only" set logic.
 - **Endpoint tests** via the existing `test/helpers/db.js` harness: supervisor cannot write outside their shop; leadership can; archived cycles reject writes; upsert is idempotent; bulk present does not overwrite an existing exception; **a period above the cycle's `period_count` is rejected, and period 8 is accepted on an 8-period cycle.** That last pair is the regression guard against re-introducing a fixed period ceiling.
 
 **Prerequisite:** the suite requires `TEST_DATABASE_URL`, which is currently unset — `npm test` fails on import for every file today, on master as well as any branch. This must be set before implementation, since unlike the PFRA work this feature has real server-side logic worth testing.
@@ -191,8 +211,9 @@ Following the split already in the repo:
 ## 12. Confirmed assumptions (approved 2026-07-28)
 
 1. The Excel is both a tally for official transcription and a squadron historical reference.
-2. Attendance is recorded per UTA period at two periods per day, so a cycle has 4, 6, or occasionally 8 periods for a two-, three-, or four-day drill. Any even count is supported without a schema change; only the API's `period <= period_count` check bounds it.
+2. **Every drill day is exactly two periods** (confirmed 2026-07-28), so `period_count` is always `days × 2` and always even: 4, 6, or occasionally 8. Any even count is supported without a schema change; only the API's `period <= period_count` check bounds it. Because the count is a pure function of the dates, it is derived rather than entered.
 3. The status vocabulary is exactly: present, excused, unexcused, RUTA, AT, deployed.
 4. Supervisors mark their own shop; leadership may mark any shop via the existing switcher.
 5. Members do not see their own attendance in v1.
 6. Existing style tokens are correct; only the tool buttons need to be larger.
+7. Nothing currently populates `uta_cycles.start_date` outside `seed.js`. Capturing drill dates in the Task Builder (§5.2.1) is a prerequisite for this feature, not a nice-to-have.
