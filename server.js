@@ -589,7 +589,7 @@ app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded
     if (start_date && end_date && !attendance.periodCountFromDates(start_date, end_date)) {
       return res.status(400).json({ error: 'End date must be on or after the start date' });
     }
-    res.json(await cycles.createDraft(pool, name, start_date, end_date));
+    res.json(await cycles.createDraft(pool, name, start_date, end_date, req.session.memberId));
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
