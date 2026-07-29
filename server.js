@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const attendance = require('./lib/attendance');
+const schedule = require('./lib/schedule');
+const events = require('./lib/events');
 const batches = require('./lib/batches');
 const records = require('./lib/records');
 const app = express();
@@ -120,6 +122,9 @@ app.use(session({
         UNIQUE (uta_cycle_id, member_id, period)
       );
       CREATE INDEX IF NOT EXISTS idx_attendance_cycle_shop ON attendance (uta_cycle_id, shop_id);
+      ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS event_group_id INTEGER;
+      ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS kind VARCHAR(20);
+      CREATE INDEX IF NOT EXISTS idx_shop_events_group ON shop_events (event_group_id);
     `);
     console.log('Migration check complete');
   } catch (e) {
@@ -589,7 +594,7 @@ app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded
     if (start_date && end_date && !attendance.periodCountFromDates(start_date, end_date)) {
       return res.status(400).json({ error: 'End date must be on or after the start date' });
     }
-    res.json(await cycles.createDraft(pool, name, start_date, end_date));
+    res.json(await cycles.createDraft(pool, name, start_date, end_date, req.session.memberId));
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -607,6 +612,180 @@ app.patch('/api/cycles/:id/dates', requireAuth, requireRole('leadership'), requi
     if (e.code === 'NO_CYCLE') return res.status(404).json({ error: 'No such cycle' });
     console.error(e); res.status(500).json({ error: 'Server error' });
   }
+});
+
+/* ── Schedule authoring ──────────────────────────────────────────────────────
+   One event, one audience. "all" writes the squadron timeline; a shop list
+   writes those shops' schedules. lib/schedule.js owns the routing so these
+   handlers stay thin and the builder never sees two shapes.
+   Member-facing reads are untouched and still filter on is_current, so draft
+   content cannot reach members before go-live. */
+
+// Authoring targets a draft (the point) or the live cycle (mid-cycle fixes).
+// Archived cycles are readable but frozen, matching the attendance rule.
+async function loadWritableCycle(cycleId) {
+  const { rows } = await pool.query('SELECT id, name, status FROM uta_cycles WHERE id = $1', [cycleId]);
+  if (!rows.length) return { error: 404, message: 'No such cycle' };
+  if (rows[0].status === 'archived') return { error: 403, message: 'This cycle is archived' };
+  return { cycle: rows[0] };
+}
+
+async function inTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const out = await fn(client);
+    await client.query('COMMIT');
+    return out;
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+function scheduleError(res, err) {
+  if (err.code === 'BAD_REQUEST') return res.status(400).json({ error: err.message });
+  if (err.code === 'NO_EVENT')    return res.status(404).json({ error: 'No such event' });
+  console.error(err);
+  return res.status(500).json({ error: 'Server error' });
+}
+
+app.get('/api/cycles/:id/schedule', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    // 404 rather than an empty list: a mistyped cycle id should not read as
+    // "this cycle has no events yet".
+    const { rows: cyc } = await pool.query(
+      'SELECT id, name, status FROM uta_cycles WHERE id = $1', [id]);
+    if (!cyc.length) return res.status(404).json({ error: 'No such cycle' });
+    const { rows: shops } = await pool.query('SELECT id, name FROM shops ORDER BY name');
+    res.json({ cycle: cyc[0], events: await schedule.listSchedule(pool, id), shops });
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.post('/api/cycles/:id/schedule', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    const created = await inTransaction(c =>
+      schedule.createEvent(c, id, req.body, req.session.memberId));
+    res.json(created);
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.put('/api/cycles/:id/schedule/:ref', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    // An audience change crosses tables, so this is a delete + create inside
+    // one transaction and the caller gets a new ref back.
+    const updated = await inTransaction(c =>
+      schedule.updateEvent(c, id, req.params.ref, req.body, req.session.memberId));
+    res.json(updated);
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.delete('/api/cycles/:id/schedule/:ref', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    const removed = await inTransaction(c => schedule.deleteEvent(c, req.params.ref));
+    if (!removed) return res.status(404).json({ error: 'No such event' });
+    res.json({ deleted: removed });
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.post('/api/cycles/:id/schedule/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    const from = reqId(req.body.from_cycle_id);
+    if (!from) return res.status(400).json({ error: 'from_cycle_id is required' });
+    const out = await inTransaction(c => schedule.copyForward(c, {
+      fromCycleId: from, toCycleId: id,
+      refs: Array.isArray(req.body.refs) ? req.body.refs : null,
+      createdById: req.session.memberId,
+    }));
+    res.json(out);
+  } catch (e) { scheduleError(res, e); }
+});
+
+/* ── Work-order authoring ────────────────────────────────────────────────────
+   Same cycle-targeting and write window as the schedule routes. Work orders are
+   one row per shop, so plain ids address them; no group ref is needed. */
+
+app.get('/api/cycles/:id/work-orders', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const { rows: cyc } = await pool.query(
+      'SELECT id, name, status FROM uta_cycles WHERE id = $1', [id]);
+    if (!cyc.length) return res.status(404).json({ error: 'No such cycle' });
+    // Compare against the live cycle so rows that arrived via carry-forward can
+    // be flagged, and McNaughton doesn't re-add a job that came across already.
+    const { rows: live } = await pool.query(
+      'SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1');
+    const compareTo = live.length && live[0].id !== id ? live[0].id : null;
+    const { rows: shops } = await pool.query('SELECT id, name FROM shops ORDER BY name');
+    res.json({
+      cycle: cyc[0], shops,
+      work_orders: await events.listWorkOrders(pool, id, compareTo),
+    });
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.post('/api/cycles/:id/work-orders', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    res.json(await inTransaction(c => events.createWorkOrder(c, id, req.body, req.session.memberId)));
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.put('/api/cycles/:id/work-orders/:woId', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id), woId = reqId(req.params.woId);
+    if (!id || !woId) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    res.json(await inTransaction(c => events.updateWorkOrder(c, id, woId, req.body)));
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.delete('/api/cycles/:id/work-orders/:woId', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id), woId = reqId(req.params.woId);
+    if (!id || !woId) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    const removed = await inTransaction(c => events.deleteWorkOrder(c, id, woId));
+    if (!removed) return res.status(404).json({ error: 'No such work order' });
+    res.json({ deleted: removed });
+  } catch (e) { scheduleError(res, e); }
+});
+
+app.post('/api/cycles/:id/work-orders/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const gate = await loadWritableCycle(id);
+    if (gate.error) return res.status(gate.error).json({ error: gate.message });
+    const from = reqId(req.body.from_cycle_id);
+    if (!from) return res.status(400).json({ error: 'from_cycle_id is required' });
+    // Same rule as the automatic carry at cycle creation: unfinished only.
+    res.json(await inTransaction(c => events.carryOpenWorkOrders(c, {
+      fromCycleId: from, toCycleId: id, createdById: req.session.memberId,
+    })));
+  } catch (e) { scheduleError(res, e); }
 });
 
 app.post('/api/cycles/:id/go-live', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {

@@ -245,6 +245,58 @@ button { font-family:inherit; cursor:pointer; }
 .mchip.sel .rk { background:rgba(255,255,255,.18); color:rgba(255,255,255,.85); }
 [data-theme="dark"] .mchip.sel .rk { background:rgba(0,0,0,.18); color:rgba(0,0,0,.65); }
 
+/* ── SECTION NAV (Tasks | Schedule) ────────── */
+.sect-tabs { display:flex; gap:4px; background:var(--cream); border:1px solid var(--border);
+  border-radius:12px; padding:4px; margin:18px 0 4px; }
+.sect-tab { flex:1; background:transparent; border:0; border-radius:9px; padding:10px 12px;
+  font-family:inherit; font-size:13.5px; font-weight:600; color:var(--t2); cursor:pointer;
+  transition:background .15s, color .15s; }
+.sect-tab:hover { color:var(--text); }
+.sect-tab.active { background:var(--text); color:var(--bg); }
+.sect { display:none; }
+.sect.active { display:block; }
+
+/* ── SCHEDULE ──────────────────────────────────
+   One event, one audience: "All" is the squadron timeline, a shop list is
+   those shops' schedules. The list is day-grouped so a drill weekend reads
+   top to bottom the way members read it. */
+.sched-day { margin-top:18px; }
+.sched-day-hd { display:flex; align-items:baseline; gap:10px; padding:0 2px 8px; }
+.sched-day-name { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--t2); }
+.sched-day-count { font-size:11px; color:var(--t3); font-weight:600; }
+.sched-row { display:flex; align-items:flex-start; gap:14px; padding:13px 18px;
+  border-top:1px solid var(--border); }
+.sched-row:first-child { border-top:0; }
+.sched-time { flex:0 0 92px; font-size:12.5px; font-weight:700; color:var(--text);
+  font-variant-numeric:tabular-nums; padding-top:1px; }
+.sched-time .st-none { color:var(--t3); font-weight:500; }
+.sched-main { flex:1; min-width:0; }
+.sched-title { font-size:14px; font-weight:600; }
+.sched-det { font-size:12.5px; color:var(--t2); margin-top:3px; }
+.sched-aud { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+.aud-chip { font-size:11px; font-weight:600; border-radius:20px; padding:3px 10px;
+  background:var(--cream); color:var(--t2); }
+.aud-chip.aud-all { background:var(--text); color:var(--bg); }
+.sched-acts { display:flex; gap:6px; flex-shrink:0; }
+.sched-acts button { border:1px solid var(--border); background:var(--bg); border-radius:7px;
+  padding:5px 10px; font-family:inherit; font-size:11.5px; font-weight:600; color:var(--t2); cursor:pointer; }
+.sched-acts button:hover { color:var(--text); border-color:var(--bm); }
+.sched-empty { padding:26px 18px; text-align:center; font-size:13px; color:var(--t2); }
+/* On a phone the three-column row leaves the middle column ~59px, too narrow
+   for the details line to wrap into — it overflows and scrolls the page. Wrap
+   instead: time and actions share the first line, the event takes the second. */
+@media (max-width:560px) {
+  .sched-row { flex-wrap:wrap; gap:8px 12px; }
+  .sched-time { flex:0 0 auto; order:0; }
+  .sched-acts { order:1; margin-left:auto; }
+  .sched-main { flex:1 1 100%; order:2; }
+}
+
+.sched-form { display:grid; gap:14px; }
+.sched-form .f2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media (max-width:640px){ .sched-form .f2 { grid-template-columns:1fr; } }
+.aud-pick { display:flex; flex-wrap:wrap; gap:7px; }
+
 .batches-strip { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .batch-pill {
   display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:600;
@@ -381,6 +433,14 @@ button { font-family:inherit; cursor:pointer; }
       </div>
     </div>
 
+    <div class="sect-tabs" role="tablist">
+      <button class="sect-tab active" data-sect="tasks" onclick="switchSect('tasks')">Tasks</button>
+      <button class="sect-tab" data-sect="schedule" onclick="switchSect('schedule')">Schedule</button>
+      <button class="sect-tab" data-sect="workorders" onclick="switchSect('workorders')">Work Orders</button>
+    </div>
+
+    <div class="sect active" id="sect-tasks">
+
     <div class="home-grid">
       <button class="big-action ba-copy" id="ba-startfrom" onclick="startCopyForward()">
         <div class="ba-icon">⟳</div>
@@ -415,6 +475,156 @@ button { font-family:inherit; cursor:pointer; }
       </div>
     </div>
     <div class="card" id="cycle-batches"></div>
+
+    </div><!-- /#sect-tasks -->
+
+    <!-- ═══ SECTION: SCHEDULE ═══
+         Timeline and schedule are one thing here: an event plus an audience.
+         "All" writes the squadron timeline; a shop list writes those shops'
+         schedules. The list shows both together, day by day. -->
+    <div class="sect" id="sect-schedule">
+
+      <div class="sec-hd">
+        <div>
+          <div class="sec-title">Schedule</div>
+          <div class="sec-sub">One event, one audience — “All” goes on the squadron timeline, shops go on those shops’ schedules</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="chip-quick" id="sched-copy-btn" onclick="schedCopyForward()">⟳ Copy forward</button>
+          <button class="btn-secondary" style="padding:8px 16px" onclick="schedOpenForm()">+ Add event</button>
+        </div>
+      </div>
+
+      <!-- add / edit form, hidden until used -->
+      <div class="card card-pad" id="sched-form-card" hidden>
+        <div class="sched-form">
+          <div>
+            <label class="lbl" for="sf-title">Title</label>
+            <input type="text" id="sf-title" placeholder="e.g. Formation / Roll Call">
+          </div>
+          <div class="f2">
+            <div>
+              <label class="lbl" for="sf-day">Day</label>
+              <select id="sf-day">
+                <option value="Friday">Friday</option>
+                <option value="Friday/Saturday">Friday/Saturday</option>
+                <option value="Saturday">Saturday</option>
+                <option value="Sunday">Sunday</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl" for="sf-kind">Kind</label>
+              <select id="sf-kind">
+                <option value="">— none —</option>
+                <option value="formation">Formation</option>
+                <option value="training">Training</option>
+                <option value="meeting">Meeting</option>
+                <option value="briefing">Briefing</option>
+                <option value="medical">Medical</option>
+                <option value="work">Work</option>
+                <option value="admin">Admin</option>
+                <option value="lunch">Lunch</option>
+              </select>
+            </div>
+          </div>
+          <div class="f2">
+            <div>
+              <label class="lbl" for="sf-start">Start (HHMM)</label>
+              <input type="text" id="sf-start" placeholder="0800" inputmode="numeric" maxlength="4">
+            </div>
+            <div>
+              <label class="lbl" for="sf-end">End (optional)</label>
+              <input type="text" id="sf-end" placeholder="0830" inputmode="numeric" maxlength="4">
+            </div>
+          </div>
+          <div>
+            <label class="lbl" for="sf-det">Details (optional)</label>
+            <textarea id="sf-det" placeholder="What members see under the title"></textarea>
+          </div>
+          <div>
+            <label class="lbl">Applies to</label>
+            <div class="hint" style="margin-top:4px">Tap “All squadron” for the timeline everyone sees, or pick the shops it applies to.</div>
+            <div class="aud-pick" id="sf-aud"></div>
+          </div>
+          <div id="sched-form-err" class="hint" style="color:var(--urgent)" hidden></div>
+          <div class="builder-foot">
+            <button class="btn-primary" id="sf-save" onclick="schedSave()">Save event</button>
+            <button class="btn-secondary" onclick="schedCloseForm()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sched-list"></div>
+    </div><!-- /#sect-schedule -->
+
+    <!-- ═══ SECTION: WORK ORDERS ═══
+         Open work orders arrive automatically when a cycle is created, since
+         unfinished work is outstanding either way. Those are marked so they
+         don't get added a second time by hand. -->
+    <div class="sect" id="sect-workorders">
+
+      <div class="sec-hd">
+        <div>
+          <div class="sec-title">Work Orders</div>
+          <div class="sec-sub">Unfinished work follows a new cycle automatically — add anything new here</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="chip-quick" onclick="woCopyForward()">⟳ Pull open WOs</button>
+          <button class="btn-secondary" style="padding:8px 16px" onclick="woOpenForm()">+ Add work order</button>
+        </div>
+      </div>
+
+      <div class="card card-pad" id="wo-form-card" hidden>
+        <div class="sched-form">
+          <div class="f2">
+            <div>
+              <label class="lbl" for="wf-shop">Shop</label>
+              <select id="wf-shop"></select>
+            </div>
+            <div>
+              <label class="lbl" for="wf-status">Status</label>
+              <select id="wf-status">
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="complete">Complete</option>
+              </select>
+            </div>
+          </div>
+          <div class="f2">
+            <div>
+              <label class="lbl" for="wf-num">WO number (optional)</label>
+              <input type="text" id="wf-num" placeholder="e.g. WO# 202600443">
+            </div>
+            <div>
+              <label class="lbl" for="wf-day">Day (optional)</label>
+              <select id="wf-day">
+                <option value="">— none —</option>
+                <option value="Friday">Friday</option>
+                <option value="Friday/Saturday">Friday/Saturday</option>
+                <option value="Saturday">Saturday</option>
+                <option value="Sunday">Sunday</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="lbl" for="wf-title">Title</label>
+            <input type="text" id="wf-title" placeholder="e.g. Replace bay door seal">
+          </div>
+          <div>
+            <label class="lbl" for="wf-det">Details (optional)</label>
+            <textarea id="wf-det" placeholder="What the shop needs to know"></textarea>
+          </div>
+          <div id="wo-form-err" class="hint" style="color:var(--urgent)" hidden></div>
+          <div class="builder-foot">
+            <button class="btn-primary" id="wf-save" onclick="woSave()">Save work order</button>
+            <button class="btn-secondary" onclick="woCloseForm()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="wo-list"></div>
+    </div><!-- /#sect-workorders -->
+
   </div>
 
   <!-- ═══ SCREEN: COPY FORWARD ═══ -->
@@ -1291,6 +1501,378 @@ async function commitNewTask() {
   }
 }
 let toastTimer = null;
+/* ══ SCHEDULE ═══════════════════════════════════════════════════════════════
+   Timeline and schedule are one thing here: an event plus an audience. "All"
+   writes the squadron timeline, a shop list writes those shops' schedules.
+   lib/schedule.js routes the storage; this only ever deals in one shape. */
+let SCHED_SHOPS = [];
+let SCHED_EVENTS = [];
+let SCHED_EDIT_REF = null;          // null = the form is adding, not editing
+let SCHED_AUD = new Set();          // selected shop ids
+let SCHED_ALL = true;               // audience is "All squadron"
+
+const SCHED_DAYS = ['Friday', 'Friday/Saturday', 'Saturday', 'Sunday'];
+
+function switchSect(name) {
+  document.querySelectorAll('.sect-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.sect === name));
+  document.querySelectorAll('.sect').forEach(s =>
+    s.classList.toggle('active', s.id === 'sect-' + name));
+  if (name === 'schedule') schedLoad();
+  if (name === 'workorders') woLoad();
+}
+
+function schedCycleId() { return WORKING_CYCLE ? WORKING_CYCLE.id : null; }
+
+async function schedLoad() {
+  const id = schedCycleId();
+  const host = document.getElementById('sched-list');
+  if (!id) { host.innerHTML = '<div class="card sched-empty">Create a cycle first.</div>'; return; }
+  try {
+    const res = await fetch(`/api/cycles/${id}/schedule`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not load');
+    const data = await res.json();
+    SCHED_SHOPS = data.shops || [];
+    SCHED_EVENTS = data.events || [];
+    schedRender();
+  } catch (e) {
+    host.innerHTML = `<div class="card sched-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function schedShopName(id) {
+  const s = SCHED_SHOPS.find(x => x.id === id);
+  return s ? s.name : ('Shop ' + id);
+}
+
+function schedRender() {
+  const host = document.getElementById('sched-list');
+  if (!SCHED_EVENTS.length) {
+    host.innerHTML = `<div class="card sched-empty">
+      No schedule yet for this cycle. Copy last cycle's forward, or add an event.
+    </div>`;
+    return;
+  }
+  // Day-grouped so the drill weekend reads the way members read it.
+  const byDay = new Map(SCHED_DAYS.map(d => [d, []]));
+  const other = [];
+  for (const ev of SCHED_EVENTS) {
+    (byDay.has(ev.day) ? byDay.get(ev.day) : other).push(ev);
+  }
+  let html = '';
+  for (const day of [...SCHED_DAYS, '__other']) {
+    const list = day === '__other' ? other : byDay.get(day);
+    if (!list || !list.length) continue;
+    html += `<div class="sched-day">
+      <div class="sched-day-hd">
+        <div class="sched-day-name">${day === '__other' ? 'Unscheduled' : escapeHtml(day)}</div>
+        <div class="sched-day-count">${list.length} item${list.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="card">${list.map(schedRowHTML).join('')}</div>
+    </div>`;
+  }
+  host.innerHTML = html;
+}
+
+function schedRowHTML(ev) {
+  const time = ev.start_time
+    ? escapeHtml(ev.start_time) + (ev.end_time ? '–' + escapeHtml(ev.end_time) : '')
+    : '<span class="st-none">—</span>';
+  const aud = ev.audience === 'all'
+    ? '<span class="aud-chip aud-all">All squadron</span>'
+    : ev.shop_ids.map(id => `<span class="aud-chip">${escapeHtml(schedShopName(id))}</span>`).join('');
+  return `<div class="sched-row">
+    <div class="sched-time">${time}</div>
+    <div class="sched-main">
+      <div class="sched-title">${escapeHtml(ev.title)}</div>
+      ${ev.details ? `<div class="sched-det">${escapeHtml(ev.details)}</div>` : ''}
+      <div class="sched-aud">${aud}</div>
+    </div>
+    <div class="sched-acts">
+      <button onclick="schedOpenForm('${ev.ref}')">Edit</button>
+      <button onclick="schedDelete('${ev.ref}')">Remove</button>
+    </div>
+  </div>`;
+}
+
+/* ── form ── */
+function schedRenderAudience() {
+  const host = document.getElementById('sf-aud');
+  const all = `<button type="button" class="mchip ${SCHED_ALL ? 'sel' : ''}"
+    onclick="schedPickAll()">All squadron</button>`;
+  const shops = SCHED_SHOPS.map(s => `<button type="button"
+    class="mchip ${!SCHED_ALL && SCHED_AUD.has(s.id) ? 'sel' : ''}"
+    onclick="schedToggleShop(${s.id})">${escapeHtml(s.name)}</button>`).join('');
+  host.innerHTML = all + shops;
+}
+function schedPickAll() { SCHED_ALL = true; SCHED_AUD.clear(); schedRenderAudience(); }
+function schedToggleShop(id) {
+  SCHED_ALL = false;                       // picking a shop means it is not squadron-wide
+  if (SCHED_AUD.has(id)) SCHED_AUD.delete(id); else SCHED_AUD.add(id);
+  schedRenderAudience();
+}
+
+function schedOpenForm(ref) {
+  SCHED_EDIT_REF = ref || null;
+  const ev = ref ? SCHED_EVENTS.find(e => e.ref === ref) : null;
+  document.getElementById('sf-title').value = ev ? (ev.title || '') : '';
+  document.getElementById('sf-day').value   = ev && ev.day ? ev.day : 'Saturday';
+  document.getElementById('sf-kind').value  = ev && ev.kind ? ev.kind : '';
+  document.getElementById('sf-start').value = ev ? (ev.start_time || '') : '';
+  document.getElementById('sf-end').value   = ev ? (ev.end_time || '') : '';
+  document.getElementById('sf-det').value   = ev ? (ev.details || '') : '';
+  SCHED_ALL = ev ? ev.audience === 'all' : true;
+  SCHED_AUD = new Set(ev && ev.audience !== 'all' ? ev.shop_ids : []);
+  schedRenderAudience();
+  document.getElementById('sched-form-err').hidden = true;
+  document.getElementById('sf-save').textContent = ref ? 'Save changes' : 'Save event';
+  document.getElementById('sched-form-card').hidden = false;
+  document.getElementById('sf-title').focus();
+}
+function schedCloseForm() {
+  document.getElementById('sched-form-card').hidden = true;
+  SCHED_EDIT_REF = null;
+}
+function schedFormError(msg) {
+  const el = document.getElementById('sched-form-err');
+  el.textContent = msg; el.hidden = false;
+}
+
+async function schedSave() {
+  const id = schedCycleId();
+  if (!id) return;
+  const title = document.getElementById('sf-title').value.trim();
+  if (!title) return schedFormError('Give the event a title.');
+  if (!SCHED_ALL && !SCHED_AUD.size) {
+    return schedFormError('Pick who it applies to — “All squadron” or at least one shop.');
+  }
+  const body = {
+    audience: SCHED_ALL ? 'all' : [...SCHED_AUD],
+    day: document.getElementById('sf-day').value,
+    start_time: document.getElementById('sf-start').value.trim() || null,
+    end_time: document.getElementById('sf-end').value.trim() || null,
+    title,
+    details: document.getElementById('sf-det').value.trim() || null,
+    kind: document.getElementById('sf-kind').value || null,
+  };
+  const btn = document.getElementById('sf-save');
+  btn.disabled = true;
+  try {
+    const url = SCHED_EDIT_REF
+      ? `/api/cycles/${id}/schedule/${SCHED_EDIT_REF}`
+      : `/api/cycles/${id}/schedule`;
+    const res = await fetch(url, {
+      method: SCHED_EDIT_REF ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save');
+    schedCloseForm();
+    await schedLoad();
+    toast(SCHED_EDIT_REF ? 'Event updated' : 'Event added');
+  } catch (e) {
+    schedFormError(e.message);
+  } finally { btn.disabled = false; }
+}
+
+async function schedDelete(ref) {
+  const ev = SCHED_EVENTS.find(e => e.ref === ref);
+  if (!confirm(`Remove “${ev ? ev.title : 'this event'}” from the schedule?`)) return;
+  const id = schedCycleId();
+  try {
+    const res = await fetch(`/api/cycles/${id}/schedule/${ref}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not remove');
+    await schedLoad();
+    toast('Event removed');
+  } catch (e) { toast(e.message); }
+}
+
+async function schedCopyForward() {
+  const id = schedCycleId();
+  if (!id) return;
+  let cycles = [];
+  try { cycles = await fetch('/api/cycles').then(r => r.json()); } catch (e) { return toast('Could not load cycles'); }
+  // Most recent cycle that isn't the one being built.
+  const source = cycles.filter(c => c.id !== id)[0];
+  if (!source) return toast('No earlier cycle to copy from');
+  if (!confirm(`Copy the schedule forward from ${source.name}? Existing events are left alone.`)) return;
+  try {
+    const res = await fetch(`/api/cycles/${id}/schedule/copy-forward`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_cycle_id: source.id }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not copy');
+    const out = await res.json();
+    await schedLoad();
+    toast(out.copied ? `${out.copied} event${out.copied !== 1 ? 's' : ''} copied from ${source.name}` : 'Nothing new to copy');
+  } catch (e) { toast(e.message); }
+}
+
+/* ══ WORK ORDERS ════════════════════════════════════════════════════════════
+   Open and in-progress work orders arrive automatically when a cycle is
+   created. They are flagged here so McNaughton doesn't add the same job twice. */
+let WO_SHOPS = [];
+let WO_ITEMS = [];
+let WO_EDIT_ID = null;
+
+const WO_STATUS_LABEL = { open: 'Open', in_progress: 'In progress', complete: 'Complete' };
+const WO_STATUS_CLASS = { open: 'bp-this', in_progress: 'bp-next', complete: 'bp-overdue' };
+
+async function woLoad() {
+  const id = schedCycleId();
+  const host = document.getElementById('wo-list');
+  if (!id) { host.innerHTML = '<div class="card sched-empty">Create a cycle first.</div>'; return; }
+  try {
+    const res = await fetch(`/api/cycles/${id}/work-orders`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not load');
+    const data = await res.json();
+    WO_SHOPS = data.shops || [];
+    WO_ITEMS = data.work_orders || [];
+    woRender();
+  } catch (e) {
+    host.innerHTML = `<div class="card sched-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function woRender() {
+  const host = document.getElementById('wo-list');
+  if (!WO_ITEMS.length) {
+    host.innerHTML = `<div class="card sched-empty">
+      No work orders on this cycle yet. Pull the open ones forward, or add one.
+    </div>`;
+    return;
+  }
+  // Grouped by shop: a supervisor owns their shop's list, so it reads that way.
+  const byShop = new Map();
+  for (const w of WO_ITEMS) {
+    const key = w.shop_name || ('Shop ' + w.shop_id);
+    if (!byShop.has(key)) byShop.set(key, []);
+    byShop.get(key).push(w);
+  }
+  let html = '';
+  for (const [shop, list] of [...byShop.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const carried = list.filter(w => w.carried).length;
+    html += `<div class="sched-day">
+      <div class="sched-day-hd">
+        <div class="sched-day-name">${escapeHtml(shop)}</div>
+        <div class="sched-day-count">${list.length} order${list.length !== 1 ? 's' : ''}${carried ? ` · ${carried} carried forward` : ''}</div>
+      </div>
+      <div class="card">${list.map(woRowHTML).join('')}</div>
+    </div>`;
+  }
+  host.innerHTML = html;
+}
+
+function woRowHTML(w) {
+  const st = WO_STATUS_LABEL[w.status] || w.status;
+  const cls = WO_STATUS_CLASS[w.status] || 'bp-this';
+  return `<div class="sched-row">
+    <div class="sched-time">${w.wo_number ? escapeHtml(w.wo_number) : '<span class="st-none">no number</span>'}</div>
+    <div class="sched-main">
+      <div class="sched-title">${escapeHtml(w.title)}</div>
+      ${w.details ? `<div class="sched-det">${escapeHtml(w.details)}</div>` : ''}
+      <div class="sched-aud">
+        <span class="batch-pill ${cls}" style="padding:3px 10px;font-size:11px">${escapeHtml(st)}</span>
+        ${w.carried ? '<span class="aud-chip">carried forward</span>' : ''}
+      </div>
+    </div>
+    <div class="sched-acts">
+      <button onclick="woOpenForm(${w.id})">Edit</button>
+      <button onclick="woDelete(${w.id})">Remove</button>
+    </div>
+  </div>`;
+}
+
+function woOpenForm(id) {
+  WO_EDIT_ID = id || null;
+  const w = id ? WO_ITEMS.find(x => x.id === id) : null;
+  const shopSel = document.getElementById('wf-shop');
+  shopSel.innerHTML = WO_SHOPS.map(s =>
+    `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  shopSel.value = w ? w.shop_id : (WO_SHOPS[0] ? WO_SHOPS[0].id : '');
+  document.getElementById('wf-status').value = w ? w.status : 'open';
+  document.getElementById('wf-num').value    = w ? (w.wo_number || '') : '';
+  document.getElementById('wf-day').value    = w && w.day ? w.day : '';
+  document.getElementById('wf-title').value  = w ? (w.title || '') : '';
+  document.getElementById('wf-det').value    = w ? (w.details || '') : '';
+  document.getElementById('wo-form-err').hidden = true;
+  document.getElementById('wf-save').textContent = id ? 'Save changes' : 'Save work order';
+  document.getElementById('wo-form-card').hidden = false;
+  document.getElementById('wf-title').focus();
+}
+function woCloseForm() {
+  document.getElementById('wo-form-card').hidden = true;
+  WO_EDIT_ID = null;
+}
+function woFormError(msg) {
+  const el = document.getElementById('wo-form-err');
+  el.textContent = msg; el.hidden = false;
+}
+
+async function woSave() {
+  const id = schedCycleId();
+  if (!id) return;
+  const title = document.getElementById('wf-title').value.trim();
+  if (!title) return woFormError('Give the work order a title.');
+  const body = {
+    shop_id: parseInt(document.getElementById('wf-shop').value, 10),
+    status: document.getElementById('wf-status').value,
+    wo_number: document.getElementById('wf-num').value.trim() || null,
+    day: document.getElementById('wf-day').value || null,
+    title,
+    details: document.getElementById('wf-det').value.trim() || null,
+  };
+  const btn = document.getElementById('wf-save');
+  btn.disabled = true;
+  try {
+    const url = WO_EDIT_ID
+      ? `/api/cycles/${id}/work-orders/${WO_EDIT_ID}`
+      : `/api/cycles/${id}/work-orders`;
+    const res = await fetch(url, {
+      method: WO_EDIT_ID ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save');
+    woCloseForm();
+    await woLoad();
+    toast(WO_EDIT_ID ? 'Work order updated' : 'Work order added');
+  } catch (e) { woFormError(e.message); }
+  finally { btn.disabled = false; }
+}
+
+async function woDelete(woId) {
+  const w = WO_ITEMS.find(x => x.id === woId);
+  if (!confirm(`Remove “${w ? w.title : 'this work order'}” from this cycle?`)) return;
+  const id = schedCycleId();
+  try {
+    const res = await fetch(`/api/cycles/${id}/work-orders/${woId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not remove');
+    await woLoad();
+    toast('Work order removed');
+  } catch (e) { toast(e.message); }
+}
+
+async function woCopyForward() {
+  const id = schedCycleId();
+  if (!id) return;
+  let cycles = [];
+  try { cycles = await fetch('/api/cycles').then(r => r.json()); } catch (e) { return toast('Could not load cycles'); }
+  const source = cycles.filter(c => c.id !== id)[0];
+  if (!source) return toast('No earlier cycle to pull from');
+  if (!confirm(`Pull open work orders forward from ${source.name}? Completed ones stay behind.`)) return;
+  try {
+    const res = await fetch(`/api/cycles/${id}/work-orders/copy-forward`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_cycle_id: source.id }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not pull');
+    const out = await res.json();
+    await woLoad();
+    toast(out.carried ? `${out.carried} work order${out.carried !== 1 ? 's' : ''} pulled forward` : 'Nothing new to pull');
+  } catch (e) { toast(e.message); }
+}
+
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
