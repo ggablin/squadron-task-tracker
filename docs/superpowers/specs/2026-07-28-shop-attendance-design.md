@@ -1,7 +1,7 @@
 # 108 CES Task Tracker — Shop Attendance Marking
 
 **Date:** 2026-07-28
-**Status:** Design approved (brainstorming). Not yet implemented.
+**Status:** Implemented. See §13 for where the build diverged from this design.
 **Author/driver:** Greg Gablin
 **Base branch for implementation:** `origin/master` (currently `13debad`)
 
@@ -217,3 +217,19 @@ Following the split already in the repo:
 5. Members do not see their own attendance in v1.
 6. Existing style tokens are correct; only the tool buttons need to be larger.
 7. Nothing currently populates `uta_cycles.start_date` outside `seed.js`. Capturing drill dates in the Task Builder (§5.2.1) is a prerequisite for this feature, not a nice-to-have.
+
+## 13. Implementation notes (built 2026-07-28)
+
+Where the build differs from, or adds to, the design above.
+
+**The summary grid needed `min-width`, not `width`.** §7.2 specified an `overflow-x: auto` container so a long drill becomes swipeable. The first implementation also set `width: 100%` on the table, which meant it compressed to fit instead of ever overflowing — the scroll container could never engage, and a 12-period drill would have squeezed columns toward nothing rather than scrolling. Corrected to `min-width: 100%` with a per-cell `min-width`, so the table fills the container when it fits and grows past it when it doesn't. Verified: 6 periods fit (no scroll), 8 and 12 scroll inside the grid, and the page never scrolls sideways at any length. The name column is `position: sticky` so it stays put while periods scroll under it.
+
+**Cycle date editing was added.** §5.2.1 only required capture at creation. A `PATCH /api/cycles/:id/dates` endpoint (leadership-only) was added as well, since a mistyped drill date would otherwise be uncorrectable without database access, and `period_count` must be recomputed when it changes.
+
+**`createDraft` keeps dates optional.** Passing neither leaves the cycle undated and falls back to a 4-period drill with bare "UTA n" labels, exactly as §5.2.1's legacy path describes. This keeps the change backward-compatible rather than making dates suddenly mandatory for a form that never had them.
+
+**The builder echoes the derived drill length back.** `createCycle()` reports "6 periods (3 drill days)" in its confirmation toast. A mistyped date is then visible immediately, rather than at drill when a period is missing from attendance.
+
+**Authorization is enforced against the member's own shop.** `PUT /api/shop/attendance` resolves the shop by looking up the target member, never from a client-supplied `shop_id`, so a supervisor cannot mark another shop's member by passing someone else's id. Verified against a temporary second shop: supervisor cross-shop write 403, leadership 200, and the stored row carries the member's own shop.
+
+**Verified behaviours** (live server, seeded data): six-period labels derived from the cycle dates; "mark all present" fills only unmarked cells and is idempotent on re-run; a recorded exception survives a later bulk tap; period 7 rejected on a 6-period cycle; invalid status rejected; a failed write rolls the chip back and leaves the server unchanged; export quotes commas correctly; chip colour is green/amber/red for present/authorized-absence/unexcused in both themes; and a plain member sees no new UI and gets 403 from all four endpoints.

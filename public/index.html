@@ -1602,6 +1602,136 @@
       .pf-card { padding: 18px 16px; }
     }
 
+    /* ══════════════════════════════════════════════════════════════
+       ATTENDANCE — supervisor tool row + takeover view
+    ══════════════════════════════════════════════════════════════ */
+    /* Bigger than .add-btn (which renders ~30px, under the 44px touch
+       minimum). Equal-width pair on phones, natural width on desktop. */
+    .shop-tools { display: flex; gap: 10px; }
+    .shop-tool-btn {
+      flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      min-height: 48px; padding: 12px 18px; border-radius: 12px;
+      border: 2px solid var(--border); background: var(--bg); color: var(--text);
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background .12s, border-color .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .shop-tool-btn:hover { background: var(--cream); border-color: var(--bm); }
+    .shop-tool-btn svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--t2); }
+    @media (min-width: 768px) { .shop-tool-btn { flex: 0 0 auto; } }
+
+    #att-view { display: none; }
+    #view-supervisor.att-open > #att-view { display: block; }
+    /* Takeover: everything else in the shop view steps aside. Scoped to direct
+       children so the .shop-pane display toggling underneath is untouched. */
+    #view-supervisor.att-open > *:not(#att-view) { display: none; }
+    .att-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: none; border: 0; padding: 6px 0; margin-bottom: 10px;
+      font-family: inherit; font-size: 13px; font-weight: 600; color: var(--t2);
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .att-back:hover { color: var(--text); }
+    .att-back svg { width: 14px; height: 14px; }
+    .att-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+    .att-title { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+    .att-sub { font-size: 12.5px; color: var(--t2); margin-top: 2px; }
+
+    .att-switch {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: var(--cream); border: 1px solid var(--border);
+      border-radius: 12px; padding: 8px 10px; margin-bottom: 14px;
+    }
+    .att-nav {
+      width: 40px; height: 40px; flex-shrink: 0;
+      border: 1px solid var(--bm); background: var(--bg); color: var(--text);
+      border-radius: 10px; cursor: pointer; font-family: inherit;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .att-nav:disabled { opacity: .35; cursor: default; }
+    .att-nav svg { width: 15px; height: 15px; }
+    .att-period { text-align: center; min-width: 0; flex: 1; }
+    .att-period-lbl { font-size: 14px; font-weight: 700; }
+    .att-period-cov { font-size: 11.5px; color: var(--t2); margin-top: 2px; }
+
+    .att-allpresent {
+      width: 100%; min-height: 46px; margin-bottom: 14px;
+      border: 2px dashed var(--bm); border-radius: 12px;
+      background: var(--bg); color: var(--t2);
+      font-family: inherit; font-size: 13.5px; font-weight: 600;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .att-allpresent:hover { background: var(--cream); color: var(--text); border-color: var(--t3); }
+    .att-allpresent:disabled { opacity: .4; cursor: default; }
+
+    .att-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 4px; border-bottom: 1px solid var(--border);
+    }
+    .att-row:last-child { border-bottom: 0; }
+    .att-who { flex: 1; min-width: 0; }
+    .att-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .att-rank { font-size: 11.5px; color: var(--t2); margin-top: 1px; }
+    /* Colour encodes whether it needs follow-up, not merely presence:
+       authorized absences are amber, only 'unexcused' is red. */
+    .att-chip {
+      flex-shrink: 0; min-width: 104px; min-height: 40px; padding: 8px 14px;
+      border-radius: 999px; border: 1px solid transparent;
+      font-family: inherit; font-size: 12px; font-weight: 700;
+      letter-spacing: .04em; text-transform: uppercase;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .att-chip:disabled { cursor: default; opacity: .75; }
+    .att-c-present    { background: var(--ok-bg);  color: var(--ok); }
+    .att-c-excused,
+    .att-c-ruta,
+    .att-c-at,
+    .att-c-deployed   { background: var(--wrn-bg); color: var(--warn); }
+    .att-c-unexcused  { background: var(--urg-bg); color: var(--urgent); }
+    .att-c-none       { background: transparent; color: var(--t3); border-color: var(--bm); border-style: dashed; }
+    .att-note-flag { font-size: 11px; color: var(--t2); margin-top: 3px; font-style: italic; }
+
+    /* The one element whose width grows with drill length — scoped scroll so a
+       4-day UTA becomes a swipeable table instead of scrolling the page. */
+    .att-grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
+    /* min-width, NOT width: with width:100% the table would compress to fit and
+       the wrapper's overflow-x could never engage, so a long drill would squeeze
+       columns to nothing instead of becoming swipeable. */
+    .att-grid { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+    .att-grid th, .att-grid td { padding: 6px 4px; text-align: center; white-space: nowrap; min-width: 32px; }
+    .att-grid th { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--t2); }
+    /* Name column stays pinned while the periods scroll under it. */
+    .att-grid td.att-g-name, .att-grid th.att-g-name {
+      text-align: left; padding-right: 10px; position: sticky; left: 0; z-index: 1;
+      background: var(--bg); font-weight: 600;
+      min-width: 96px; max-width: 120px;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .att-grid tbody tr { border-top: 1px solid var(--border); }
+    .att-g-cell { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .att-g-present { color: var(--t3); }
+    .att-g-warn { color: var(--warn); }
+    .att-g-bad { color: var(--urgent); }
+    .att-g-none { color: var(--goff); }
+
+    .att-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .att-banner {
+      background: var(--s2); border-radius: var(--rs); padding: 10px 12px;
+      font-size: 12.5px; color: var(--t2); margin-bottom: 14px; line-height: 1.45;
+    }
+
+    /* Leadership roll-up */
+    .att-shop-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .att-shop-row:last-child { border-bottom: 0; }
+    .att-shop-name { font-size: 13px; font-weight: 600; }
+    .att-shop-frac { font-size: 12px; font-weight: 600; color: var(--t2); font-variant-numeric: tabular-nums; }
+    .att-shop-bar { grid-column: 1 / -1; height: 5px; background: var(--bm); border-radius: 999px; overflow: hidden; }
+    .att-shop-fill { height: 100%; border-radius: 999px; background: var(--ok); }
+    .att-shop-fill.att-part { background: var(--warn); }
+    .att-shop-fill.att-zero { background: var(--urgent); }
+
     /* ── Resources: useful links ─────────────────── */
     .pf-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; max-width: 1080px; }
     .pf-link {
@@ -1851,11 +1981,16 @@
         <select id="shop-switcher" onchange="onShopSwitch(this.value)" aria-label="Switch shop"></select>
       </div>
 
-      <!-- Records link — supervisors (and leadership) only -->
-      <div id="shop-records-link" class="mb-md" style="display:none">
-        <button class="add-btn" onclick="window.location.href='/records'">
+      <!-- Supervisor tools — supervisors (and leadership) only. The tab row
+           below is what every member reads; this row is the editing tools. -->
+      <div id="shop-records-link" class="mb-md shop-tools" style="display:none">
+        <button class="shop-tool-btn" onclick="window.location.href='/records'">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h6l2.5 2.5V13a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M6 8h4M6 10.5h4"/></svg>
           Records
+        </button>
+        <button class="shop-tool-btn" onclick="openAttendance()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h6"/><path d="M11.5 11.5l1.4 1.4 2.6-2.9"/></svg>
+          Attendance
         </button>
       </div>
 
@@ -1893,6 +2028,54 @@
           <div class="sec-sub uta-sub">June 2026 UTA</div>
         </div>
         <div id="shop-events-list" class="mb-lg"></div>
+      </div>
+
+      <!-- ── Attendance takeover. Opening it hides every sibling above
+           (see #view-supervisor.att-open) so the tool gets full width. ── -->
+      <div id="att-view">
+        <button class="att-back" onclick="closeAttendance()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+          Shop
+        </button>
+
+        <div class="att-hd">
+          <div>
+            <div class="att-title">Attendance</div>
+            <div class="att-sub" id="att-sub"></div>
+          </div>
+        </div>
+
+        <div class="att-banner" id="att-banner" style="display:none"></div>
+
+        <div class="att-switch">
+          <button class="att-nav" id="att-prev" onclick="attStep(-1)" aria-label="Previous period">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+          </button>
+          <div class="att-period">
+            <div class="att-period-lbl" id="att-period-lbl">—</div>
+            <div class="att-period-cov" id="att-period-cov"></div>
+          </div>
+          <button class="att-nav" id="att-next" onclick="attStep(1)" aria-label="Next period">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+          </button>
+        </div>
+
+        <button class="att-allpresent" id="att-allpresent" onclick="attMarkAllPresent()">
+          Mark all present
+        </button>
+
+        <div id="att-list"></div>
+
+        <div class="sec-hd" style="padding:18px 4px 8px">
+          <div class="sec-title" style="font-size:14px">Weekend summary</div>
+          <div class="sec-sub" id="att-coverage"></div>
+        </div>
+        <div class="att-grid-wrap"><table class="att-grid" id="att-grid"></table></div>
+
+        <div class="att-actions">
+          <button class="add-btn" onclick="attCopy()">Copy for Excel</button>
+          <button class="add-btn" onclick="attDownloadCsv()">Download CSV</button>
+        </div>
       </div>
 
     </div>
@@ -2035,6 +2218,14 @@
         </button>
       </div>
       <div class="card" id="shop-list"></div>
+
+      <!-- Which shops still owe attendance — the question the spreadsheet
+           can't answer. Least complete first. -->
+      <div class="sec-hd" style="padding:22px 4px 8px">
+        <div class="sec-title">Attendance</div>
+        <div class="sec-sub">Periods marked, least complete first</div>
+      </div>
+      <div class="card card-pad" id="sq-attendance"></div>
 
       </div><!-- /#sq-rollups -->
 
@@ -2389,6 +2580,34 @@
     </div>
     <div id="at-error" class="login-error" style="display:none"></div>
     <button class="modal-submit" id="at-submit" onclick="submitAddTask()">Add Task</button>
+  </div>
+</div>
+
+<!-- ═══ ATTENDANCE STATUS SHEET ═════════════════ -->
+<div class="modal-backdrop" id="att-status-modal" onclick="if(event.target===this)closeModal('att-status-modal')">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <div class="modal-title" id="att-modal-title">Status</div>
+      <button class="modal-close" onclick="closeModal('att-status-modal')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="modal-field">
+      <label>Status</label>
+      <select id="att-modal-status">
+        <option value="present">Present</option>
+        <option value="excused">Excused</option>
+        <option value="unexcused">Unexcused</option>
+        <option value="ruta">RUTA</option>
+        <option value="at">AT</option>
+        <option value="deployed">Deployed</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Note (optional)</label>
+      <input type="text" id="att-modal-note" placeholder="e.g. released early by supervisor">
+    </div>
+    <button class="modal-submit" onclick="attSaveStatus()">Save</button>
   </div>
 </div>
 
@@ -2903,6 +3122,9 @@ function onShopSwitch(shopId) {
   // loadShopMembers rebuilds the roster (collapsing any expanded member).
   loadShopEvents(true);   // switched shop → always fetch fresh (cache is keyed per shop)
   loadShopMembers();
+  // Keep an open attendance takeover pointed at the shop now being viewed,
+  // otherwise leadership would be marking the previous shop's roster.
+  if (document.getElementById('view-supervisor').classList.contains('att-open')) loadAttendance();
 }
 
 /* ── Login ──────────────────────────────────────── */
@@ -3826,12 +4048,283 @@ function switchView(btn) {
   document.getElementById('desk-sub').textContent   = s;
 
   if (name === 'member') { switchMtPane('tasks'); loadTasks(false); }
-  if (name === 'supervisor') { switchShopPane('members'); loadShopEvents(false); loadShopMembers(); }
+  if (name === 'supervisor') {
+    closeAttendance();   // returning to My Shop shows the tabs, not a stale takeover
+    switchShopPane('members'); loadShopEvents(false); loadShopMembers();
+  }
   if (name === 'leadership') {
     loadOrgChart();
-    if (currentMember?.role === 'leadership') loadSquadron();
+    if (currentMember?.role === 'leadership') { loadSquadron(); loadSquadronAttendance(); }
   }
   if (name === 'resources') switchResPane('pfra');
+}
+
+/* ══ Attendance ═══════════════════════════════════════════════════════════
+   Supervisors mark their own shop, leadership any shop via the switcher.
+   A row's absence means UNMARKED — never "present" — so a shop that was
+   never opened is visibly incomplete rather than silently perfect. */
+const ATT_LABEL = {
+  present: 'Present', excused: 'Excused', unexcused: 'Unexcused',
+  ruta: 'RUTA', at: 'AT', deployed: 'Deployed',
+};
+// Single letters for the summary grid. RUTA is R, Deployed D, AT keeps 2 chars.
+const ATT_SHORT = { present: 'P', excused: 'E', unexcused: 'U', ruta: 'R', at: 'AT', deployed: 'D' };
+
+let attData = null;      // last payload from GET /api/shop/attendance
+let attPeriod = 1;       // period currently being marked
+let attTarget = null;    // {memberId, name} while the status sheet is open
+
+function attRowsFor(period) {
+  return (attData?.rows || []).filter(r => Number(r.period) === Number(period));
+}
+function attStatusOf(memberId, period) {
+  const r = attRowsFor(period).find(x => x.member_id === memberId);
+  return r ? r.status : null;
+}
+
+async function openAttendance() {
+  document.getElementById('view-supervisor').classList.add('att-open');
+  await loadAttendance();
+}
+function closeAttendance() {
+  document.getElementById('view-supervisor').classList.remove('att-open');
+}
+
+async function loadAttendance() {
+  try {
+    const res = await fetch('/api/shop/attendance' + shopQ());
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      showToast(b.error || 'Could not load attendance', 'error');
+      return;
+    }
+    attData = await res.json();
+    attPeriod = attData.first_incomplete || 1;
+    renderAttendance();
+  } catch (e) {
+    console.error('loadAttendance', e);
+    showToast('Could not load attendance — check your connection', 'error');
+  }
+}
+
+function renderAttendance() {
+  if (!attData) return;
+  const { members, periods, cycle, editable } = attData;
+  const total = periods.length;
+
+  document.getElementById('att-sub').textContent =
+    `${attData.shop_name || ''}${attData.shop_name ? ' · ' : ''}${cycle.name} · ${total} periods`;
+
+  const banner = document.getElementById('att-banner');
+  if (!editable) {
+    banner.style.display = '';
+    banner.textContent = 'This cycle is archived — attendance is read-only. You can still copy or download it.';
+  } else if (!periods.length) {
+    banner.style.display = '';
+    banner.textContent = 'This cycle has no periods configured.';
+  } else {
+    banner.style.display = 'none';
+  }
+
+  if (attPeriod < 1) attPeriod = 1;
+  if (attPeriod > total) attPeriod = total || 1;
+  const cur = periods[attPeriod - 1];
+  document.getElementById('att-period-lbl').textContent = cur ? cur.label : '—';
+  const markedHere = attRowsFor(attPeriod).length;
+  document.getElementById('att-period-cov').textContent =
+    `${markedHere} of ${members.length} marked`;
+  document.getElementById('att-prev').disabled = attPeriod <= 1;
+  document.getElementById('att-next').disabled = attPeriod >= total;
+
+  const allBtn = document.getElementById('att-allpresent');
+  const unmarked = members.length - markedHere;
+  allBtn.disabled = !editable || !unmarked;
+  allBtn.textContent = unmarked
+    ? `Mark all present (${unmarked} unmarked)`
+    : 'All marked for this period';
+
+  document.getElementById('att-list').innerHTML = members.map(m => {
+    const row = attRowsFor(attPeriod).find(x => x.member_id === m.id);
+    const st = row ? row.status : null;
+    const cls = st ? 'att-c-' + st : 'att-c-none';
+    return `<div class="att-row">
+      <div class="att-who">
+        <div class="att-name">${escapeHtml(m.last_name)}, ${escapeHtml((m.first_name || '').charAt(0))}.</div>
+        <div class="att-rank">${escapeHtml(m.rank || '')}</div>
+        ${row && row.note ? `<div class="att-note-flag">${escapeHtml(row.note)}</div>` : ''}
+      </div>
+      <button class="att-chip ${cls}" ${editable ? '' : 'disabled'}
+              onclick="attOpenStatus(${m.id})">${st ? ATT_LABEL[st] : 'Mark'}</button>
+    </div>`;
+  }).join('');
+
+  renderAttGrid();
+  const cov = attData.coverage || { marked: 0, total: 0 };
+  document.getElementById('att-coverage').textContent = `${cov.marked} of ${cov.total} marked`;
+}
+
+function renderAttGrid() {
+  const { members, periods } = attData;
+  const head = `<thead><tr><th class="att-g-name">Member</th>${
+    periods.map(p => `<th>U${p.period}</th>`).join('')}</tr></thead>`;
+  const body = members.map(m => {
+    const cells = periods.map(p => {
+      const st = attStatusOf(m.id, p.period);
+      const cls = !st ? 'att-g-none'
+        : st === 'present' ? 'att-g-present'
+        : st === 'unexcused' ? 'att-g-bad' : 'att-g-warn';
+      return `<td class="att-g-cell ${cls}">${st ? ATT_SHORT[st] : '·'}</td>`;
+    }).join('');
+    return `<tr><td class="att-g-name">${escapeHtml(m.last_name)}</td>${cells}</tr>`;
+  }).join('');
+  document.getElementById('att-grid').innerHTML = head + '<tbody>' + body + '</tbody>';
+}
+
+function attStep(delta) {
+  attPeriod += delta;
+  renderAttendance();
+}
+
+function attOpenStatus(memberId) {
+  const m = attData.members.find(x => x.id === memberId);
+  if (!m) return;
+  const row = attRowsFor(attPeriod).find(x => x.member_id === memberId);
+  attTarget = { memberId, name: `${m.last_name}, ${(m.first_name || '').charAt(0)}.` };
+  document.getElementById('att-modal-title').textContent =
+    `${attTarget.name} · ${attData.periods[attPeriod - 1]?.label || ''}`;
+  document.getElementById('att-modal-status').value = row ? row.status : 'present';
+  document.getElementById('att-modal-note').value = row && row.note ? row.note : '';
+  openModal('att-status-modal');
+}
+
+async function attSaveStatus() {
+  if (!attTarget) return;
+  const status = document.getElementById('att-modal-status').value;
+  const note = document.getElementById('att-modal-note').value.trim();
+  const memberId = attTarget.memberId;
+  const period = attPeriod;
+  closeModal('att-status-modal');
+
+  // Optimistic: paint it, then reconcile. Writes are idempotent upserts, so a
+  // retry after a dropped connection is always safe.
+  const prev = JSON.parse(JSON.stringify(attData.rows));
+  attUpsertLocal({ member_id: memberId, period, status, note: note || null });
+  renderAttendance();
+
+  try {
+    const res = await fetch('/api/shop/attendance', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ member_id: memberId, period, status, note }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Save failed');
+    attUpsertLocal(await res.json());
+    attRecount();
+    renderAttendance();
+  } catch (e) {
+    attData.rows = prev;             // roll back the optimistic paint
+    attRecount();
+    renderAttendance();
+    showToast(e.message || 'Could not save — try again', 'error');
+  }
+}
+
+function attUpsertLocal(row) {
+  const i = attData.rows.findIndex(
+    r => r.member_id === row.member_id && Number(r.period) === Number(row.period));
+  if (i >= 0) attData.rows[i] = { ...attData.rows[i], ...row };
+  else attData.rows.push(row);
+}
+
+function attRecount() {
+  const n = attData.periods.length;
+  const ids = new Set(attData.members.map(m => m.id));
+  const seen = new Set();
+  for (const r of attData.rows) {
+    if (!ids.has(r.member_id)) continue;
+    if (r.period < 1 || r.period > n) continue;
+    seen.add(r.member_id + ':' + r.period);
+  }
+  attData.coverage = { marked: seen.size, total: ids.size * n };
+}
+
+async function attMarkAllPresent() {
+  const btn = document.getElementById('att-allpresent');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/shop/attendance/present', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ period: attPeriod, shop_id: attData.shop_id }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
+    const out = await res.json();
+    out.rows.forEach(attUpsertLocal);
+    attRecount();
+    renderAttendance();
+    showToast(`${out.created} marked present`, 'success');
+  } catch (e) {
+    renderAttendance();
+    showToast(e.message || 'Could not mark all present', 'error');
+  }
+}
+
+/* Export runs entirely client-side — the grid is already loaded. Copy is the
+   primary path: transcription happens at a desk with Excel open, so a paste
+   beats a download-then-open round trip. */
+function attTable() {
+  const { members, periods } = attData;
+  const head = ['Rank', 'Member', ...periods.map(p => p.label.replace(/·/g, '-'))];
+  const body = members.map(m => [
+    m.rank || '',
+    `${m.last_name}, ${m.first_name || ''}`.trim(),
+    ...periods.map(p => {
+      const st = attStatusOf(m.id, p.period);
+      return st ? ATT_LABEL[st] : '';
+    }),
+  ]);
+  return [head, ...body];
+}
+
+async function attCopy() {
+  const tsv = attTable().map(r => r.join('\t')).join('\n');
+  try {
+    await navigator.clipboard.writeText(tsv);
+    showToast('Copied — paste into Excel', 'success');
+  } catch (e) {
+    showToast('Clipboard blocked — use Download CSV instead', 'error');
+  }
+}
+
+function attDownloadCsv() {
+  const esc = v => /[",\n]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
+  const csv = attTable().map(r => r.map(esc).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `attendance-${(attData.cycle.name || 'uta').replace(/\s+/g, '-').toLowerCase()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* Leadership roll-up — which shops still owe attendance. */
+async function loadSquadronAttendance() {
+  const host = document.getElementById('sq-attendance');
+  if (!host) return;
+  try {
+    const res = await fetch('/api/squadron/attendance');
+    if (!res.ok) { host.innerHTML = ''; return; }
+    const data = await res.json();
+    host.innerHTML = data.shops.map(s => {
+      const pct = s.total ? Math.round(s.marked / s.total * 100) : 0;
+      const cls = pct === 100 ? '' : pct === 0 ? 'att-zero' : 'att-part';
+      return `<div class="att-shop-row">
+        <div class="att-shop-name">${escapeHtml(s.name)}</div>
+        <div class="att-shop-frac">${s.marked}/${s.total}</div>
+        <div class="att-shop-bar"><div class="att-shop-fill ${cls}" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+  } catch (e) { console.error('loadSquadronAttendance', e); host.innerHTML = ''; }
 }
 
 /* ── Resources sub-tabs (PT Calculator | Useful Links) ── */

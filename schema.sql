@@ -142,6 +142,9 @@ DO $$ BEGIN
   UPDATE uta_cycles SET status = CASE WHEN is_current THEN 'live' ELSE 'archived' END WHERE status IS NULL;
   ALTER TABLE uta_cycles ALTER COLUMN status SET DEFAULT 'draft';
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS batch_id INTEGER REFERENCES task_batches(id);
+  -- Drill length in half-days. Derived from start_date/end_date on write, never
+  -- typed. Default 4 covers legacy rows whose dates were never captured.
+  ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS period_count SMALLINT DEFAULT 4;
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
@@ -170,6 +173,29 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_member ON notifications (member_id, read_at);
 CREATE INDEX IF NOT EXISTS idx_notifications_unemailed ON notifications (emailed_at) WHERE emailed_at IS NULL;
+
+-- Per-period UTA attendance, marked by shop supervisors.
+-- A row's EXISTENCE means "marked" — there is deliberately no 'unmarked'
+-- status and no implicit 'present', so a supervisor who never opens the app
+-- cannot produce a clean full-attendance record for their whole shop.
+-- shop_id is snapshotted rather than joined through members, so a transfer
+-- doesn't silently re-attribute someone's past attendance to their new shop.
+-- The period CHECK is a garbage guard, not the real limit: the real bound is
+-- the cycle's own period_count, enforced per write in the API.
+CREATE TABLE IF NOT EXISTS attendance (
+  id            SERIAL PRIMARY KEY,
+  uta_cycle_id  INTEGER NOT NULL REFERENCES uta_cycles(id),
+  member_id     INTEGER NOT NULL REFERENCES members(id),
+  shop_id       INTEGER REFERENCES shops(id),
+  period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 12),
+  status        VARCHAR(12) NOT NULL CHECK (status IN
+                  ('present','excused','unexcused','ruta','at','deployed')),
+  note          TEXT,
+  marked_by_id  INTEGER REFERENCES members(id),
+  updated_at    TIMESTAMP DEFAULT NOW(),
+  UNIQUE (uta_cycle_id, member_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_attendance_cycle_shop ON attendance (uta_cycle_id, shop_id);
 
 -- Session storage for connect-pg-simple
 CREATE TABLE IF NOT EXISTS session (
