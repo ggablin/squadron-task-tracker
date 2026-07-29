@@ -41,6 +41,13 @@
 
       --r:  14px;
       --rs: 10px;
+
+      /* Desktop reading column. Without a cap, a task row's checkbox and its
+         urgency pill sit ~1700px apart on a wide monitor. Only referenced in
+         the ≥768px block; mobile is edge-to-edge by design. */
+      --content-max: 1280px;
+      --view-pad:     40px;
+      --sbw:           0px;   /* scrollbar width, measured at runtime */
     }
 
     [data-theme="dark"] {
@@ -657,21 +664,77 @@
       .sidebar { display: flex; }
       .mob-hdr, .mob-nav { display: none; }
       .main { flex: 1; height: 100vh; overflow: hidden; }
-      .desk-top { display: flex; }
+      /* Same column as the hero it flows into. Its containing block is .main,
+         which has no padding, so nothing is added back — but .desk-top sits
+         OUTSIDE .view's scroll container, so it never loses the scrollbar's
+         width the way the content column does. Without --sbw the topbar
+         centres on an axis half a scrollbar to the right of everything else.
+         See syncScrollbarWidth(). */
+      .desk-top {
+        display: flex;
+        --gutter: max(
+          var(--view-pad),
+          calc((100% - var(--sbw) - var(--content-max)) / 2)
+        );
+        padding-left: var(--gutter);
+        /* The scrollbar eats width on the right only, so the column it has to
+           line up with is not centred in .desk-top — it is centred in
+           .desk-top minus the scrollbar. Hence the asymmetry. */
+        padding-right: calc(var(--gutter) + var(--sbw));
+      }
+      /* Keeps the gutter — and so --sbw — constant whether or not a given
+         view happens to overflow. */
+      .view { scrollbar-gutter: stable; }
       .view {
-        padding: 32px 40px;
+        padding: 32px var(--view-pad);
         padding-bottom: 40px;
         height: calc(100vh - 67px);
         overflow-y: auto;
       }
 
-      /* Hero strip on desktop: horizontal layout, full-bleed cream */
+      /* Cap the reading column. Everything but the hero is a plain block
+         centred at --content-max. The hero is handled separately below,
+         because its cream strip has to keep bleeding to the window edge. */
+      .view > *:not(.hero) {
+        max-width: var(--content-max);
+        margin-inline: auto;
+      }
+
+      /* Stretched across the full column a 2–3 item segmented control reads as
+         a banner, not a control. Size it to its buttons and anchor it to the
+         column's left edge. Needs .view > to beat the rule above. */
+      .view > .mt-tabs, .view > .shop-tabs,
+      .view > .res-tabs, .view > .sq-tabs {
+        /* An explicit cap rather than an intrinsic width: a flex container's
+           max-content size ignores flex-basis once the items can shrink, so
+           width:max-content collapses these to their labels. The two values
+           are ~160px per button and so track tab count; adding a tab just
+           makes them a little narrower. Below the cap max-width yields and
+           the buttons shrink normally, so nothing overflows near 768px. */
+        max-width: 500px;
+        /* Siblings reach the column via max-width + auto margins; these have
+           their own cap, so their left offset is stated outright. */
+        margin-inline: max(0px, calc((100% - var(--content-max)) / 2)) auto;
+      }
+      .view > .sq-tabs { max-width: 340px; }  /* two tabs, not three */
+
+      /* Hero strip on desktop: horizontal layout, full-bleed cream.
+         The negative margin cancels .view's padding so the cream reaches the
+         window edge; the padding then insets the hero's *content* back to the
+         same column as everything else. Percentage padding resolves against
+         .view's content box (= full width − 2×--view-pad), so that padding is
+         added back in to land on (full width − --content-max) / 2. Floored at
+         --view-pad so narrow desktops keep a normal gutter. */
       .hero {
         flex-direction: row;
         align-items: stretch;
         gap: 0;
-        padding: 14px 40px 36px;
-        margin: -32px -40px 28px;
+        padding-block: 14px 36px;
+        padding-inline: max(
+          var(--view-pad),
+          calc((100% + 2 * var(--view-pad) - var(--content-max)) / 2)
+        );
+        margin: -32px calc(-1 * var(--view-pad)) 28px;
       }
       .hero-section {
         flex: 1;
@@ -3085,6 +3148,9 @@ function showLogin() {
 function showApp() {
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('app').style.display = '';
+  // .view has no measurable width behind the login overlay, so the
+  // DOMContentLoaded call reads 0. Re-measure now that it is laid out.
+  syncScrollbarWidth();
   // Fresh session: drop any SWR caches left from a previous user in this tab
   // (doLogout does not reload the page) so we never paint one member's data for another.
   _tasksLoaded = false; currentTasks = [];
@@ -3207,8 +3273,23 @@ document.addEventListener('DOMContentLoaded', () => {
       if (open) closeModal(open.id);
     }
   });
+  syncScrollbarWidth();
+  window.addEventListener('resize', syncScrollbarWidth);
   init();
 });
+
+/* The desktop topbar is a sibling of .view, not a child, so it is the one
+   element on the page whose width doesn't already have the scrollbar taken
+   out of it. Publishing that width lets .desk-top centre its content on the
+   same axis as the hero and the panes instead of half a scrollbar to the
+   right. Pure CSS can't read it; scrollbar-gutter:stable keeps it constant. */
+function syncScrollbarWidth() {
+  // Must be the *active* view: the others are display:none and measure 0,
+  // which would zero --sbw on any resize away from My Tasks.
+  const v = document.querySelector('.view.active');
+  if (!v || !v.offsetWidth) return;
+  document.documentElement.style.setProperty('--sbw', (v.offsetWidth - v.clientWidth) + 'px');
+}
 
 /* ── Gauge ──────────────────────────────────────── */
 function gauge(id, pct) {

@@ -192,14 +192,19 @@ button { font-family:inherit; cursor:pointer; }
 .builder-grid { display:grid; grid-template-columns:400px 1fr; gap:16px; align-items:start; }
 @media (max-width:860px){ .builder-grid { grid-template-columns:1fr; } }
 
+/* Task form (.field) and the Schedule / Work Order forms (.sched-form) share one
+   control style. Kept as a single rule so the two can't drift apart. .sched-form
+   spaces itself with grid gap, so it takes the controls but not .field's margin. */
 .field { margin-bottom:15px; }
-.field label { display:block; margin-bottom:6px; }
-.field input[type=text], .field textarea, .field select {
+.field label, .sched-form label.lbl { display:block; margin-bottom:6px; }
+.field input[type=text], .field textarea, .field select,
+.sched-form input[type=text], .sched-form textarea, .sched-form select {
   width:100%; padding:11px 13px; border:2px solid var(--border); border-radius:var(--rs);
   font-family:inherit; font-size:14px; color:var(--text); background:var(--bg); outline:none;
 }
-.field input:focus, .field textarea:focus, .field select:focus { border-color:var(--text); }
-.field textarea { resize:none; min-height:56px; }
+.field input:focus, .field textarea:focus, .field select:focus,
+.sched-form input:focus, .sched-form textarea:focus, .sched-form select:focus { border-color:var(--text); }
+.field textarea, .sched-form textarea { resize:none; min-height:56px; }
 
 .seg { display:flex; gap:4px; background:var(--cream); border:1px solid var(--border); border-radius:11px; padding:4px; flex-wrap:wrap; }
 .seg button {
