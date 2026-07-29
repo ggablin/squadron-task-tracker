@@ -340,20 +340,23 @@
     .hero-bar-count .hbc-tot { color: var(--t2); font-weight: 500; }
     .hero-bar-row.overall .hero-bar-count { font-size: 13px; }
 
-    /* My Tasks gauge — larger than supervisor/leadership variants */
-    #mt-pane-tasks .gauge-pct { font-size: 28px; }
-    #mt-pane-tasks .gauge-lbl { font-size: 11px; }
-    #mt-pane-tasks .stat-num  { font-size: 34px; }
+    /* My Tasks gauge — larger than supervisor/leadership variants.
+       Scoped to #hero-member, not #mt-pane-tasks: the hero now sits above the
+       sub-tabs as a direct child of the view (matching My Shop), so it is no
+       longer inside a pane. */
+    #hero-member .gauge-pct { font-size: 28px; }
+    #hero-member .gauge-lbl { font-size: 11px; }
+    #hero-member .stat-num  { font-size: 34px; }
     @media (max-width: 767px) {
-      #mt-pane-tasks .stat-num { font-size: 28px; }
+      #hero-member .stat-num { font-size: 28px; }
     }
 
     /* U1: on phones, collapse the category-bars section behind a toggle so the
        member's task list is the first thing on screen. Desktop keeps the full hero. */
     @media (max-width: 640px) {
-      #mt-pane-tasks .hero { padding: 8px 16px 12px; margin: -16px -16px 16px; gap: 0; }
-      #mt-pane-tasks #hero-bars-section { display: none; }
-      #mt-pane-tasks #hero-bars-section.open { display: block; }
+      #hero-member { padding: 8px 16px 12px; margin: -16px -16px 16px; gap: 0; }
+      #hero-member #hero-bars-section { display: none; }
+      #hero-member #hero-bars-section.open { display: block; }
       .hero-bars-toggle {
         display: inline-flex; align-items: center; gap: 6px;
         font-size: 11px; font-weight: 600; color: var(--t2);
@@ -667,12 +670,6 @@
         flex: 0 0 180px;
       }
 
-      /* Squadron grid for additional cards */
-      .sq-bottom-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
-      }
     }
 
     /* Mobile: hero sections stack inside cream zone */
@@ -699,24 +696,19 @@
       .mini-grid > .mini-cell:nth-child(n+4):last-child { border-right: none; }
     }
 
-    .sq-bottom-grid > * { margin: 0; }
-    .sq-bottom-grid .bar-chart { height: 100px; }
-    .sq-bottom-grid .chart-label-row { margin-bottom: 10px; }
+    /* Squadron breakdown cards — full width since the two-column grid was
+       dissolved (Members Most Behind is now a collapsible section of its own). */
+    .sq-breakdown .bar-chart { height: 100px; }
+    .sq-breakdown .chart-label-row { margin-bottom: 10px; }
     .mini-num .mini-frac { margin-top: 0; margin-left: 1px; }
 
     /* ── Org chart ──────────────────────────────── */
-    #view-leadership.active { display: flex; flex-direction: column; }  /* .active so id-specificity doesn't override .view hide */
-    /* Desktop makes this view a fixed-height scroll container (.view sets an explicit
-       height + overflow-y:auto). Its sections must keep their natural height and let
-       the container scroll. A .card section (overflow:hidden) otherwise gets an
-       automatic flex min-size of 0 and collapses when total content exceeds the
-       viewport — which crushed #sq-leader-tools to ~48px (invisible) on desktop. */
-    #view-leadership.active > * { flex-shrink: 0; }
-    #sq-orgchart { margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
-    /* Glance-and-go: the roll-ups come first at every size — leadership viewers already
-       know the org chart, so it (and the tools) drop below. With the roll-ups first, the
-       hero's margin-top:-32px full-bleeds to the top of the view as intended. */
-    #sq-rollups { order: -1; }
+    /* #view-leadership used to be a flex column purely so #sq-rollups could take
+       order:-1 and render above the org chart. The hero is now genuinely first and
+       the org chart has moved to Resources, so the view is a plain block like every
+       other one. That also retires the `flex-shrink: 0` guard those rules needed:
+       cards were collapsing on desktop only because a flex child of a fixed-height
+       column gets an automatic min-size of 0 — no flex container, no collapse. */
 
     /* Staff banner */
     .org-staff {
@@ -1064,23 +1056,22 @@
     .add-btn svg { width: 14px; height: 14px; }
 
     /* ── My Tasks sub-tabs (My Tasks | Timeline) ── */
-    .mt-tabs, .shop-tabs, .res-tabs {
+    .mt-tabs, .shop-tabs, .res-tabs, .sq-tabs {
       display: flex; gap: 4px;
       background: var(--cream);
       border-radius: 12px; padding: 4px;
       border: 1px solid var(--border);
       margin: 0 0 20px;
     }
-    #mt-pane-tasks .hero { margin-top: 0; }
-    .mt-tab, .shop-tab, .res-tab {
+    .mt-tab, .shop-tab, .res-tab, .sq-tab {
       flex: 1; background: transparent; border: 0;
       padding: 9px 10px; border-radius: 9px;
       font-family: inherit; font-size: 13px; font-weight: 600;
       color: var(--t2); cursor: pointer;
       transition: background .15s, color .15s;
     }
-    .mt-tab:hover, .shop-tab:hover, .res-tab:hover { color: var(--text); }
-    .mt-tab.active, .shop-tab.active, .res-tab.active { background: var(--text); color: var(--bg); }
+    .mt-tab:hover, .shop-tab:hover, .res-tab:hover, .sq-tab:hover { color: var(--text); }
+    .mt-tab.active, .shop-tab.active, .res-tab.active, .sq-tab.active { background: var(--text); color: var(--bg); }
     .mt-tab-badge {
       margin-left: 5px; padding: 1px 6px;
       font-size: 10px; font-weight: 700;
@@ -1088,8 +1079,8 @@
       border-radius: 9px;
     }
     .mt-tab.active .mt-tab-badge { background: rgba(255,255,255,.22); }
-    .mt-pane, .shop-pane, .res-pane { display: none; }
-    .mt-pane.active, .shop-pane.active, .res-pane.active { display: block; }
+    .mt-pane, .shop-pane, .res-pane, .sq-pane { display: none; }
+    .mt-pane.active, .shop-pane.active, .res-pane.active, .sq-pane.active { display: block; }
 
     /* ── Timeline pane ─────────────────────────── */
     #mt-pane-timeline {
@@ -1391,10 +1382,22 @@
     .onboard-banner button:hover { background: var(--ok); color: #fff; }
 
     /* ── Hero differentiation ───────────────────── */
+    #hero-member     { border-bottom: 2px solid var(--bm); }
     #hero-supervisor { border-bottom: 2px solid var(--bm); }
     #hero-leadership { border-bottom: 2px solid var(--bm); padding-bottom: 30px; margin-bottom: 8px; }
     #view-leadership .sec-hd { margin-top: 12px; }
-    .sq-bottom-grid { margin-top: 8px; }
+    .sq-breakdown { margin-top: 8px; }
+
+    /* ── Members Most Behind: collapsible, collapsed by default ── */
+    .sq-collapse-hd {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      background: none; border: 0; padding: 0; margin: 0;
+      font-family: inherit; text-align: left; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sq-collapse-hd .chart-label { flex: 1; }
+    .sq-collapse-hd .chevron { transition: transform .2s; }
+    .sq-collapse-hd[aria-expanded="true"] .chevron { transform: rotate(90deg); }
 
     /* ── Utility classes ────────────────────────── */
     .stat-col-wrap { display: flex; flex-direction: column; gap: 24px; height: 100%; justify-content: center; }
@@ -1864,21 +1867,10 @@
     <!-- ═══ MEMBER VIEW ═══════════════════════════ -->
     <div id="view-member" class="view active">
 
-      <div class="mt-tabs" role="tablist">
-        <button class="mt-tab active" data-mt="tasks" onclick="switchMtPane('tasks')">My Tasks<span class="mt-tab-badge" id="pillb-tasks" hidden></span></button>
-        <button class="mt-tab" data-mt="timeline" onclick="switchMtPane('timeline')">Timeline</button>
-        <button class="mt-tab" data-mt="workorders" onclick="switchMtPane('workorders')">Work Orders<span class="mt-tab-badge" id="pillb-wo" hidden></span></button>
-      </div>
-
-      <div id="mt-pane-tasks" class="mt-pane active">
-
-        <div class="onboard-banner" id="onboard-banner" style="display:none">
-          <span>Tap a checkbox to mark a task done. Use the note button for details.</span>
-          <button onclick="dismissOnboard()">Got it</button>
-        </div>
-
-        <!-- HERO STRIP -->
-        <div class="hero">
+      <!-- HERO STRIP — a direct child of the view, above the tabs, so the
+           completion gauge stays visible on Timeline and Work Orders too.
+           Matches #hero-supervisor / #hero-leadership. -->
+      <div class="hero" id="hero-member">
 
           <div class="hero-section">
             <div class="hero-gauge">
@@ -1919,7 +1911,21 @@
             </div>
           </div>
 
-        </div><!-- /hero -->
+      </div><!-- /hero -->
+
+      <div class="mt-tabs" role="tablist">
+        <button class="mt-tab active" data-mt="tasks" onclick="switchMtPane('tasks')">My Tasks<span class="mt-tab-badge" id="pillb-tasks" hidden></span></button>
+        <button class="mt-tab" data-mt="timeline" onclick="switchMtPane('timeline')">Timeline</button>
+        <button class="mt-tab" data-mt="workorders" onclick="switchMtPane('workorders')">Work Orders<span class="mt-tab-badge" id="pillb-wo" hidden></span></button>
+      </div>
+
+      <div id="mt-pane-tasks" class="mt-pane active">
+
+        <!-- Stays in the pane: the copy is task-list specific. -->
+        <div class="onboard-banner" id="onboard-banner" style="display:none">
+          <span>Tap a checkbox to mark a task done. Use the note button for details.</span>
+          <button onclick="dismissOnboard()">Got it</button>
+        </div>
 
         <div id="member-tasks"></div>
 
@@ -2083,38 +2089,8 @@
     <!-- ═══ LEADERSHIP VIEW ═══════════════════════ -->
     <div id="view-leadership" class="view">
 
-      <!-- Org chart (visible to all members) -->
-      <div id="sq-orgchart">
-        <div class="sec-hd">
-          <div class="sec-title">Chain of Command</div>
-          <div class="sec-sub">108th Civil Engineer Squadron</div>
-        </div>
-        <div id="org-staff-banner"></div>
-        <div id="org-flights"></div>
-      </div>
-
-      <!-- Leadership-only tools: Task Builder + Records -->
-      <div id="sq-leader-tools" class="card card-pad mb-md" style="display:none">
-        <div class="sec-hd" style="padding:0 0 12px">
-          <div class="sec-title">Leadership Tools</div>
-          <div class="sec-sub">Task Builder &amp; member records</div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="add-btn" onclick="window.location.href='/build'">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10v10H3z"/><path d="M6 6h4M6 8.5h4M6 11h2.5"/></svg>
-            Task Builder
-          </button>
-          <button class="add-btn" onclick="window.location.href='/records'">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h6l2.5 2.5V13a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M6 8h4M6 10.5h4"/></svg>
-            Records
-          </button>
-        </div>
-      </div>
-
-      <!-- Leadership-only rollups -->
-      <div id="sq-rollups">
-
-      <!-- HERO: gauge + bar chart + 2 stat blocks with arrows -->
+      <!-- HERO: gauge + bar chart + 2 stat blocks with arrows.
+           Above the tabs, so squadron completion stays visible on both panes. -->
       <div class="hero" id="hero-leadership">
 
         <div class="hero-section">
@@ -2171,6 +2147,14 @@
 
       </div><!-- /hero -->
 
+      <div class="sq-tabs" role="tablist">
+        <button class="sq-tab active" data-sq="stats" onclick="switchSqPane('stats')">Stats</button>
+        <button class="sq-tab" data-sq="tools" onclick="switchSqPane('tools')">Tools</button>
+      </div>
+
+      <!-- ── Stats: squadron completion roll-ups (read-only) ── -->
+      <div id="sq-pane-stats" class="sq-pane active">
+
       <!-- Mobile-only quick-stats (since the desk-only stats don't show on mobile) -->
       <div class="card mob-only card-pad mb-md">
         <div class="mini-grid mini-grid-2col">
@@ -2185,37 +2169,32 @@
         </div>
       </div>
 
-      <!-- Squadron breakdown grid -->
-      <div class="sq-bottom-grid mb-md">
-
-        <div class="card card-pad">
-          <div class="chart-label-row mb-md">
-            <div class="chart-label">Squadron by Category</div>
-            <div class="chart-meta" id="sq-cat-meta">All — members</div>
-          </div>
-          <div class="bar-chart" id="sq-cat-chart"></div>
-          <div class="mini-grid" id="sq-cat-mini"></div>
+      <div class="card card-pad mb-md sq-breakdown">
+        <div class="chart-label-row mb-md">
+          <div class="chart-label">Squadron by Category</div>
+          <div class="chart-meta" id="sq-cat-meta">All — members</div>
         </div>
+        <div class="bar-chart" id="sq-cat-chart"></div>
+        <div class="mini-grid" id="sq-cat-mini"></div>
+      </div>
 
-        <div class="card card-pad">
-          <div class="chart-label-row mb-md">
-            <div class="chart-label">Members Most Behind</div>
-            <div class="chart-meta">Sorted by completion</div>
-          </div>
-          <div id="sq-alerts"></div>
+      <!-- Collapsed by default: it's a drill-down, not a headline. #sq-alerts is
+           always populated by loadSquadron() whether or not the panel is open. -->
+      <div class="card card-pad mb-md sq-breakdown">
+        <button class="sq-collapse-hd" id="sq-alerts-toggle" aria-expanded="false"
+                aria-controls="sq-alerts-panel" onclick="toggleSqAlerts()">
+          <div class="chart-label">Members Most Behind</div>
+          <div class="chart-meta">Tap to expand</div>
+          <svg class="chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+        </button>
+        <div class="expand-panel" id="sq-alerts-panel">
+          <div style="padding-top:14px"><div id="sq-alerts"></div></div>
         </div>
-
       </div>
 
       <div class="sec-hd">
         <div class="sec-title">All Shops</div>
         <div class="sec-sub">Tap a shop to expand</div>
-      </div>
-      <div class="mb-sm">
-        <button class="add-btn" onclick="openSquadronAddTask()">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
-          Add Task
-        </button>
       </div>
       <div class="card" id="shop-list"></div>
 
@@ -2227,7 +2206,31 @@
       </div>
       <div class="card card-pad" id="sq-attendance"></div>
 
-      </div><!-- /#sq-rollups -->
+      </div><!-- /#sq-pane-stats -->
+
+      <!-- ── Tools: everything leadership goes here to DO something ── -->
+      <div id="sq-pane-tools" class="sq-pane">
+        <div class="card card-pad mb-md" id="sq-leader-tools">
+          <div class="sec-hd" style="padding:0 0 12px">
+            <div class="sec-title">Leadership Tools</div>
+            <div class="sec-sub">Authoring &amp; records</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="add-btn" onclick="window.location.href='/build'">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10v10H3z"/><path d="M6 6h4M6 8.5h4M6 11h2.5"/></svg>
+              Task Builder
+            </button>
+            <button class="add-btn" onclick="window.location.href='/records'">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h6l2.5 2.5V13a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M6 8h4M6 10.5h4"/></svg>
+              Records
+            </button>
+            <button class="add-btn" onclick="openSquadronAddTask()">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+              Add Task
+            </button>
+          </div>
+        </div>
+      </div><!-- /#sq-pane-tools -->
 
     </div>
 
@@ -2237,6 +2240,7 @@
       <div class="res-tabs" role="tablist">
         <button class="res-tab active" data-rt="pfra" onclick="switchResPane('pfra')">PT Calculator</button>
         <button class="res-tab" data-rt="links" onclick="switchResPane('links')">Useful Links</button>
+        <button class="res-tab" data-rt="orgchart" onclick="switchResPane('orgchart')">Org Chart</button>
       </div>
 
       <!-- ── PFRA calculator ──────────────────────── -->
@@ -2515,6 +2519,19 @@
           or a card reader &mdash; they will load on a phone but usually stop at the sign-in page.
         </div>
       </div><!-- /#res-pane-links -->
+
+      <!-- ── Org chart — reference material every member needs, so it lives
+           here rather than in the (now leadership-only) Squadron tab. ── -->
+      <div id="res-pane-orgchart" class="res-pane">
+        <div id="sq-orgchart">
+          <div class="sec-hd" style="padding:0 0 12px">
+            <div class="sec-title">Chain of Command</div>
+            <div class="sec-sub">108th Civil Engineer Squadron</div>
+          </div>
+          <div id="org-staff-banner"></div>
+          <div id="org-flights"></div>
+        </div>
+      </div><!-- /#res-pane-orgchart -->
 
     </div><!-- /#view-resources -->
 
@@ -3080,12 +3097,15 @@ function populateUserUI() {
 
 function applyRole() {
   const role = currentMember?.role;
-  // All 3 tabs are visible to every authenticated member; per-section
-  // gating below hides leadership-only rollups and supervisor-only edit affordances.
-  const rollups = document.getElementById('sq-rollups');
-  if (rollups) rollups.style.display = role === 'leadership' ? '' : 'none';
-  const leaderTools = document.getElementById('sq-leader-tools');
-  if (leaderTools) leaderTools.style.display = role === 'leadership' ? '' : 'none';
+  // The Squadron tab is leadership-only in its entirety now that the org chart
+  // (the one thing members went there for) lives under Resources. Gate the NAV,
+  // not the sections: applyRole used to set inline display on #sq-rollups, and an
+  // inline style beats the .sq-pane.active class rule, which would break the
+  // Stats/Tools toggle.
+  const isLeader = role === 'leadership';
+  document.querySelectorAll('[data-view="leadership"]').forEach(b => {
+    b.style.display = isLeader ? '' : 'none';
+  });
   const shopRecords = document.getElementById('shop-records-link');
   if (shopRecords) shopRecords.style.display = ['supervisor','leadership'].includes(role) ? '' : 'none';
 }
@@ -4027,7 +4047,10 @@ async function loadSquadron() {
 
 /* ── View switch ────────────────────────────────── */
 function switchView(btn) {
-  const name = btn.dataset.view;
+  let name = btn.dataset.view;
+  // Squadron is leadership-only; its nav entries are hidden for everyone else,
+  // but guard the view itself in case something routes here (e.g. a deep link).
+  if (name === 'leadership' && currentMember?.role !== 'leadership') name = 'member';
   document.querySelectorAll('.sb-item,.mob-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll(`[data-view="${name}"]`).forEach(b => b.classList.add('active'));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -4039,7 +4062,7 @@ function switchView(btn) {
     member:     [utaLabel,            m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
     supervisor: [viewedShop+' Shop',  'Supervisor View'],
     leadership: ['108th CES',         'Leadership View'],
-    resources:  ['Resources',         'PT calculator & useful links'],
+    resources:  ['Resources',         'PT calculator, links & org chart'],
   };
   const [t, s] = titles[name] || ['',''];
   document.getElementById('mob-title').textContent  = t;
@@ -4053,8 +4076,9 @@ function switchView(btn) {
     switchShopPane('members'); loadShopEvents(false); loadShopMembers();
   }
   if (name === 'leadership') {
-    loadOrgChart();
-    if (currentMember?.role === 'leadership') { loadSquadron(); loadSquadronAttendance(); }
+    switchSqPane('stats');
+    loadSquadron();
+    loadSquadronAttendance();
   }
   if (name === 'resources') switchResPane('pfra');
 }
@@ -4327,7 +4351,7 @@ async function loadSquadronAttendance() {
   } catch (e) { console.error('loadSquadronAttendance', e); host.innerHTML = ''; }
 }
 
-/* ── Resources sub-tabs (PT Calculator | Useful Links) ── */
+/* ── Resources sub-tabs (PT Calculator | Useful Links | Org Chart) ── */
 function switchResPane(name) {
   document.querySelectorAll('.res-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.rt === name));
@@ -4335,6 +4359,27 @@ function switchResPane(name) {
     p.classList.toggle('active', p.id === 'res-pane-' + name));
   // The calculator builds its gauge + age pills on first open only.
   if (name === 'pfra' && window.pfInit) window.pfInit();
+  if (name === 'orgchart') loadOrgChart();
+}
+
+/* ── Squadron sub-tabs (Stats | Tools) ── */
+function switchSqPane(name) {
+  document.querySelectorAll('.sq-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.sq === name));
+  document.querySelectorAll('.sq-pane').forEach(p =>
+    p.classList.toggle('active', p.id === 'sq-pane-' + name));
+}
+
+/* Members Most Behind — a drill-down, so it opens collapsed. Not persisted;
+   nothing else in the app remembers open/closed state. */
+function toggleSqAlerts() {
+  const btn = document.getElementById('sq-alerts-toggle');
+  const panel = document.getElementById('sq-alerts-panel');
+  if (!btn || !panel) return;
+  const isOpen = panel.classList.toggle('open');
+  btn.setAttribute('aria-expanded', isOpen);
+  const meta = btn.querySelector('.chart-meta');
+  if (meta) meta.textContent = isOpen ? 'Sorted by completion' : 'Tap to expand';
 }
 
 /* ── Modal helpers ──────────────────────────────── */
