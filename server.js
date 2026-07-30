@@ -1249,6 +1249,46 @@ app.get('/api/squadron/attendance', requireAuth, requireRole('leadership'), asyn
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+// The full squadron-wide grid: every active member's per-period marks, grouped
+// by shop. Read-only — marking still happens through the shop routes above.
+app.get('/api/squadron/attendance/grid', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const cycle = await loadCurrentCycle();
+    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+    const periodCount = attendance.periodCountFor(cycle);
+
+    // LEFT JOIN keeps zero-member shops visible rather than silently complete.
+    const { rows: roster } = await pool.query(
+      `SELECT s.id AS shop_id, s.name AS shop_name,
+              m.id, m.last_name, m.first_name, m.rank
+       FROM shops s
+       LEFT JOIN members m ON m.shop_id = s.id AND m.active = true
+       ORDER BY s.name, m.last_name, m.first_name`);
+    const { rows } = await pool.query(
+      `SELECT member_id, period, status, note, updated_at FROM attendance
+       WHERE uta_cycle_id = $1`, [cycle.id]);
+
+    const shops = [];
+    for (const r of roster) {
+      let shop = shops[shops.length - 1];
+      if (!shop || shop.id !== r.shop_id) {
+        shop = { id: r.shop_id, name: r.shop_name, members: [] };
+        shops.push(shop);
+      }
+      if (r.id != null) {
+        shop.members.push({ id: r.id, last_name: r.last_name, first_name: r.first_name, rank: r.rank });
+      }
+    }
+
+    res.json({
+      cycle: { id: cycle.id, name: cycle.name, status: cycle.status, period_count: periodCount },
+      periods: attendance.periodLabels(cycle.start_date, periodCount),
+      shops,
+      rows,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ── Squadron Timeline (all members) ──────────────────────────────────────────
 
 app.get('/api/squadron/timeline', requireAuth, async (req, res) => {
