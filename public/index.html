@@ -707,16 +707,15 @@
       .view > .res-tabs, .view > .sq-tabs {
         /* An explicit cap rather than an intrinsic width: a flex container's
            max-content size ignores flex-basis once the items can shrink, so
-           width:max-content collapses these to their labels. The two values
-           are ~160px per button and so track tab count; adding a tab just
-           makes them a little narrower. Below the cap max-width yields and
-           the buttons shrink normally, so nothing overflows near 768px. */
+           width:max-content collapses these to their labels. The cap is
+           ~160px per button at three tabs; adding a tab just makes them a
+           little narrower. Below the cap max-width yields and the buttons
+           shrink normally, so nothing overflows near 768px. */
         max-width: 500px;
         /* Siblings reach the column via max-width + auto margins; these have
            their own cap, so their left offset is stated outright. */
         margin-inline: max(0px, calc((100% - var(--content-max)) / 2)) auto;
       }
-      .view > .sq-tabs { max-width: 340px; }  /* two tabs, not three */
 
       /* Hero strip on desktop: horizontal layout, full-bleed cream.
          The negative margin cancels .view's padding so the cream reaches the
@@ -1888,15 +1887,28 @@
       font-size: 12.5px; color: var(--t2); margin-bottom: 14px; line-height: 1.45;
     }
 
-    /* Leadership roll-up */
-    .att-shop-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
-    .att-shop-row:last-child { border-bottom: 0; }
+    /* Shop coverage readout — name / fraction / bar, shared by the squadron
+       Attendance pane's collapse headers. */
     .att-shop-name { font-size: 13px; font-weight: 600; }
     .att-shop-frac { font-size: 12px; font-weight: 600; color: var(--t2); font-variant-numeric: tabular-nums; }
     .att-shop-bar { grid-column: 1 / -1; height: 5px; background: var(--bm); border-radius: 999px; overflow: hidden; }
     .att-shop-fill { height: 100%; border-radius: 999px; background: var(--ok); }
     .att-shop-fill.att-part { background: var(--warn); }
     .att-shop-fill.att-zero { background: var(--urgent); }
+
+    /* Squadron attendance pane: the roll-up rows become collapsible headers,
+       each expanding to that shop's member × period grid. Declared after the
+       .sq-collapse-hd rules so this grid layout wins over that flex. */
+    .sq-att-shop { padding: 0 18px; border-bottom: 1px solid var(--border); }
+    .sq-att-shop:last-child { border-bottom: 0; }
+    .sq-att-hd {
+      display: grid; grid-template-columns: 1fr auto 16px; gap: 4px 12px;
+      align-items: center; width: 100%; padding: 12px 0;
+      background: none; border: 0; font-family: inherit; text-align: left;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .sq-att-hd .att-shop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .sq-att-hd .att-shop-bar { grid-column: 1 / -1; }
 
     /* ── Resources: useful links ─────────────────── */
     .pf-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; max-width: 1080px; }
@@ -2312,6 +2324,7 @@
 
       <div class="sq-tabs" role="tablist">
         <button class="sq-tab active" data-sq="stats" onclick="switchSqPane('stats')">Stats</button>
+        <button class="sq-tab" data-sq="attendance" onclick="switchSqPane('attendance')">Attendance</button>
         <button class="sq-tab" data-sq="tools" onclick="switchSqPane('tools')">Tools</button>
       </div>
 
@@ -2360,15 +2373,24 @@
       </div>
       <div class="card" id="shop-list"></div>
 
-      <!-- Which shops still owe attendance — the question the spreadsheet
-           can't answer. Least complete first. -->
-      <div class="sec-hd" style="padding:22px 4px 8px">
-        <div class="sec-title">Attendance</div>
-        <div class="sec-sub">Periods marked, least complete first</div>
-      </div>
-      <div class="card card-pad" id="sq-attendance"></div>
-
       </div><!-- /#sq-pane-stats -->
+
+      <!-- ── Attendance: squadron-wide member × period grid (read-only).
+           Marking stays in My Shop's takeover; this answers "which shops
+           still owe attendance, and who exactly" and feeds the transcription
+           export. Least complete shop first; shops collapsed by default. ── -->
+      <div id="sq-pane-attendance" class="sq-pane">
+        <div class="sec-hd">
+          <div class="sec-title">Attendance</div>
+          <div class="sec-sub" id="sq-att-sub">&mdash;</div>
+        </div>
+        <div class="att-actions" style="margin:2px 0 14px">
+          <button class="add-btn" id="sq-att-copy" onclick="sqAttCopy()" disabled>Copy for Excel</button>
+          <button class="add-btn" id="sq-att-csv" onclick="sqAttDownloadCsv()" disabled>Download CSV</button>
+        </div>
+        <div class="att-banner" id="sq-att-banner" style="display:none"></div>
+        <div class="card" id="sq-att-shops"></div>
+      </div><!-- /#sq-pane-attendance -->
 
       <!-- ── Tools: everything leadership goes here to DO something ── -->
       <div id="sq-pane-tools" class="sq-pane">
@@ -4535,7 +4557,6 @@ function switchView(btn) {
   if (name === 'leadership') {
     switchSqPane('stats');
     loadSquadron();
-    loadSquadronAttendance();
   }
   if (name === 'resources') switchResPane('pfra');
 }
@@ -4788,24 +4809,158 @@ function attDownloadCsv() {
   URL.revokeObjectURL(url);
 }
 
-/* Leadership roll-up — which shops still owe attendance. */
-async function loadSquadronAttendance() {
-  const host = document.getElementById('sq-attendance');
-  if (!host) return;
+/* ── Squadron attendance — every shop's member × period grid (read-only).
+   Marking stays in the My Shop takeover. The old per-shop coverage roll-up
+   lives on as the collapsible section headers, least complete first. ── */
+let sqAttData = null;   // { cycle, periods, shops, rows } + derived idx / sorted
+
+async function loadSqAttGrid() {
+  const banner = document.getElementById('sq-att-banner');
+  const host = document.getElementById('sq-att-shops');
   try {
-    const res = await fetch('/api/squadron/attendance');
-    if (!res.ok) { host.innerHTML = ''; return; }
-    const data = await res.json();
-    host.innerHTML = data.shops.map(s => {
-      const pct = s.total ? Math.round(s.marked / s.total * 100) : 0;
-      const cls = pct === 100 ? '' : pct === 0 ? 'att-zero' : 'att-part';
-      return `<div class="att-shop-row">
-        <div class="att-shop-name">${escapeHtml(s.name)}</div>
-        <div class="att-shop-frac">${s.marked}/${s.total}</div>
-        <div class="att-shop-bar"><div class="att-shop-fill ${cls}" style="width:${pct}%"></div></div>
-      </div>`;
+    const res = await fetch('/api/squadron/attendance/grid');
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))).error || 'Could not load attendance';
+      sqAttData = null;
+      banner.style.display = '';
+      banner.textContent = err === 'No current UTA cycle'
+        ? 'No current UTA cycle — attendance opens when a cycle is set current.' : err;
+      host.innerHTML = '';
+      host.style.display = 'none';   // an empty .card would render as a bordered sliver
+      document.getElementById('sq-att-sub').textContent = '—';
+      document.getElementById('sq-att-copy').disabled = true;
+      document.getElementById('sq-att-csv').disabled = true;
+      return;
+    }
+    sqAttData = await res.json();
+    sqAttData.idx = new Map(sqAttData.rows.map(r => [r.member_id + ':' + Number(r.period), r.status]));
+    host.style.display = '';
+    renderSqAttGrid();
+  } catch (e) {
+    console.error('loadSqAttGrid', e);
+    showToast('Could not load attendance — try again', 'error');
+  }
+}
+
+// Same counting rules as the shop view's attRecount: active roster only,
+// rendered periods only. No row means unmarked — never "present".
+function sqAttCoverage(shop) {
+  const n = sqAttData.periods.length;
+  let marked = 0;
+  for (const m of shop.members) {
+    for (let p = 1; p <= n; p++) if (sqAttData.idx.has(m.id + ':' + p)) marked++;
+  }
+  return { marked, total: shop.members.length * n };
+}
+
+function sqAttStatusOf(memberId, period) {
+  return sqAttData.idx.get(memberId + ':' + period) || null;
+}
+
+function sqAttGridHtml(shop) {
+  const { periods } = sqAttData;
+  const head = `<thead><tr><th class="att-g-name">Member</th>${
+    periods.map(p => `<th>U${p.period}</th>`).join('')}</tr></thead>`;
+  const body = shop.members.map(m => {
+    const cells = periods.map(p => {
+      const st = sqAttStatusOf(m.id, p.period);
+      const cls = !st ? 'att-g-none'
+        : st === 'present' ? 'att-g-present'
+        : st === 'unexcused' ? 'att-g-bad' : 'att-g-warn';
+      return `<td class="att-g-cell ${cls}">${st ? ATT_SHORT[st] : '·'}</td>`;
     }).join('');
-  } catch (e) { console.error('loadSquadronAttendance', e); host.innerHTML = ''; }
+    return `<tr><td class="att-g-name">${escapeHtml(m.last_name)}</td>${cells}</tr>`;
+  }).join('');
+  return head + '<tbody>' + body + '</tbody>';
+}
+
+function renderSqAttGrid() {
+  const { cycle, periods, shops } = sqAttData;
+  const banner = document.getElementById('sq-att-banner');
+
+  const withCov = shops.map(s => ({ ...s, cov: sqAttCoverage(s) }))
+    .sort((x, y) => (x.cov.marked / (x.cov.total || 1)) - (y.cov.marked / (y.cov.total || 1)));
+  sqAttData.sorted = withCov;
+
+  const all = withCov.reduce(
+    (a, s) => ({ marked: a.marked + s.cov.marked, total: a.total + s.cov.total }),
+    { marked: 0, total: 0 });
+  document.getElementById('sq-att-sub').textContent =
+    `${cycle.name} · ${all.marked} of ${all.total} marked`;
+
+  banner.style.display = periods.length ? 'none' : '';
+  if (!periods.length) banner.textContent = 'This cycle has no periods configured.';
+
+  document.getElementById('sq-att-shops').innerHTML = withCov.map(s => {
+    const pct = s.cov.total ? Math.round(s.cov.marked / s.cov.total * 100) : 0;
+    const cls = pct === 100 ? '' : pct === 0 ? 'att-zero' : 'att-part';
+    const inner = s.members.length
+      ? `<div class="att-grid-wrap"><table class="att-grid">${sqAttGridHtml(s)}</table></div>`
+      : '<div class="att-banner">No members in this shop.</div>';
+    return `<div class="sq-att-shop">
+      <button class="sq-collapse-hd sq-att-hd" aria-expanded="false"
+              aria-controls="sq-att-panel-${s.id}" onclick="sqAttToggle(${s.id})">
+        <div class="att-shop-name">${escapeHtml(s.name)}</div>
+        <div class="att-shop-frac">${s.cov.marked}/${s.cov.total}</div>
+        <svg class="chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+        <div class="att-shop-bar"><div class="att-shop-fill ${cls}" style="width:${pct}%"></div></div>
+      </button>
+      <div class="expand-panel" id="sq-att-panel-${s.id}">
+        <div style="padding:2px 0 14px">${inner}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('sq-att-copy').disabled = false;
+  document.getElementById('sq-att-csv').disabled = false;
+}
+
+function sqAttToggle(shopId) {
+  const panel = document.getElementById('sq-att-panel-' + shopId);
+  const btn = document.querySelector(`[aria-controls="sq-att-panel-${shopId}"]`);
+  if (!panel || !btn) return;
+  const isOpen = panel.classList.toggle('open');
+  btn.setAttribute('aria-expanded', isOpen);
+}
+
+/* Export mirrors the shop view's, plus a Shop column. All shops are included
+   regardless of collapse state, in the same least-complete-first order. */
+function sqAttTable() {
+  const { periods, sorted } = sqAttData;
+  const head = ['Shop', 'Rank', 'Member', ...periods.map(p => p.label.replace(/·/g, '-'))];
+  const body = sorted.flatMap(s => s.members.map(m => [
+    s.name,
+    m.rank || '',
+    `${m.last_name}, ${m.first_name || ''}`.trim(),
+    ...periods.map(p => {
+      const st = sqAttStatusOf(m.id, p.period);
+      return st ? ATT_LABEL[st] : '';
+    }),
+  ]));
+  return [head, ...body];
+}
+
+async function sqAttCopy() {
+  if (!sqAttData || !sqAttData.sorted) return;
+  const tsv = sqAttTable().map(r => r.join('\t')).join('\n');
+  try {
+    await navigator.clipboard.writeText(tsv);
+    showToast('Copied — paste into Excel', 'success');
+  } catch (e) {
+    showToast('Clipboard blocked — use Download CSV instead', 'error');
+  }
+}
+
+function sqAttDownloadCsv() {
+  if (!sqAttData || !sqAttData.sorted) return;
+  const esc = v => /[",\n]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
+  const csv = sqAttTable().map(r => r.map(esc).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `squadron-attendance-${(sqAttData.cycle.name || 'uta').replace(/\s+/g, '-').toLowerCase()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* ── Resources sub-tabs (PT Calculator | Promotion | Useful Links | Org Chart) ── */
@@ -4820,12 +4975,14 @@ function switchResPane(name) {
   if (name === 'orgchart') loadOrgChart();
 }
 
-/* ── Squadron sub-tabs (Stats | Tools) ── */
+/* ── Squadron sub-tabs (Stats | Attendance | Tools) ── */
 function switchSqPane(name) {
   document.querySelectorAll('.sq-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.sq === name));
   document.querySelectorAll('.sq-pane').forEach(p =>
     p.classList.toggle('active', p.id === 'sq-pane-' + name));
+  // Fresh fetch on every open; collapse state deliberately resets with it.
+  if (name === 'attendance') loadSqAttGrid();
 }
 
 /* Members Most Behind — a drill-down, so it opens collapsed. Not persisted;
