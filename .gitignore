@@ -3,3 +3,5 @@ node_modules/
 .superpowers/
 preview-run.cjs
 .claude/launch.json
+.env.test
+.claude/worktrees/
