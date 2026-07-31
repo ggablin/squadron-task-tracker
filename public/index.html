@@ -90,15 +90,22 @@
       margin-bottom: 2px;
     }
     .sb-item:hover { background: var(--cream); color: var(--text); }
-    .sb-item.active { background: var(--text); color: #fff; }
+    .sb-item.active { background: var(--text); color: var(--bg); }
     .sb-item svg { width: 17px; height: 17px; flex-shrink: 0; }
     .sb-badge {
       margin-left: auto;
-      background: var(--urgent); color: #fff;
+      background: var(--urgent); color: var(--bg);
       font-size: 10.5px; font-weight: 700;
       padding: 1px 7px; border-radius: 10px;
     }
-    .sb-item.active .sb-badge { background: rgba(255,255,255,.22); }
+    /* The active item's background is var(--text), which inverts to near-white
+       in dark mode — so a hardcoded white chip with white text vanished. Deriving
+       the overlay and the label from var(--bg) keeps the exact light-mode look
+       and inverts correctly. */
+    .sb-item.active .sb-badge {
+      background: color-mix(in srgb, var(--bg) 22%, transparent);
+      color: var(--bg);
+    }
     .sb-spacer { flex: 1; }
     .sb-user {
       padding: 16px 18px;
@@ -119,7 +126,7 @@
     .sb-user:hover .sb-logout { opacity: 1; pointer-events: auto; }
     .sb-av {
       width: 34px; height: 34px; border-radius: 50%;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       font-size: 12px; font-weight: 600;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
@@ -487,7 +494,8 @@
     .b-upcoming { background: var(--wrn-bg); color: var(--warn); }
     .b-done { background: var(--ok-bg); color: var(--ok); }
     /* Work-order status badges */
-    .b-open { background: var(--border); color: var(--t2); }
+    /* --t2 on --border lands at 4.42:1, just under AA for this size. */
+    .b-open { background: var(--border); color: var(--t3-nav-text); }
     .b-progress { background: var(--wrn-bg); color: var(--warn); }
 
     /* ──────────────────────────────────────────────
@@ -511,7 +519,7 @@
     .mem-row.readonly:hover { background: transparent; }
     .avatar {
       width: 36px; height: 36px; border-radius: 50%;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       font-size: 12px; font-weight: 600;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
@@ -644,7 +652,7 @@
       min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
       align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700; line-height: 1;
-      color: #fff; background: var(--urgent);
+      color: var(--bg); background: var(--urgent);
       border: 2px solid var(--bg); border-radius: 9px;
     }
     .mob-badge:not([hidden]) { display: flex; }
@@ -985,7 +993,7 @@
     .login-field input:focus { border-color: var(--text); }
     .login-btn {
       width: 100%; padding: 13px;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       border: none; border-radius: 10px;
       font-family: inherit; font-size: 15px; font-weight: 600;
       cursor: pointer; margin-top: 8px;
@@ -998,7 +1006,7 @@
     .note-save-btn {
       display: inline-block; margin-top: 6px;
       padding: 5px 14px;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       border: none; border-radius: 6px;
       font-family: inherit; font-size: 12px; font-weight: 600;
       cursor: pointer;
@@ -1078,7 +1086,7 @@
     #shop-switcher:focus { border-color: var(--text); }
     .modal-submit {
       width: 100%; padding: 13px;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       border: none; border-radius: 10px;
       font-family: inherit; font-size: 15px; font-weight: 600;
       cursor: pointer; margin-top: 8px;
@@ -1154,10 +1162,14 @@
     .mt-tab-badge {
       margin-left: 5px; padding: 1px 6px;
       font-size: 10px; font-weight: 700;
-      color: #fff; background: var(--urgent);
+      color: var(--bg); background: var(--urgent);
       border-radius: 9px;
     }
-    .mt-tab.active .mt-tab-badge { background: rgba(255,255,255,.22); }
+    /* Same inversion problem as .sb-item.active .sb-badge — see the note there. */
+    .mt-tab.active .mt-tab-badge {
+      background: color-mix(in srgb, var(--bg) 22%, transparent);
+      color: var(--bg);
+    }
     .mt-pane, .shop-pane, .res-pane, .sq-pane { display: none; }
     .mt-pane.active, .shop-pane.active, .res-pane.active, .sq-pane.active { display: block; }
 
@@ -1388,7 +1400,7 @@
       min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
       display: flex; align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700; line-height: 1;
-      color: #fff; background: var(--urgent);
+      color: var(--bg); background: var(--urgent);
       border: 2px solid var(--bg); border-radius: 9px;
     }
     .notif-dot[hidden] { display: none; }
@@ -1448,7 +1460,7 @@
       font-weight: 600; white-space: nowrap; padding: 10px 12px; border-radius: 6px;
       min-height: 44px; margin: -8px -6px -8px 0;
     }
-    .onboard-banner button:hover { background: var(--ok); color: #fff; }
+    .onboard-banner button:hover { background: var(--ok); color: var(--bg); }
 
     /* ── Hero differentiation ───────────────────── */
     #hero-member     { border-bottom: 2px solid var(--bm); }
@@ -1501,7 +1513,7 @@
     .all-clear-emoji {
       width: 40px; height: 40px; margin: 0 auto 10px;
       display: flex; align-items: center; justify-content: center;
-      border-radius: 50%; background: var(--ok); color: #fff;
+      border-radius: 50%; background: var(--ok); color: var(--bg);
       font-size: 22px; font-weight: 700;
     }
     .all-clear-title { font-size: 16px; font-weight: 700; color: var(--text); }
@@ -1857,10 +1869,12 @@
     }
     .att-grid tbody tr { border-top: 1px solid var(--border); }
     .att-g-cell { font-weight: 700; font-variant-numeric: tabular-nums; }
-    .att-g-present { color: var(--t3); }
+    /* --t3 and --goff are stroke/icon tones and fail AA as text in both themes
+       (3.25:1 and 1.48:1 measured in dark). These cells carry real status. */
+    .att-g-present { color: var(--t2); }
     .att-g-warn { color: var(--warn); }
     .att-g-bad { color: var(--urgent); }
-    .att-g-none { color: var(--goff); }
+    .att-g-none { color: var(--t3-nav-text); }
 
     .att-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
     .att-banner {
@@ -1885,7 +1899,11 @@
     .sq-att-hd {
       display: grid; grid-template-columns: 1fr auto 16px; gap: 4px 12px;
       align-items: center; width: 100%; padding: 12px 0;
-      background: none; border: 0; font-family: inherit; text-align: left;
+      /* A <button> does not inherit colour — without this it falls back to the
+         UA default (pure black), which was invisible on the dark surface. The
+         shop names in this list rendered at 1.19:1 in dark mode. */
+      background: none; border: 0; color: var(--text);
+      font-family: inherit; text-align: left;
       cursor: pointer; -webkit-tap-highlight-color: transparent;
     }
     .sq-att-hd .att-shop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

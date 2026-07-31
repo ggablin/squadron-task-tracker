@@ -166,6 +166,15 @@
   clip: rect(0 0 0 0); clip-path: inset(50%);
 }
 
+/* Buttons do not inherit colour from their container — the UA stylesheet gives
+   them `buttontext`, which resolves to pure black. In light mode that passes
+   unnoticed; in dark mode any button that never set its own colour rendered
+   black-on-dark. That is how the squadron Attendance shop names shipped at
+   1.19:1, and .hero-bars-toggle and .sq-collapse-hd had the same defect.
+   Inheriting is the fix for the whole class, and stops it recurring: a new
+   button now picks up var(--text) unless it deliberately says otherwise. */
+button, input, select, textarea { color: inherit; }
+
 /* Visible keyboard focus on every page. */
 :focus-visible {
   outline: 2px solid var(--text);
