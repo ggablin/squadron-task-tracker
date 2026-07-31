@@ -1611,6 +1611,14 @@ app.get('/records', requireLeadershipPage, (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'records.html'))
 );
 
+// Unknown /api/* paths must fail as JSON. Without this they fall through to the
+// SPA catch-all below and return index.html with a 200, so the caller's .json()
+// throws an opaque SyntaxError instead of surfacing a real status. Sits after
+// every real API route, so only genuinely unmatched paths reach it.
+app.all('/api/*', (req, res) =>
+  res.status(404).json({ error: 'Not found' })
+);
+
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );

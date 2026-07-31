@@ -13,6 +13,10 @@
     })();
   </script>
   <title>108th CES UTA Tracker</title>
+  <!-- Shared tokens + primitives. Must precede the page <style> so page-local
+       rules still win on specificity ties. -->
+  <link rel="stylesheet" href="/design.css">
+  <script src="/ui.js" defer></script>
   <style>
     /* Self-hosted General Sans — survives base-network blocking of api.fontshare.com */
     @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
@@ -22,26 +26,10 @@
     *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
 
+    /* Colour, radius and theme tokens now live in /design.css, shared with
+       build.html and records.html. Only tokens specific to this page's desktop
+       shell remain here. */
     :root {
-      --cream:    #f6f7ed;
-      --bg:       #ffffff;
-      --s2:       #f4f4f4;
-      --border:   #f4f4f4;   /* 2px borders use this */
-      --bm:       #e8e9e0;   /* slightly darker for dividers */
-      --text:     #1f1f1f;
-      --t2:       #6f7066;
-      --t3:       #b8b9b0;
-      --t3-nav-text: #696660;   /* D2: AA-legible nav/placeholder text (5.46:1 on white) */
-
-      --urgent:   #a8472f;  --urg-bg:  #f5ece9;
-      --warn:     #8a6a2f;  --wrn-bg:  #f5eedf;
-      --ok:       #5f7a5a;  --ok-bg:   #edf2eb;
-
-      --gon:  #1f1f1f;  --goff: #ddddd5;
-
-      --r:  14px;
-      --rs: 10px;
-
       /* Desktop reading column. Without a cap, a task row's checkbox and its
          urgency pill sit ~1700px apart on a wide monitor. Only referenced in
          the ≥768px block; mobile is edge-to-edge by design. */
@@ -50,23 +38,7 @@
       --sbw:           0px;   /* scrollbar width, measured at runtime */
     }
 
-    [data-theme="dark"] {
-      --cream:    #2a2724;
-      --bg:       #1a1816;
-      --s2:       #232120;
-      --border:   #2e2b28;
-      --bm:       #3a3633;
-      --text:     #ece8e0;
-      --t2:       #a8a39a;
-      --t3:       #6e6962;
-      --t3-nav-text: #9a9389;   /* D2: AA-legible nav/placeholder text (4.91:1 on dark) */
-
-      --urgent:   #d97a60;  --urg-bg:  #3a201a;
-      --warn:     #c9a766;  --wrn-bg:  #3a2e1a;
-      --ok:       #88a880;  --ok-bg:   #1f2a1c;
-
-      --gon:      #ece8e0;  --goff:    #3a3633;
-    }
+    /* Dark tokens: see /design.css */
 
     body { transition: background .25s ease, color .25s ease; }
     .sidebar, .mob-hdr, .desk-top, .sb-user, .sb-item, .card {
@@ -104,7 +76,8 @@
 
     .sb-sec-lbl {
       font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
-      text-transform: uppercase; color: var(--t3);
+      /* --t3 renders this at 1.98:1. It is a stroke/icon tone, not a text tone. */
+      text-transform: uppercase; color: var(--t3-nav-text);
       padding: 0 12px; margin-bottom: 6px;
     }
     .sb-item {
@@ -155,12 +128,16 @@
 
     /* ── Theme toggle ───────────────────────────── */
     .theme-toggle {
+      position: relative;
       display: inline-flex; align-items: center; justify-content: center;
       width: 34px; height: 34px; border-radius: 10px;
       border: none; background: none; cursor: pointer;
       color: var(--t2);
       transition: background .15s, color .15s;
     }
+    /* Header icon buttons keep their 34px visual so the bar doesn't grow;
+       the hit area reaches 44×44 underneath. */
+    .theme-toggle::after { content: ''; position: absolute; inset: -5px; }
     .theme-toggle:hover { background: var(--cream); color: var(--text); }
     .theme-toggle svg { width: 17px; height: 17px; }
     .theme-toggle .icon-sun { display: none; }
@@ -399,7 +376,8 @@
       .hero-bars-toggle {
         display: inline-flex; align-items: center; gap: 6px;
         font-size: 11px; font-weight: 600; color: var(--t2);
-        background: none; border: none; padding: 6px 4px; margin-top: 8px;
+        background: none; border: none; padding: 6px 4px; margin-top: 2px;
+        min-height: 44px;
         cursor: pointer; -webkit-tap-highlight-color: transparent;
       }
       .hero-bars-toggle svg { width: 12px; height: 12px; transition: transform 0.2s; }
@@ -441,7 +419,10 @@
       padding: 13px 14px;
       margin-bottom: 6px;
       display: flex; align-items: flex-start; gap: 12px;
-      cursor: pointer; -webkit-tap-highlight-color: transparent;
+      /* No cursor:pointer — the row itself has no click handler. Only .chk
+         toggles, and its ::after already covers this gutter. Advertising the
+         whole row as clickable was a false affordance. */
+      -webkit-tap-highlight-color: transparent;
       transition: opacity .15s, border-color .12s;
     }
     .task-item:hover { border-color: var(--bm); }
@@ -449,11 +430,21 @@
     .task-item[data-state="done"] .task-title { text-decoration: line-through; }
 
     .chk {
+      position: relative;
       width: 20px; height: 20px; border-radius: 6px;
       border: 2px solid var(--bm);
       flex-shrink: 0; display: flex; align-items: center; justify-content: center;
       margin-top: 1px; background: var(--bg);
       transition: all .15s;
+    }
+    /* Checking off a task is the one thing all ~70 members do, on phones. The
+       box stays 20px for rhythm; this invisible ::after carries the real target
+       out to 44×44 (WCAG 2.2 AA needs ≥24). The insets are asymmetric on
+       purpose: left/top spend .task-item's own padding, right stops 2px short
+       of .task-body so the extra height can never swallow a tap meant for the
+       note button sitting inside it. */
+    .chk::after {
+      content: ''; position: absolute; inset: -12px -10px -12px -14px;
     }
     .task-item[data-state="done"] .chk { border-color: var(--ok); background: var(--ok); }
     .chk .ic { display: none; }
@@ -467,7 +458,7 @@
       display: inline-flex; align-items: center; gap: 5px;
       font-size: 11px; color: var(--t2);
       background: none; border: none; font-family: inherit;
-      cursor: pointer; padding: 0; margin-top: 7px;
+      cursor: pointer; padding: 8px 10px; margin: 1px 0 0 -10px;
       -webkit-tap-highlight-color: transparent;
       transition: color .12s;
     }
@@ -1132,8 +1123,8 @@
 
     /* ── Add button (+ circle) ─────────────────── */
     .add-btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 14px; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 6px 14px; min-height: 44px; border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--bg); color: var(--t2);
       font-family: inherit; font-size: 12px; font-weight: 600;
@@ -1153,7 +1144,7 @@
     }
     .mt-tab, .shop-tab, .res-tab, .sq-tab {
       flex: 1; background: transparent; border: 0;
-      padding: 9px 10px; border-radius: 9px;
+      padding: 9px 10px; min-height: 44px; border-radius: 9px;
       font-family: inherit; font-size: 13px; font-weight: 600;
       color: var(--t2); cursor: pointer;
       transition: background .15s, color .15s;
@@ -1373,11 +1364,13 @@
       color: var(--text);
     }
     .tl-chip .tl-rank { color: var(--t2); font-weight: 500; margin-right: 3px; }
+    /* Was a hardcoded #e8f0fe/#b6d4fe blue — the only colour in the app that
+       never responded to the theme, so it stayed pale blue in dark mode. */
     .tl-chip-shop {
       font-size: 11.5px; font-weight: 600;
-      padding: 3px 8px; background: #e8f0fe;
-      border: 1px solid #b6d4fe; border-radius: 6px;
-      color: var(--text);
+      padding: 3px 8px; background: var(--info-bg);
+      border: 1px solid var(--info-bd); border-radius: 6px;
+      color: var(--info);
     }
 
     .tl-day-panel { display: none; }
@@ -1386,20 +1379,7 @@
     .tl-empty { color: var(--t2); font-size: 13px; padding: 12px 0; }
 
     /* ── Toast notifications ────────────────────── */
-    .toast-container {
-      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
-      z-index: 9500; display: flex; flex-direction: column; gap: 8px;
-      pointer-events: none; width: max-content; max-width: 90vw;
-    }
-    .toast {
-      padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
-      pointer-events: auto;
-      animation: toastIn .2s ease, toastOut .2s ease 3s forwards;
-    }
-    .toast-success { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok); }
-    .toast-error { background: var(--urg-bg); color: var(--urgent); border: 1px solid var(--urgent); }
-    @keyframes toastIn { from { transform: translateY(12px); opacity: 0; } }
-    @keyframes toastOut { to { opacity: 0; pointer-events: none; } }
+    /* Toast styles: see /design.css (shared with build.html + records.html). */
 
     /* ── Notification center ────────────────────── */
     .notif-btn { position: relative; }
@@ -1465,7 +1445,8 @@
     .onboard-banner button {
       background: none; border: none; color: var(--ok);
       cursor: pointer; font-family: inherit; font-size: 12px;
-      font-weight: 600; white-space: nowrap; padding: 4px 8px; border-radius: 6px;
+      font-weight: 600; white-space: nowrap; padding: 10px 12px; border-radius: 6px;
+      min-height: 44px; margin: -8px -6px -8px 0;
     }
     .onboard-banner button:hover { background: var(--ok); color: #fff; }
 
@@ -2041,6 +2022,7 @@
 
     <!-- ═══ MEMBER VIEW ═══════════════════════════ -->
     <div id="view-member" class="view active">
+      <h1 class="vh">My Tasks</h1>
 
       <!-- HERO STRIP — a direct child of the view, above the tabs, so the
            completion gauge stays visible on Timeline and Work Orders too.
@@ -2118,6 +2100,7 @@
 
     <!-- ═══ SUPERVISOR VIEW ═══════════════════════ -->
     <div id="view-supervisor" class="view">
+      <h1 class="vh">My Shop</h1>
 
       <div class="hero" id="hero-supervisor">
 
@@ -2186,7 +2169,7 @@
       <div id="shop-pane-members" class="shop-pane active">
         <div id="shop-members-section">
           <div class="sec-hd">
-            <div class="sec-title" id="shop-members-title">Structures Shop</div>
+            <h2 class="sec-title" id="shop-members-title">Structures Shop</h2>
             <div class="sec-sub">Tap a member to expand</div>
           </div>
           <div class="card" id="member-list"></div>
@@ -2196,7 +2179,7 @@
       <!-- Pane: Work Orders — visible to all members -->
       <div id="shop-pane-workorders" class="shop-pane">
         <div class="sec-hd">
-          <div class="sec-title">Work Orders</div>
+          <h2 class="sec-title">Work Orders</h2>
           <div class="sec-sub uta-sub">June 2026 UTA</div>
         </div>
         <div id="shop-wo-host" class="mb-lg"></div>
@@ -2205,7 +2188,7 @@
       <!-- Pane: Schedule — visible to all members -->
       <div id="shop-pane-schedule" class="shop-pane">
         <div class="sec-hd">
-          <div class="sec-title">Schedule</div>
+          <h2 class="sec-title">Schedule</h2>
           <div class="sec-sub uta-sub">June 2026 UTA</div>
         </div>
         <div id="shop-events-list" class="mb-lg"></div>
@@ -2248,7 +2231,7 @@
         <div id="att-list"></div>
 
         <div class="sec-hd" style="padding:18px 4px 8px">
-          <div class="sec-title" style="font-size:14px">Weekend summary</div>
+          <h2 class="sec-title" style="font-size:14px">Weekend summary</h2>
           <div class="sec-sub" id="att-coverage"></div>
         </div>
         <div class="att-grid-wrap"><table class="att-grid" id="att-grid"></table></div>
@@ -2263,6 +2246,7 @@
 
     <!-- ═══ LEADERSHIP VIEW ═══════════════════════ -->
     <div id="view-leadership" class="view">
+      <h1 class="vh">Squadron</h1>
 
       <!-- HERO: gauge + bar chart + 2 stat blocks with arrows.
            Above the tabs, so squadron completion stays visible on both panes. -->
@@ -2368,7 +2352,7 @@
       </div>
 
       <div class="sec-hd">
-        <div class="sec-title">All Shops</div>
+        <h2 class="sec-title">All Shops</h2>
         <div class="sec-sub">Tap a shop to expand</div>
       </div>
       <div class="card" id="shop-list"></div>
@@ -2381,7 +2365,7 @@
            export. Least complete shop first; shops collapsed by default. ── -->
       <div id="sq-pane-attendance" class="sq-pane">
         <div class="sec-hd">
-          <div class="sec-title">Attendance</div>
+          <h2 class="sec-title">Attendance</h2>
           <div class="sec-sub" id="sq-att-sub">&mdash;</div>
         </div>
         <div class="att-actions" style="margin:2px 0 14px">
@@ -2396,7 +2380,7 @@
       <div id="sq-pane-tools" class="sq-pane">
         <div class="card card-pad mb-md" id="sq-leader-tools">
           <div class="sec-hd" style="padding:0 0 12px">
-            <div class="sec-title">Leadership Tools</div>
+            <h2 class="sec-title">Leadership Tools</h2>
             <div class="sec-sub">Authoring &amp; records</div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -2420,6 +2404,7 @@
 
     <!-- ═══ RESOURCES VIEW ════════════════════════ -->
     <div id="view-resources" class="view">
+      <h1 class="vh">Resources</h1>
 
       <div class="res-tabs" role="tablist">
         <button class="res-tab active" data-rt="pfra" onclick="switchResPane('pfra')">PT Calculator</button>
@@ -2450,7 +2435,7 @@
 
               <!-- MEMBER -->
               <section class="pf-card">
-                <div class="pf-cardhead"><span class="pf-microlabel">Member</span></div>
+                <div class="pf-cardhead"><h3 class="pf-microlabel">Member</h3></div>
                 <div class="pf-seg" id="pf-seg-sex" style="max-width:260px">
                   <button data-v="M">Male</button>
                   <button data-v="F">Female</button>
@@ -2461,7 +2446,7 @@
               <!-- STRENGTH -->
               <section class="pf-card">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">Strength &middot; 15 pts</span>
+                  <h3 class="pf-microlabel">Strength &middot; 15 pts</h3>
                   <span class="pf-pts" id="pf-pts-strength">&mdash;<span class="pf-of"> / 15</span></span>
                 </div>
                 <div class="pf-bar"><div class="pf-fill" id="pf-bar-strength"></div></div>
@@ -2486,7 +2471,7 @@
               <!-- CORE -->
               <section class="pf-card">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">Core &middot; 15 pts</span>
+                  <h3 class="pf-microlabel">Core &middot; 15 pts</h3>
                   <span class="pf-pts" id="pf-pts-core">&mdash;<span class="pf-of"> / 15</span></span>
                 </div>
                 <div class="pf-bar"><div class="pf-fill" id="pf-bar-core"></div></div>
@@ -2555,7 +2540,7 @@
               <!-- BODY COMP -->
               <section class="pf-card">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">Body Composition &middot; 20 pts</span>
+                  <h3 class="pf-microlabel">Body Composition &middot; 20 pts</h3>
                   <span class="pf-pts" id="pf-pts-body">&mdash;<span class="pf-of"> / 20</span></span>
                 </div>
                 <div class="pf-bar"><div class="pf-fill" id="pf-bar-body"></div></div>
@@ -2588,7 +2573,7 @@
             <!-- SCORE PANEL -->
             <aside class="pf-score">
               <section class="pf-card">
-                <div class="pf-cardhead"><span class="pf-microlabel">Composite Score</span></div>
+                <div class="pf-cardhead"><h3 class="pf-microlabel">Composite Score</h3></div>
                 <div class="pf-gaugebox">
                   <svg viewBox="0 0 200 118" id="pf-gauge" aria-hidden="true">
                     <g id="pf-gticks"></g>
@@ -2658,7 +2643,7 @@
 
               <!-- RANK -->
               <section class="pf-card">
-                <div class="pf-cardhead"><span class="pf-microlabel">Promoting To</span></div>
+                <div class="pf-cardhead"><h3 class="pf-microlabel">Promoting To</h3></div>
                 <div class="pf-seg" id="pm-seg-rank">
                   <button data-v="SSgt">SSgt</button>
                   <button data-v="TSgt">TSgt</button>
@@ -2675,7 +2660,7 @@
               <!-- 1 · CIVILIAN EDUCATION -->
               <section class="pf-card">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">1 &middot; Highest Civilian Education &middot; 10 pts max</span>
+                  <h3 class="pf-microlabel">1 &middot; Highest Civilian Education &middot; 10 pts max</h3>
                   <span class="pf-pts" id="pm-pts-edu">0<span class="pf-of"> / 10</span></span>
                 </div>
                 <div class="pf-bar"><div class="pf-fill" id="pm-bar-edu"></div></div>
@@ -2712,7 +2697,7 @@
               <!-- 3 · FEDERAL DECORATIONS -->
               <section class="pf-card">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">3 &middot; Federal Decorations &middot; 15 pts max</span>
+                  <h3 class="pf-microlabel">3 &middot; Federal Decorations &middot; 15 pts max</h3>
                   <span class="pf-pts" id="pm-pts-dec">0<span class="pf-of"> / 15</span></span>
                 </div>
                 <div class="pf-bar"><div class="pf-fill" id="pm-bar-dec"></div></div>
@@ -2726,7 +2711,7 @@
               <!-- 4 · FITNESS -->
               <section class="pf-card">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">4 &middot; Fitness Assessments &middot; Past 3 Years &middot; 10 pts max</span>
+                  <h3 class="pf-microlabel">4 &middot; Fitness Assessments &middot; Past 3 Years &middot; 10 pts max</h3>
                   <span class="pf-pts" id="pm-pts-fit">0<span class="pf-of"> / 10</span></span>
                 </div>
                 <div class="pf-bar"><div class="pf-fill" id="pm-bar-fit"></div></div>
@@ -2740,7 +2725,7 @@
               <!-- SUBJECTIVE PORTION — what the panel scores -->
               <section class="pf-card">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">The Other <span id="pm-subj-lbl">60</span> Points &middot; Panel-Scored</span>
+                  <h3 class="pf-microlabel">The Other <span id="pm-subj-lbl">60</span> Points &middot; Panel-Scored</h3>
                 </div>
                 <div class="pm-item" style="border-top:0;padding-top:0">
                   <div class="pm-item-info">
@@ -2769,7 +2754,7 @@
               <!-- IN-PERSON BOARD PREP — SSgt / MSgt / CMSgt only -->
               <section class="pf-card" id="pm-board" style="display:none">
                 <div class="pf-cardhead">
-                  <span class="pf-microlabel">In-Person Board Prep</span>
+                  <h3 class="pf-microlabel">In-Person Board Prep</h3>
                   <span class="pf-chip pf-pace" id="pm-board-level"></span>
                 </div>
                 <div class="pm-list">
@@ -2797,7 +2782,7 @@
 
               <!-- SNCO BOARD SCHEDULE -->
               <section class="pf-card" id="pm-sched" style="display:none">
-                <div class="pf-cardhead"><span class="pf-microlabel">CY2026 SNCO / STEP II Board Dates</span></div>
+                <div class="pf-cardhead"><h3 class="pf-microlabel">CY2026 SNCO / STEP II Board Dates</h3></div>
                 <div class="pm-schedrow"><span class="pm-sched-when">Q1 &middot; 31 Jan 2026</span><span class="pm-sched-due">package due 21 Jan</span></div>
                 <div class="pm-schedrow"><span class="pm-sched-when">Q2 &middot; 1 May 2026</span><span class="pm-sched-due">package due 22 Apr</span></div>
                 <div class="pm-schedrow"><span class="pm-sched-when">Q3 &middot; 12 Sep 2026</span><span class="pm-sched-due">package due 2 Sep</span></div>
@@ -2812,7 +2797,7 @@
             <!-- SCORE PANEL -->
             <aside class="pf-score">
               <section class="pf-card">
-                <div class="pf-cardhead"><span class="pf-microlabel">Objective Score</span></div>
+                <div class="pf-cardhead"><h3 class="pf-microlabel">Objective Score</h3></div>
                 <div class="pf-gaugebox">
                   <svg viewBox="0 0 200 118" id="pm-gauge" aria-hidden="true">
                     <g id="pm-gticks"></g>
@@ -2882,7 +2867,7 @@
       <!-- ── Useful links ─────────────────────────── -->
       <div id="res-pane-links" class="res-pane">
         <div class="sec-hd" style="padding:0 0 12px">
-          <div class="sec-title">Useful Links</div>
+          <h2 class="sec-title">Useful Links</h2>
           <div class="sec-sub">Opens in a new tab</div>
         </div>
 
@@ -2966,7 +2951,7 @@
       <div id="res-pane-orgchart" class="res-pane">
         <div id="sq-orgchart">
           <div class="sec-hd" style="padding:0 0 12px">
-            <div class="sec-title">Chain of Command</div>
+            <h2 class="sec-title">Chain of Command</h2>
             <div class="sec-sub">108th Civil Engineer Squadron</div>
           </div>
           <div id="org-staff-banner"></div>
@@ -3005,7 +2990,7 @@
 <div class="modal-backdrop" id="add-task-modal" onclick="if(event.target===this)closeModal('add-task-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title">Add Task</div>
+      <h2 class="modal-title">Add Task</h2>
       <button class="modal-close" onclick="closeModal('add-task-modal')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -3045,7 +3030,7 @@
 <div class="modal-backdrop" id="att-status-modal" onclick="if(event.target===this)closeModal('att-status-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title" id="att-modal-title">Status</div>
+      <h2 class="modal-title" id="att-modal-title">Status</h2>
       <button class="modal-close" onclick="closeModal('att-status-modal')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -3073,7 +3058,7 @@
 <div class="modal-backdrop" id="add-sq-task-modal" onclick="if(event.target===this)closeModal('add-sq-task-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title">Add Task</div>
+      <h2 class="modal-title">Add Task</h2>
       <button class="modal-close" onclick="closeModal('add-sq-task-modal')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -3125,7 +3110,7 @@
 <div class="modal-backdrop" id="add-event-modal" onclick="if(event.target===this)closeModal('add-event-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title" id="ae-modal-title">Add Shop Item</div>
+      <h2 class="modal-title" id="ae-modal-title">Add Shop Item</h2>
       <button class="modal-close" onclick="closeModal('add-event-modal')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -3179,7 +3164,7 @@
 <div class="modal-backdrop" id="wo-status-modal" onclick="if(event.target===this)closeModal('wo-status-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title">Update Work Order</div>
+      <h2 class="modal-title">Update Work Order</h2>
       <button class="modal-close" onclick="closeModal('wo-status-modal')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -3200,7 +3185,7 @@
     </div>
     <div id="ws-error" class="login-error" style="display:none"></div>
     <button class="modal-submit" onclick="submitStatus()">Save Update</button>
-    <div class="sec-hd" style="margin-top:18px"><div class="sec-title">History</div></div>
+    <div class="sec-hd" style="margin-top:18px"><h2 class="sec-title">History</h2></div>
     <div id="ws-history"></div>
   </div>
 </div>
@@ -3219,7 +3204,7 @@
 <div class="modal-backdrop" id="change-pw-modal" onclick="if(event.target===this&&!forcePwChange)closeModal('change-pw-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title">Change Password</div>
+      <h2 class="modal-title">Change Password</h2>
       <button class="modal-close" id="cp-close" onclick="closeModal('change-pw-modal')" aria-label="Close">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -3246,7 +3231,7 @@
 <div class="modal-backdrop" id="reset-result-modal" onclick="if(event.target===this)closeModal('reset-result-modal')">
   <div class="modal-sheet">
     <div class="modal-hdr">
-      <div class="modal-title">Temporary Password</div>
+      <h2 class="modal-title">Temporary Password</h2>
       <button class="modal-close" onclick="closeModal('reset-result-modal')" aria-label="Close">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -3257,7 +3242,11 @@
   </div>
 </div>
 
-<div class="toast-container" id="toast-container"></div>
+<!-- aria-live is declared here rather than only being set by uiToast, so the
+     region is registered with assistive tech at page load. A live region that
+     gains the attribute at the same moment its first child is inserted is
+     unreliable — the insertion can be missed. -->
+<div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="false"></div>
 </div>
 <script>
 /* ── State ─────────────────────────────────────── */
@@ -3290,14 +3279,10 @@ function shopQ() {
   return (currentMember?.role === 'leadership' && viewingShopId) ? ('?shop_id=' + viewingShopId) : '';
 }
 
+/* Thin alias over the shared primitive in /ui.js, which adds the aria-live
+   announcement. Kept as showToast so the existing call sites don't churn. */
 function showToast(msg, type) {
-  const c = document.getElementById('toast-container');
-  if (!c) return;
-  const t = document.createElement('div');
-  t.className = 'toast toast-' + (type || 'success');
-  t.textContent = msg;
-  c.appendChild(t);
-  t.addEventListener('animationend', e => { if (e.animationName === 'toastOut') t.remove(); });
+  uiToast(msg, type);
 }
 
 /* ── Notifications ─────────────────────────────── */
@@ -3448,7 +3433,11 @@ async function submitChangePw() {
 async function resetMemberPassword(memberId) {
   const m = shopMembers.find(x => x.id === memberId);
   const who = m ? (m.last_name + ', ' + (m.first_name ? m.first_name[0] + '.' : '')) : 'this member';
-  if (!confirm('Reset the password for ' + who + '?\n\nThey will get a one-time temporary password and must choose a new one the next time they sign in.')) return;
+  if (!await uiConfirm({
+    title: 'Reset password for ' + who + '?',
+    message: 'They will get a one-time temporary password and must choose a new one the next time they sign in.',
+    confirmLabel: 'Reset password',
+  })) return;
   try {
     const res = await fetch('/api/members/' + memberId + '/reset-password', { method: 'POST' });
     const data = await res.json();
@@ -4334,15 +4323,15 @@ function orgPersonChip(p, variant) {
 
 function orgShopHtml(shop) {
   const ncoicHtml = shop.ncoic
-    ? `<div class="org-section-lbl">${esc(shop.ncoic.position || 'NCOIC')}</div>
+    ? `<h3 class="org-section-lbl">${esc(shop.ncoic.position || 'NCOIC')}</h3>
        <div class="org-people">${orgPersonChip(shop.ncoic, 'ncoic')}</div>`
     : '';
   const supHtml = shop.supervisors.length
-    ? `<div class="org-section-lbl">Supervisors</div>
+    ? `<h3 class="org-section-lbl">Supervisors</h3>
        <div class="org-people">${shop.supervisors.map(p => orgPersonChip(p, 'supervisor')).join('')}</div>`
     : '';
   const memHtml = shop.members.length
-    ? `<div class="org-section-lbl">Members</div>
+    ? `<h3 class="org-section-lbl">Members</h3>
        <div class="org-people">${shop.members.map(p => orgPersonChip(p)).join('')}</div>`
     : '';
   return `<div class="org-shop-card">
@@ -4445,10 +4434,13 @@ async function loadSquadron() {
     document.getElementById('sq-cat-meta').textContent     = 'All ' + totalMems + ' members';
 
     // Completion by shop bar chart
-    barChart('squad-shop-chart', shops.map(s => ({
-      label: s.shop,
-      pct:   s.total_tasks ? Math.round(parseInt(s.done_tasks) / parseInt(s.total_tasks) * 100) : 0,
-    })));
+    // pg returns COUNT() as a *string*, so "0" is truthy — coerce before the
+    // zero-check or a shop with no tasks divides 0/0 and renders NaN%.
+    barChart('squad-shop-chart', shops.map(s => {
+      const t = parseInt(s.total_tasks) || 0;
+      const d = parseInt(s.done_tasks)  || 0;
+      return { label: s.shop, pct: t ? Math.round(d / t * 100) : 0 };
+    }));
 
     // Squadron by category — one row per category carrying label, count and
     // percentage together, so nothing has to be cross-referenced between two
@@ -4998,29 +4990,43 @@ function toggleSqAlerts() {
 }
 
 /* ── Modal helpers ──────────────────────────────── */
-let _modalTrapHandler = null;
+/* Focus management is delegated to uiTrapFocus in /ui.js.
+   The previous implementation registered a Tab handler but never moved focus
+   into the sheet and never restored it on close. Because document.activeElement
+   started outside the sheet, neither branch of the trap ever matched and Tab
+   simply walked the page behind the open modal — the trap was inert in exactly
+   the case it existed for. uiTrapFocus focuses the first control on open,
+   re-reads the focusable list on every Tab (the Add Shop Item sheet shows and
+   hides fields by type, so a snapshot goes stale), and returns focus to the
+   trigger on release. */
+let _modalRelease = null;
+
 function closeModal(id) {
   if (id === 'change-pw-modal' && forcePwChange) return;
   const el = document.getElementById(id);
   el.classList.remove('open');
-  if (_modalTrapHandler) { document.removeEventListener('keydown', _modalTrapHandler); _modalTrapHandler = null; }
+  if (_modalRelease) { _modalRelease(); _modalRelease = null; }
 }
+
 function openModal(id) {
   const el = document.getElementById(id);
   el.classList.add('open');
   const sheet = el.querySelector('.modal-sheet');
-  if (sheet) {
-    const focusable = sheet.querySelectorAll('input,select,textarea,button,[tabindex]');
-    if (focusable.length) {
-      _modalTrapHandler = e => {
-        if (e.key !== 'Tab') return;
-        const first = focusable[0], last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      };
-      document.addEventListener('keydown', _modalTrapHandler);
-    }
+  if (!sheet) return;
+
+  // Applied here rather than in markup so every sheet stays in step.
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-modal', 'true');
+  const title = sheet.querySelector('.modal-title');
+  if (title) {
+    if (!title.id) title.id = id + '-title';
+    sheet.setAttribute('aria-labelledby', title.id);
   }
+
+  if (_modalRelease) _modalRelease();
+  // A forced password change must not be escapable.
+  const escapable = !(id === 'change-pw-modal' && forcePwChange);
+  _modalRelease = uiTrapFocus(sheet, escapable ? () => closeModal(id) : null);
 }
 
 let cachedCategories = null;
@@ -5157,7 +5163,12 @@ async function submitSquadronAddTask() {
 
 /* ── Delete Task ───────────────────────────────── */
 async function deleteTask(taskId, memberId) {
-  if (!confirm('Delete this task?')) return;
+  if (!await uiConfirm({
+    title: 'Delete this task?',
+    message: 'It is removed for this member, along with any note and completion they have recorded against it.',
+    confirmLabel: 'Delete',
+    danger: true,
+  })) return;
   try {
     const res = await fetch('/api/tasks/' + taskId, { method: 'DELETE' });
     if (!res.ok) throw new Error();
@@ -5315,7 +5326,12 @@ async function submitStatus() {
 
 /* ── Delete Shop Event ─────────────────────────── */
 async function deleteEvent(eventId) {
-  if (!confirm('Delete this shop item?')) return;
+  if (!await uiConfirm({
+    title: 'Delete this shop item?',
+    message: 'It is removed from your shop for this UTA, along with any status history recorded against it.',
+    confirmLabel: 'Delete',
+    danger: true,
+  })) return;
   try {
     const res = await fetch('/api/shop/events/' + eventId, { method: 'DELETE' });
     if (!res.ok) throw new Error();

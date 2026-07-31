@@ -1,0 +1,174 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   108th CES Task Tracker — shared design layer
+   ══════════════════════════════════════════════════════════════════════════
+   Single source of truth for design tokens and the primitives that appear on
+   more than one page (toast, confirm dialog).
+
+   Loaded by index.html, build.html and records.html *before* each page's own
+   <style> block, so page-local rules still win on specificity ties.
+
+   Before this file existed the token block was pasted into all three pages and
+   had already drifted: --warn was #8a6a2f in index.html (picked for AA) but
+   #c9954a in build.html and records.html, and --s2 / --t3-nav-text were only
+   declared in the dark block on two of them. index.html's values are canonical
+   here because they are the ones that were contrast-checked.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --cream:    #f6f7ed;
+  --bg:       #fdfdfa;   /* tinted toward cream — never pure #fff */
+  --s2:       #f5f5ef;
+  --border:   #f1f1ea;   /* 2px borders use this */
+  --bm:       #e8e9e0;   /* slightly darker for dividers */
+  --text:     #1f1f1f;
+  --t2:       #6f7066;
+  --t3:       #b8b9b0;   /* strokes and icons ONLY — fails AA as text, use --t3-nav-text */
+  --t3-nav-text: #696660;   /* AA-legible nav/label/placeholder text (5.46:1 on --bg) */
+
+  /* Each foreground is checked against its own -bg pairing, not against --bg:
+     the "Next UTA" badge sits on --wrn-bg, where #8a6a2f measured 4.29:1.
+     urgent 4.88:1 · warn 5.04:1 · ok 4.75:1 */
+  --urgent:   #a8472f;  --urg-bg:  #f5ece9;
+  --warn:     #7d5f2a;  --wrn-bg:  #f5eedf;
+  --ok:       #55704f;  --ok-bg:   #edf2eb;
+
+  /* Neutral info chip. Was a hardcoded #e8f0fe/#b6d4fe pair that never
+     responded to the theme. */
+  --info:     #2f5c8a;  --info-bg: #e9f0f7;  --info-bd: #c2d6e8;
+
+  --gon:  #1f1f1f;  --goff: #ddddd5;
+
+  --r:  14px;
+  --rs: 10px;
+}
+
+[data-theme="dark"] {
+  --cream:    #2a2724;
+  --bg:       #1a1816;
+  --s2:       #232120;
+  --border:   #2e2b28;
+  --bm:       #3a3633;
+  --text:     #ece8e0;
+  --t2:       #a8a39a;
+  --t3:       #6e6962;
+  --t3-nav-text: #9a9389;   /* 4.91:1 on dark */
+
+  --urgent:   #d97a60;  --urg-bg:  #3a201a;
+  --warn:     #c9a766;  --wrn-bg:  #3a2e1a;
+  --ok:       #88a880;  --ok-bg:   #1f2a1c;
+
+  --info:     #8fb6d9;  --info-bg: #1d2833;  --info-bd: #33465a;
+
+  --gon:      #ece8e0;  --goff:    #3a3633;
+}
+
+/* --text becomes light in dark mode, so "background:var(--text); color:#fff"
+   combinations (fine on light, where --text is near-black) need the foreground
+   flipped to stay legible. Selectors from all three pages are collected here. */
+[data-theme="dark"] .step.active .n,
+[data-theme="dark"] .seg button.active,
+[data-theme="dark"] .count-pill,
+[data-theme="dark"] .mchip.sel,
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .member-row.sel {
+  color: var(--bg);
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────────
+   One implementation for all three pages. index.html had a stacking container
+   with success/error variants; build.html had a single inline-styled div with
+   no severity that overwrote itself; records.html had none. This is the
+   index.html behaviour, shared.
+
+   The container is an aria-live region so screen-reader users are told when a
+   save succeeds or fails — previously the only feedback channel in the app was
+   silent to them. Errors additionally get role="alert" (assertive) via .js.
+   ───────────────────────────────────────────────────────────────────────── */
+.toast-container {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  z-index: 9500; display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none; width: max-content; max-width: 90vw;
+}
+.toast {
+  padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  pointer-events: auto; text-align: center;
+  animation: toastIn .2s ease, toastOut .2s ease 3s forwards;
+}
+.toast-success { background: var(--ok-bg);  color: var(--ok);     border: 1px solid var(--ok); }
+.toast-error   { background: var(--urg-bg); color: var(--urgent); border: 1px solid var(--urgent); }
+@keyframes toastIn  { from { transform: translateY(12px); opacity: 0; } }
+@keyframes toastOut { to   { opacity: 0; pointer-events: none; } }
+
+/* ── Confirm dialog ───────────────────────────────────────────────────────
+   Replaces native confirm(). The app has a considered modal vocabulary, but
+   the nine highest-stakes actions — going live with a cycle to ~70 people,
+   undoing a batch members have already checked off, deleting schedule rows —
+   dropped to a grey OS dialog at exactly the moment reassurance matters most.
+   ───────────────────────────────────────────────────────────────────────── */
+.ui-confirm-backdrop {
+  position: fixed; inset: 0; z-index: 9600;
+  background: rgba(31, 31, 31, .45);
+  display: none; align-items: center; justify-content: center; padding: 20px;
+}
+.ui-confirm-backdrop.open { display: flex; }
+.ui-confirm {
+  background: var(--bg); color: var(--text);
+  border: 2px solid var(--bm); border-radius: var(--r);
+  padding: 22px; width: 100%; max-width: 400px;
+  box-shadow: 0 18px 48px rgba(31, 31, 31, .18);
+}
+.ui-confirm-title {
+  font-size: 16px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 8px;
+}
+.ui-confirm-msg {
+  font-size: 13.5px; line-height: 1.5; color: var(--t2); margin-bottom: 20px;
+}
+.ui-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.ui-confirm-actions button {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 0 16px; min-height: 44px; border-radius: var(--rs);
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.ui-confirm-cancel {
+  background: transparent; color: var(--t2); border: 2px solid var(--bm);
+}
+.ui-confirm-cancel:hover { color: var(--text); border-color: var(--t2); }
+.ui-confirm-ok {
+  background: var(--text); color: var(--bg); border: 2px solid var(--text);
+}
+.ui-confirm-ok:hover { opacity: .88; }
+.ui-confirm-backdrop[data-danger="true"] .ui-confirm-ok {
+  background: var(--urgent); border-color: var(--urgent); color: #fff;
+}
+
+/* ── Shared motion policy ─────────────────────────────────────────────────
+   Previously only index.html carried a reduced-motion block, and it disabled
+   exactly one animation. This covers every page and every transition.
+   ───────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visually hidden, still announced. Used for the per-view <h1>s that give the
+   app a document outline: each view's name is already obvious visually from the
+   active nav item, but screen-reader users navigate by heading and had nothing
+   to navigate to — index.html carried exactly one heading in 6,000 lines. */
+.vh {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; white-space: nowrap;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+}
+
+/* Visible keyboard focus on every page. */
+:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
