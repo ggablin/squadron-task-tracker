@@ -1639,8 +1639,17 @@
     .pf-brow .pf-val { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .pf-brow .pf-val .pf-of { color: var(--t3); font-weight: 500; }
     .pf-msgs { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-    .pf-msg { font-size: 12.5px; color: var(--urgent); display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; }
-    .pf-msg::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--urgent); margin-top: 5px; flex-shrink: 0; }
+    /* Positioned bullet, not a flex sibling — same reason as .pm-list > div.
+       These messages happen to be plain text today, so the flex version looked
+       fine, but any inline <b> added later would have shattered the line. */
+    .pf-msg {
+      font-size: 12.5px; color: var(--urgent); line-height: 1.4;
+      position: relative; padding-left: 14px;
+    }
+    .pf-msg::before {
+      content: ''; position: absolute; left: 0; top: 5px;
+      width: 6px; height: 6px; border-radius: 50%; background: var(--urgent);
+    }
     .pf-msg.pf-info { color: var(--t2); }
     .pf-msg.pf-info::before { background: var(--t3); }
     .pf-walknote { font-size: 12px; color: var(--t2); background: var(--s2); border-radius: var(--rs); padding: 9px 12px; margin-top: 12px; line-height: 1.45; }
@@ -1731,6 +1740,27 @@
 
     /* Divider between rows only — the cardhead div precedes the first row, so a
        :first-of-type suppression could never match. */
+    /* Study references. Previously six short .pf-chip spans, which worked while
+       the labels were things like "AFDP 3-0 Operations". The per-rank lists run
+       to thirteen entries with titles like "DoDD 5100.01 Functions of the
+       Department of Defense and its Major Components" — nowrap chips would
+       overflow, so these are rows that wrap. Entries with a published URL are
+       anchors; the rest are plain rows. */
+    .pm-refs { margin-top: 2px; }
+    .pm-ref {
+      display: flex; gap: 9px; align-items: flex-start;
+      font-size: 12.5px; line-height: 1.45; color: var(--t2);
+      padding: 9px 0; border-top: 1px solid var(--border);
+    }
+    .pm-refs > :first-child { border-top: 0; }
+    a.pm-ref {
+      text-decoration: none; color: var(--t2);
+      min-height: 44px; box-sizing: border-box;
+    }
+    a.pm-ref .pm-ref-name { color: var(--text); font-weight: 600; }
+    a.pm-ref:hover .pm-ref-name { text-decoration: underline; }
+    .pm-ref-ext { width: 11px; height: 11px; flex-shrink: 0; color: var(--t3); margin-top: 4px; }
+
     .pm-schedrow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; font-size: 13px; }
     .pm-schedrow + .pm-schedrow { border-top: 1px solid var(--border); }
     .pm-sched-when { font-weight: 600; }
@@ -1738,8 +1768,18 @@
 
     /* Reference cards (subjective portion, board prep) — dot-bulleted lines. */
     .pm-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-    .pm-list > div { font-size: 12.5px; color: var(--t2); line-height: 1.45; display: flex; gap: 8px; }
-    .pm-list > div::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--t3); margin-top: 6px; flex-shrink: 0; }
+    /* The bullet is positioned, not a flex sibling. As a flex row every inline
+       <b>/<i> in the sentence became its own flex item and got its own column,
+       which shredded these paragraphs into a stack of narrow strips. Absolute
+       positioning keeps the text in normal inline flow. */
+    .pm-list > div {
+      font-size: 12.5px; color: var(--t2); line-height: 1.45;
+      position: relative; padding-left: 13px;
+    }
+    .pm-list > div::before {
+      content: ''; position: absolute; left: 0; top: 6px;
+      width: 5px; height: 5px; border-radius: 50%; background: var(--t3);
+    }
     .pm-list b { color: var(--text); font-weight: 600; }
 
     /* Four tabs now share the resources tab bar — give the labels a little
@@ -2766,14 +2806,7 @@
                 </div>
                 <div class="pf-divider" style="margin:14px 0"></div>
                 <div class="pf-microlabel" style="margin-bottom:8px">Study References</div>
-                <div class="pf-chips">
-                  <span class="pf-chip">The Enlisted Force Structure</span>
-                  <span class="pf-chip">AFH-1 Airman &middot; ch. 1, 7, 13A</span>
-                  <span class="pf-chip">AFI 36-2406 &middot; ch. 2 &amp; 4</span>
-                  <span class="pf-chip">AFDP 3-0 Operations</span>
-                  <span class="pf-chip">The Joint Team (Purple Book)</span>
-                  <span class="pf-chip">AFI 1-1 &middot; MPAs &amp; ALQs</span>
-                </div>
+                <div class="pm-refs" id="pm-board-refs"></div>
                 <div class="pf-walknote" style="margin-top:12px">
                   Board reporting instructions and the full question bank live on the JFHQ SharePoint
                   (Useful Links &mdash; CAC required).
@@ -5949,6 +5982,66 @@ const PTS = {
 };
 const CAP = { edu: 10, ejpme: 5, dec: 15, fit: 10 };
 
+/* Study references for the in-person board, per rank. Ranks whose PROCESS entry
+   has board:false (TSgt, SMSgt) never render this section at all, so they have
+   no list here.
+
+   CMSgt reuses the MSgt list: both sit on the SNCO board track and no separate
+   CMSgt list was supplied. Confirm before relying on it.
+
+   `url` is optional — entries without a published link render as plain rows. */
+const BOARD_REFS = {
+  SSgt: [
+    { name: 'A Profession of Arms: Our Core Values (Blue Book)', meta: 'May 2022',
+      url: 'https://www.airuniversity.af.edu/Portals/10/Foundational-Resources/A-Profession-of-Arms.pdf' },
+    { name: 'The Enlisted Force Structure (Brown Book)', meta: 'May 2022',
+      url: 'https://www.airuniversity.af.edu/Portals/10/Foundational-Resources/Enlisted-Force-Structure-Sep2025.pdf' },
+    { name: 'DAFI 36-2903, Dress and Personal Appearance', meta: 'April 2022',
+      url: 'https://static.e-publishing.af.mil/production/1/af_a1/publication/dafi36-2903/dafi36-2903.pdf' },
+    { name: 'DAFMAN 36-2905, Physical Fitness Program', meta: 'April 2022',
+      url: 'https://static.e-publishing.af.mil/production/1/af_a1/publication/afman36-2905/dafman36-2905.pdf' },
+    { name: 'DAFI 90-5001, Integrated Resilience',
+      url: 'https://static.e-publishing.af.mil/production/1/af_a1/publication/dafi90-5001/dafi90-5001.pdf' },
+    { name: 'DAFI 90-6001, Sexual Assault Prevention and Response (SAPR) Program',
+      meta: 'July 2020, incorporating Change 1, March 2021',
+      url: 'https://static.e-publishing.af.mil/production/1/af_a1/publication/dafi90-6001/dafi90-6001.pdf' },
+  ],
+  MSgt: [
+    { name: 'AF724-A Airman Comprehensive Assessment Addendum' },
+    { name: 'AFDP 1-1 Mission Command' },
+    { name: 'AFDP 3-0 Operations' },
+    { name: 'AFH1 Airman' },
+    { name: 'AFI 10-401 Operations Planning and Execution' },
+    { name: 'AFI 1-1 Air Force Standards' },
+    { name: 'AFI 6-2406 Officer and Enlisted Evaluation Procedures' },
+    { name: 'DAFI 36-2903, Dress and Personal Appearance', meta: 'April 2022',
+      url: 'https://static.e-publishing.af.mil/production/1/af_a1/publication/dafi36-2903/dafi36-2903.pdf' },
+    { name: 'AFI 90-301 Inspector General Complaints Resolution' },
+    { name: 'AFMAN 36-2643 Coaching and Mentoring Program' },
+    { name: 'AFMAN 36-2806 Military Awards Criteria and Procedures' },
+    { name: 'DoDD 5100.01 Functions of the Department of Defense and its Major Components' },
+    { name: 'The Enlisted Force Structure (Brown Book)', meta: 'May 2022',
+      url: 'https://www.airuniversity.af.edu/Portals/10/Foundational-Resources/Enlisted-Force-Structure-Sep2025.pdf' },
+  ],
+};
+BOARD_REFS.CMSgt = BOARD_REFS.MSgt;
+
+const EXT_ICON = '<svg class="pm-ref-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>';
+
+function renderBoardRefs(rank) {
+  const host = $('pm-board-refs');
+  if (!host) return;
+  const refs = BOARD_REFS[rank] || [];
+  host.innerHTML = refs.map(r => {
+    const label = escapeHtml(r.name) + (r.meta ? ` <span class="pf-of">· ${escapeHtml(r.meta)}</span>` : '');
+    return r.url
+      ? `<a class="pm-ref" href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">
+           <span class="pm-ref-name">${label}</span>${EXT_ICON}
+         </a>`
+      : `<div class="pm-ref"><span>${label}</span></div>`;
+  }).join('');
+}
+
 /* Which reviews a recommendation for each rank goes through. */
 const PROCESS = {
   SSgt:  { board: true,  step2: false, note: 'Documentation panel plus an in-person board — 70+ is the recommended standard on each.' },
@@ -6097,8 +6190,15 @@ function render() {
   $('pm-path-note').textContent = proc.note;
   $('pm-sched').style.display = i >= 2 ? '' : 'none';   // SNCO boards: MSgt and above
   $('pm-board').style.display = proc.board ? '' : 'none';
-  if (proc.board) $('pm-board-level').textContent =
-    'Answer at the ' + (i === 0 ? 'tactical' : i === 2 ? 'operational' : 'operational / strategic') + ' level';
+  if (proc.board) {
+    $('pm-board-level').textContent =
+      'Answer at the ' + (i === 0 ? 'tactical' : i === 2 ? 'operational' : 'operational / strategic') + ' level';
+    renderBoardRefs(state.rank);
+  } else {
+    // Clear rather than leave the previous rank's list sitting in a hidden
+    // section, where a future change that reveals it would show stale refs.
+    renderBoardRefs(null);
+  }
   $('pm-subj-lbl').textContent = i === 0 ? 65 : 60;
 
   /* 1 · education */
