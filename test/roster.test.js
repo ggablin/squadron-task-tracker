@@ -410,3 +410,13 @@ test('granting is never blocked by the invariant', async () => {
   const m = await roster.setRosterAdmin(pool, f.mcnaughton, true, f.gablin);
   assert.strictEqual(m.can_manage_roster, true);
 });
+
+test('granting to the sole remaining admin is not blocked by the invariant', async () => {
+  const f = await seedAdmins();
+  await roster.setRosterAdmin(pool, f.mcnaughton, false, f.gablin);  // gablin is now the only holder
+  // Granting cannot strand the capability, so the invariant must not apply here.
+  // This is the ONLY case where ids[0] === Number(memberId) holds, so it is the
+  // only test that would catch a regression to an unconditional guard.
+  const m = await roster.setRosterAdmin(pool, f.gablin, true, f.gablin);
+  assert.strictEqual(m.can_manage_roster, true);
+});
