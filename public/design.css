@@ -172,3 +172,66 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* ── Member browser ───────────────────────────────────────────────────────
+   The shop-grouped, searchable member list rendered by /member-browser.js,
+   shared by records.html and (from Task 11) roster.html. Moved here from
+   records.html's own <style> block so both pages get it from one place.
+
+   The .shop-group / .shop-group-hd / .sg-name / .sg-count selectors are
+   scoped under .member-list on purpose: build.html and task-builder-mockup.html
+   already use those same class names for their own, differently-tuned
+   shop-grouped chip picker (`#roster` in build.html — a flat "assign a task"
+   member picker, not this component). That picker's values differ (e.g.
+   11px vs 10px header padding, no sticky header) — leaving these rules
+   unscoped would silently repaint it too. Give any new host's list container
+   the .member-list class to opt into this styling.
+
+   .member-row itself (and its descendants/states) isn't reused anywhere else
+   in public/, so it's left unscoped, matching what member-browser.js renders
+   and what records.html had before this moved. Note .member-row.sel is
+   deliberately NOT `.member-list .member-row.sel`: design.css already carries
+   a dark-mode foreground-flip rule keyed to the bare selector (see the
+   [data-theme="dark"] list near the top of this file) — scoping it here would
+   raise its specificity to match that rule and make the winner depend on
+   source order instead of the intentional specificity gap.
+   ───────────────────────────────────────────────────────────────────────── */
+.search-wrap { padding:16px 18px 12px; border-bottom:1px solid var(--border); }
+.search-input {
+  width:100%; padding:11px 13px; border:2px solid var(--border); border-radius:var(--rs);
+  font-size:14px; color:var(--text); background:var(--bg); outline:none;
+}
+.search-input:focus { border-color:var(--text); }
+.search-count { font-size:11.5px; color:var(--t2); margin-top:8px; }
+
+.member-list { overflow-y:auto; flex:1; }
+@media (max-width:860px){ .member-list { max-height:60vh; } }
+
+.member-list .shop-group { border-top:1px solid var(--border); }
+.member-list .shop-group:first-child { border-top:none; }
+.member-list .shop-group-hd {
+  display:flex; align-items:center; gap:10px; padding:10px 18px;
+  background:var(--cream); position:sticky; top:0; z-index:1;
+}
+.member-list .shop-group-hd .sg-name { font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--t2); flex:1; }
+.member-list .shop-group-hd .sg-count { font-size:11px; color:var(--t3); font-weight:600; }
+.member-list .shop-group-hd .sg-badge { font-size:11px; font-weight:600; color:var(--warn); margin-left:auto; }
+
+.member-row {
+  display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+  padding:11px 18px; border:none; border-bottom:1px solid var(--border);
+  background:var(--bg); font-size:13.5px; color:var(--text);
+}
+.member-row:last-child { border-bottom:none; }
+.member-row:hover { background:var(--cream); }
+.member-row.sel { background:var(--text); color:#fff; }
+.member-row.inactive { opacity:.55; }
+.member-row .rk {
+  font-size:10.5px; font-weight:600; color:var(--t2); background:var(--cream);
+  border-radius:12px; padding:3px 8px; flex-shrink:0;
+}
+.member-row.sel .rk { background:rgba(255,255,255,.18); color:rgba(255,255,255,.85); }
+[data-theme="dark"] .member-row.sel .rk { background:rgba(0,0,0,.18); color:rgba(0,0,0,.65); }
+.member-row .nm { flex:1; min-width:0; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.empty-state { padding:40px 24px; text-align:center; color:var(--t2); font-size:13px; line-height:1.6; }

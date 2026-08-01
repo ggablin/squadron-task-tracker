@@ -2432,6 +2432,10 @@
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h6l2.5 2.5V13a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M6 8h4M6 10.5h4"/></svg>
               Records
             </button>
+            <button class="add-btn" id="tool-roster" style="display:none" onclick="window.location.href='/roster'">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M12 6h3M13.5 4.5v3"/></svg>
+              Roster
+            </button>
             <button class="add-btn" onclick="openSquadronAddTask()">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
               Add Task
@@ -3574,6 +3578,16 @@ function applyRole() {
   });
   const shopRecords = document.getElementById('shop-records-link');
   if (shopRecords) shopRecords.style.display = ['supervisor','leadership'].includes(role) ? '' : 'none';
+
+  // Capability, not role — can_manage_roster only exists on GET /api/auth/me
+  // (the login response never carries it, see server.js), and currentMember is
+  // populated from that endpoint in init(), so this is always reading the
+  // right source. Set both ways, not just shown-when-true: currentMember can
+  // belong to a *different* member after a same-tab logout/login (doLogout
+  // doesn't reload the page), so a stale 'shown' from the previous session
+  // must be explicitly hidden for one that lacks the flag.
+  const rosterBtn = document.getElementById('tool-roster');
+  if (rosterBtn) rosterBtn.style.display = currentMember?.can_manage_roster ? '' : 'none';
 }
 
 /* ── Shop switcher (My Shop — leadership oversees multiple shops) ── */
@@ -3627,7 +3641,20 @@ async function doLogin() {
       body: JSON.stringify({ slug, password: pwd }),
     });
     const data = await res.json();
-    if (res.ok) { currentMember = data; showApp(); }
+    if (res.ok) {
+      // The login response is deliberately minimal and never carries
+      // can_manage_roster (server.js keeps that endpoint member-facing and
+      // unchanged; GET /api/auth/me is the one place the capability flag is
+      // exposed). Fetch it now so currentMember has the same complete shape
+      // here as it does after a plain page reload (init()) — otherwise a
+      // same-tab login leaves the Roster button hidden until the next
+      // reload, even for a member who does hold the capability. Fall back to
+      // the login payload if that fetch itself fails, so a real login
+      // success is never turned into a false "connection error".
+      try { currentMember = await fetch('/api/auth/me').then(r => r.ok ? r.json() : Promise.reject()); }
+      catch { currentMember = data; }
+      showApp();
+    }
     else { err.textContent = data.error || 'Login failed'; err.style.display = ''; }
   } catch { err.textContent = 'Connection error — try again'; err.style.display = ''; }
   btn.disabled = false; btn.textContent = 'Sign In';

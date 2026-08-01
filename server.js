@@ -12,6 +12,7 @@ const schedule = require('./lib/schedule');
 const events = require('./lib/events');
 const batches = require('./lib/batches');
 const records = require('./lib/records');
+const roster = require('./lib/roster');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -49,6 +50,9 @@ app.use(session({
       ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS can_manage_roster BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_by_id INTEGER REFERENCES members(id);
       ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS status VARCHAR(20) CHECK (status IN ('draft','live','archived'));
       UPDATE uta_cycles SET status = CASE WHEN is_current THEN 'live' ELSE 'archived' END WHERE status IS NULL;
       ALTER TABLE uta_cycles ALTER COLUMN status SET DEFAULT 'draft';
@@ -147,6 +151,33 @@ function requireRole(minRole) {
   };
 }
 
+// Roster management is a capability, not a rank. Twenty-one members hold
+// role='leadership' — the Commander, the Chief, the First Sergeant, four flight
+// superintendents and all nine shop NCOICs — so requireRole('leadership') would
+// grant roster control to twenty-one people rather than two.
+//
+// Reads can_manage_roster and active live from members on every request,
+// rather than trusting req.session.canManageRoster — which is written only at
+// login and good for the cookie's full 30-day life (see the session config
+// above). A session-only gate meant a revoked admin kept full roster control,
+// including granting the capability back to themselves, until their cookie
+// happened to expire. The session field still exists and is still set at
+// login, but only for the cheap UI hint (/api/auth/me, showing the Roster
+// button) — it must never be used to gate a request.
+async function requireRosterAdmin(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT can_manage_roster, active FROM members WHERE id = $1`, [req.session.memberId]);
+    if (!rows.length || !rows[0].active || !rows[0].can_manage_roster) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
 // Blocks every state-changing endpoint until a defaulted account sets its own
 // password. Session flag is set from members.must_change_password at login and
 // cleared by POST /api/auth/password. Read-only endpoints are intentionally
@@ -202,6 +233,9 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.shopId   = member.shop_id;
     req.session.shopName = member.shop_name;
     req.session.mustChange = member.must_change_password;
+    // Capability, not derived from role — see requireRosterAdmin. member.* comes
+    // from `SELECT m.*` above, so can_manage_roster is already present here.
+    req.session.canManageRoster = !!member.can_manage_roster;
 
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Session save failed' });
@@ -327,7 +361,11 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
       [req.session.memberId]
     );
     if (!rows.length) return res.status(401).json({ error: 'Session invalid' });
-    res.json(rows[0]);
+    // Sourced from the session (set at login from members.can_manage_roster), not
+    // from this query — keeps this endpoint's SQL member-facing and unchanged, per
+    // the roster-management spec, while still surfacing the flag for the
+    // Leadership Tools button.
+    res.json({ ...rows[0], can_manage_roster: !!req.session.canManageRoster });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -1583,6 +1621,86 @@ app.post('/api/notifications/read', requireAuth, async (req, res) => {
   }
 });
 
+// ── Roster management (capability-gated: members.can_manage_roster) ──────────
+function rosterFail(res, e) {
+  if (e instanceof roster.RosterError) {
+    return res.status(e.status).json({ error: e.code, message: e.message });
+  }
+  console.error(e);
+  res.status(500).json({ error: 'Server error' });
+}
+
+// Shared by `grant` below and `active` in the update route just below that:
+// both setRosterAdmin and updateMember (lib/roster.js) are safe once they
+// receive a real boolean, but this is the HTTP boundary, and JSON/query values
+// arrive as whatever the caller sent. The *string* "false" is truthy in JS, so
+// a bare `!!req.body.grant` (or `!!req.body.active`) would silently flip a
+// revoke or deactivate request into its opposite. Accept real booleans and the
+// strings "true"/"false"; reject anything else with 400 instead of guessing.
+function parseStrictBool(v) {
+  if (v === true || v === false) return v;
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return undefined;
+}
+
+app.get('/api/roster', requireAuth, requireRosterAdmin, async (req, res) => {
+  try {
+    res.json({
+      members: await roster.listRoster(pool),
+      shops: (await pool.query(`SELECT id, name FROM shops ORDER BY name`)).rows,
+      flights: roster.FLIGHTS,
+      placements: Object.fromEntries(
+        Object.entries(roster.PLACEMENTS).map(([k, v]) => [k, v.positions])),
+    });
+  } catch (e) { rosterFail(res, e); }
+});
+
+app.post('/api/roster/members', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  try { res.json(await roster.createMember(pool, req.body, req.session.memberId)); }
+  catch (e) { rosterFail(res, e); }
+});
+
+app.patch('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid member id' });
+  // The HTTP boundary stays lenient on purpose: JSON can carry the *strings*
+  // "true"/"false" (naive clients), which parseStrictBool accepts and
+  // converts to real booleans before lib/roster.js ever sees them — that
+  // library now rejects any non-boolean `active` outright rather than
+  // coercing it. `active` is optional (undefined means "don't touch it"), so
+  // only validate when present.
+  const body = { ...req.body };
+  if (body.active !== undefined) {
+    const active = parseStrictBool(body.active);
+    if (active === undefined) {
+      return res.status(400).json({ error: 'BAD_ACTIVE', message: 'active must be true or false' });
+    }
+    body.active = active;
+  }
+  try { res.json(await roster.updateMember(pool, id, body, req.session.memberId)); }
+  catch (e) { rosterFail(res, e); }
+});
+
+app.delete('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid member id' });
+  try { res.json(await roster.deleteMember(pool, id)); }
+  catch (e) { rosterFail(res, e); }
+});
+
+app.patch('/api/roster/members/:id/admin', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid member id' });
+  const grant = parseStrictBool(req.body.grant);
+  if (grant === undefined) {
+    return res.status(400).json({ error: 'BAD_GRANT', message: 'grant must be true or false' });
+  }
+  try {
+    res.json(await roster.setRosterAdmin(pool, id, grant, req.session.memberId));
+  } catch (e) { rosterFail(res, e); }
+});
+
 // ── Static ────────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1611,6 +1729,19 @@ app.get('/records', requireLeadershipPage, (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'records.html'))
 );
 
+// Spec §9.1: /roster redirects unless the session holds can_manage_roster —
+// including when there is no session at all, same as /build and /records
+// (requireLeadershipPage redirects rather than 401-JSON-ing a logged-out or
+// expired-session browser landing here from a stale bookmark). Unlike /build
+// and /records, the shell itself is ALSO gated on the capability: this page
+// lists every member including inactive ones, so there is no reason to serve
+// the frame to a logged-in member who cannot use it either. Must sit before
+// the SPA catch-all.
+app.get('/roster', requireLeadershipPage, (req, res) => {
+  if (!req.session.canManageRoster) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'roster.html'));
+});
+
 // Unknown /api/* paths must fail as JSON. Without this they fall through to the
 // SPA catch-all below and return index.html with a 200, so the caller's .json()
 // throws an opaque SyntaxError instead of surfacing a real status. Sits after
@@ -1623,25 +1754,35 @@ app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Exported so tests can drive the app in-process with fetch() against an
+// ephemeral port (app.listen(0, ...)), rather than re-deriving every route's
+// auth/authz behaviour by reading the middleware instead of exercising it.
+// Guarded below so merely requiring this module never binds PORT or starts
+// the cron schedules — both are startup side effects that belong only to the
+// actual running server, not to anything that requires server.js as a library.
+module.exports = app;
 
-// ── Scheduled jobs (in-process) ─────────────────────────────────────────────
-// Completion digests + email flushing run on a timer inside the web process.
-// Disable with ENABLE_CRON=false (e.g. for local/dev or one-off scripts).
-if (process.env.ENABLE_CRON !== 'false') {
-  const cron = require('node-cron');
-  const { runDigests } = require('./notify-digests');
-  const { flushEmails } = require('./notify-emails');
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-  // Completion digest once a day at 21:00 (end of a typical drill day).
-  cron.schedule('0 21 * * *', () => {
-    runDigests({ pool }).catch(e => console.error('digest job failed:', e.message));
-  });
+  // ── Scheduled jobs (in-process) ───────────────────────────────────────────
+  // Completion digests + email flushing run on a timer inside the web process.
+  // Disable with ENABLE_CRON=false (e.g. for local/dev or one-off scripts).
+  if (process.env.ENABLE_CRON !== 'false') {
+    const cron = require('node-cron');
+    const { runDigests } = require('./notify-digests');
+    const { flushEmails } = require('./notify-emails');
 
-  // Flush pending notification emails every 5 minutes.
-  cron.schedule('*/5 * * * *', () => {
-    flushEmails({ pool }).catch(e => console.error('email job failed:', e.message));
-  });
+    // Completion digest once a day at 21:00 (end of a typical drill day).
+    cron.schedule('0 21 * * *', () => {
+      runDigests({ pool }).catch(e => console.error('digest job failed:', e.message));
+    });
 
-  console.log('Scheduled jobs registered (digests 21:00 daily, email flush every 5m)');
+    // Flush pending notification emails every 5 minutes.
+    cron.schedule('*/5 * * * *', () => {
+      flushEmails({ pool }).catch(e => console.error('email job failed:', e.message));
+    });
+
+    console.log('Scheduled jobs registered (digests 21:00 daily, email flush every 5m)');
+  }
 }
