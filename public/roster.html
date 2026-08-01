@@ -541,7 +541,12 @@ async function handleSubmit(e, originalMember) {
   }
 
   const name = `${first_name} ${last_name}`.trim();
-  const alreadyLeadership = !isNew && LEADERSHIP_PLACEMENTS.has(originalMember.placement);
+  // Computed from role, not placement: placement is derived client-side from
+  // whatever the server last reported, and a stored anomaly (role:'member'
+  // with flight:'Squadron Staff') used to report placement 'squadron_staff'
+  // — which would have suppressed this confirmation for a save that actually
+  // grants leadership for the first time.
+  const alreadyLeadership = !isNew && originalMember.role === 'leadership';
   if (!await confirmLeadershipGrantIfNeeded(placement, position, name, alreadyLeadership)) return;
 
   const payload = { last_name, first_name, rank, shop_id, placement, position, flight, email };

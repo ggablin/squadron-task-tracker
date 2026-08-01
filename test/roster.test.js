@@ -475,3 +475,42 @@ test('updateMember rejects a slug that normalises to empty, leaving the stored s
   const { rows: [row] } = await pool.query(`SELECT slug FROM members WHERE id = $1`, [f.plain]);
   assert.strictEqual(row.slug, 'gorey');
 });
+
+// ── Fix-round-2 CRITICAL 2: placementOf silently escalated a member to
+// leadership. It tested only `m.flight === 'Squadron Staff'`, with no role
+// check — unlike the org chart's own equivalent (server.js), which tests the
+// flight and THEN `if (r.role === 'leadership')`. A stored
+// {role:'member', flight:'Squadron Staff'} reported placement
+// 'squadron_staff', and because the UI resends `placement` on every save,
+// correcting an unrelated field (e.g. email) on such a member would have
+// saved them back as role:'leadership' — unlocking every
+// requireRole('leadership') endpoint, silently and without the UI's
+// leadership-grant confirmation dialog (which itself relied on the same
+// broken signal, see public/roster.html).
+
+test('placementOf does not escalate a non-leadership member whose flight happens to be Squadron Staff', () => {
+  const anomaly = { role: 'member', flight: 'Squadron Staff', position: null };
+  assert.strictEqual(roster.placementOf(anomaly), 'shop_member');
+  assert.notStrictEqual(roster.placementOf(anomaly), 'squadron_staff');
+});
+
+test('a round-trip save of that anomalous member does not escalate their role to leadership', async () => {
+  const f = await seedAdmins();
+  const m = await roster.createMember(pool, {
+    last_name: 'Odd', first_name: 'Case', rank: 'AB',
+    shop_id: f.shopId, placement: 'shop_member',
+  }, f.gablin);
+  // derivePlacement can never produce role:'member' + flight:'Squadron Staff'
+  // — this simulates the stored anomaly directly, exactly as a hand-edit or a
+  // legacy import row could.
+  await pool.query(`UPDATE members SET flight = 'Squadron Staff' WHERE id = $1`, [m.id]);
+
+  const fetched = await roster.getMember(pool, m.id);
+  assert.strictEqual(fetched.placement, 'shop_member');
+
+  // Round-trip exactly as the browser would: it always resends `placement`
+  // on save (public/roster.html), so replay that here and confirm role is
+  // untouched by a save that never intended to touch it.
+  const saved = await roster.updateMember(pool, m.id, { placement: fetched.placement }, f.gablin);
+  assert.strictEqual(saved.role, 'member');
+});
