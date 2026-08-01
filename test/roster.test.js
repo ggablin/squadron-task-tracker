@@ -349,6 +349,37 @@ test('deleteMember refuses a member with history and leaves them intact', async 
   assert.strictEqual(rows[0].n, 1);
 });
 
+// Regression coverage for fix-round-1: the only other history test references
+// the member via tasks.member_id, the obvious non-nullable case. This one
+// proves the catch-based mechanism also catches a nullable *_by_id column —
+// the member under test owns no task (member_id points at someone else) and is
+// referenced solely via flagged_by_id, an audit-trail column that is NULL for
+// almost every row.
+test('deleteMember refuses a member referenced only via a nullable *_by_id column, and leaves them intact', async () => {
+  const f = await seedAdmins();
+  const owner = await roster.createMember(pool, {
+    last_name: 'Owner', first_name: 'Rick', rank: 'SSgt',
+    shop_id: f.shopId, placement: 'shop_member',
+  }, f.gablin);
+  const flagger = await roster.createMember(pool, {
+    last_name: 'Flagger', first_name: 'Sam', rank: 'SrA',
+    shop_id: f.shopId, placement: 'shop_member',
+  }, f.gablin);
+  const { rows: [cyc] } = await pool.query(
+    `INSERT INTO uta_cycles (name, is_current, status) VALUES ('Aug 2026', true, 'live') RETURNING id`);
+  const { rows: [cat] } = await pool.query(
+    `INSERT INTO task_categories (code, label, sort_order) VALUES ('admin','Admin',1) RETURNING id`);
+  // owner is the task's member_id (the obvious case, covered by the test
+  // above); flagger is referenced only through flagged_by_id.
+  await pool.query(
+    `INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, urgency, is_flagged, flagged_by_id)
+     VALUES ($1,$2,$3,'Update vRED','this_uta',true,$4)`, [cyc.id, owner.id, cat.id, flagger.id]);
+
+  await assert.rejects(() => roster.deleteMember(pool, flagger.id), /history/i);
+  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM members WHERE id = $1`, [flagger.id]);
+  assert.strictEqual(rows[0].n, 1);
+});
+
 test('deleteMember refuses the last active admin', async () => {
   const f = await seedAdmins();
   await pool.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
