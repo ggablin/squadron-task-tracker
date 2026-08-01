@@ -234,3 +234,46 @@ test('listRoster returns active and inactive members with their placement', asyn
   // to be a lead or a flight leader.
   assert.strictEqual(inactive.placement, 'shop_member');
 });
+
+test('updateMember changes placement by rewriting the whole triple', async () => {
+  const f = await seedAdmins();
+  const m = await roster.createMember(pool, {
+    last_name: 'Green', first_name: 'Jo', rank: 'SSgt',
+    shop_id: f.shopId, placement: 'shop_member',
+  }, f.gablin);
+
+  const up = await roster.updateMember(pool, m.id,
+    { placement: 'shop_lead', position: 'NCOIC' }, f.gablin);
+  assert.deepStrictEqual(
+    { role: up.role, flight: up.flight, position: up.position },
+    { role: 'leadership', flight: null, position: 'NCOIC' });
+
+  const back = await roster.updateMember(pool, m.id, { placement: 'shop_supervisor' }, f.gablin);
+  assert.deepStrictEqual(
+    { role: back.role, flight: back.flight, position: back.position },
+    { role: 'supervisor', flight: null, position: null });
+});
+
+test('updateMember refuses to deactivate the last active admin', async () => {
+  const f = await seedAdmins();
+  await pool.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
+  await assert.rejects(
+    () => roster.updateMember(pool, f.gablin, { active: false }, f.gablin), /only person/i);
+  const { rows: [row] } = await pool.query(`SELECT active FROM members WHERE id = $1`, [f.gablin]);
+  assert.strictEqual(row.active, true);
+});
+
+test('updateMember ignores can_manage_roster in the payload', async () => {
+  const f = await seedAdmins();
+  await roster.updateMember(pool, f.plain, { can_manage_roster: true, rank: 'TSgt' }, f.gablin);
+  const { rows: [row] } = await pool.query(
+    `SELECT rank, can_manage_roster FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(row.rank, 'TSgt');
+  assert.strictEqual(row.can_manage_roster, false);
+});
+
+test('updateMember reports a slug collision rather than throwing a raw error', async () => {
+  const f = await seedAdmins();
+  await assert.rejects(
+    () => roster.updateMember(pool, f.plain, { slug: 'gablin' }, f.gablin), /already taken/i);
+});
