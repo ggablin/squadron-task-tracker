@@ -3641,7 +3641,20 @@ async function doLogin() {
       body: JSON.stringify({ slug, password: pwd }),
     });
     const data = await res.json();
-    if (res.ok) { currentMember = data; showApp(); }
+    if (res.ok) {
+      // The login response is deliberately minimal and never carries
+      // can_manage_roster (server.js keeps that endpoint member-facing and
+      // unchanged; GET /api/auth/me is the one place the capability flag is
+      // exposed). Fetch it now so currentMember has the same complete shape
+      // here as it does after a plain page reload (init()) — otherwise a
+      // same-tab login leaves the Roster button hidden until the next
+      // reload, even for a member who does hold the capability. Fall back to
+      // the login payload if that fetch itself fails, so a real login
+      // success is never turned into a false "connection error".
+      try { currentMember = await fetch('/api/auth/me').then(r => r.ok ? r.json() : Promise.reject()); }
+      catch { currentMember = data; }
+      showApp();
+    }
     else { err.textContent = data.error || 'Login failed'; err.style.display = ''; }
   } catch { err.textContent = 'Connection error — try again'; err.style.display = ''; }
   btn.disabled = false; btn.textContent = 'Sign In';
