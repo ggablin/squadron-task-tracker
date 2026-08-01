@@ -120,5 +120,23 @@ function filterMemberBrowser(host, query) {
     const anyVisible = [...g.querySelectorAll('.member-row')].some(r => r.style.display !== 'none');
     g.style.display = anyVisible ? '' : 'none';
   });
+
+  // display:none-ing every row/group (above) leaves a blank-looking area, not
+  // the explicit "nothing matched" message the original page showed. Restore
+  // that message on a zero-match query, and drop it again the moment a later
+  // query matches something — `.empty-state` is also what renderMemberBrowser
+  // itself uses for "no members at all", so re-use the same lookup rather
+  // than tag our own: if one's already there (host was rendered empty to
+  // begin with), searching an already-empty list is a no-op, not a duplicate.
+  const existingEmpty = host.querySelector('.empty-state');
+  if (!shown && !existingEmpty) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'No members found.';
+    host.appendChild(empty);
+  } else if (shown && existingEmpty) {
+    existingEmpty.remove();
+  }
+
   return shown;
 }

@@ -253,7 +253,13 @@ async function loadRoster() {
 function updateSearchCount(shown) {
   const countEl = document.getElementById('search-count');
   const total = MEMBERS.length;
-  if (!total) { countEl.textContent = ''; return; }
+  // Keyed on `shown`, not `total`: a zero-match search is a `shown` of 0 over
+  // a non-zero `total`, and the original page cleared the count text for
+  // that case too (renderMemberList's `if (!totalMembers)` branch, where
+  // totalMembers was the count for *that* render, filtered or not — not the
+  // grand total). Keying on `total` alone missed that case and rendered
+  // "0 of 61 members" instead.
+  if (!shown) { countEl.textContent = ''; return; }
   countEl.textContent = shown === total
     ? `${total} member${total === 1 ? '' : 's'}`
     : `${shown} of ${total} members`;
