@@ -95,3 +95,14 @@ test('nextSlug preserves hyphenated surnames and rejects empty', async () => {
   assert.strictEqual(await roster.nextSlug(pool, 'Beljour-Sommer', 'Rose'), 'beljour-sommer');
   await assert.rejects(() => roster.nextSlug(pool, '   ', 'Rose'), /last name/i);
 });
+
+test('nextSlug falls through to a numeral when there is no first name and the surname is taken', async () => {
+  await resetDb();
+  const { rows: [shop] } = await pool.query(`INSERT INTO shops (name) VALUES ('Electrical') RETURNING id`);
+  await pool.query(
+    `INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash)
+     VALUES ('Fowler','','AB',$1,'member','fowler','x')`, [shop.id]);
+  // No initial to disambiguate with, so the 'fowler-<initial>' candidate is
+  // never generated and the numeral is the only remaining option.
+  assert.strictEqual(await roster.nextSlug(pool, 'Fowler', ''), 'fowler-2');
+});
