@@ -292,19 +292,21 @@ test('updateMember deactivates a member who is not the last active admin', async
 // Regression coverage for the fix-round-1 critical finding: the guard used to
 // branch on `input.active === false` while the write used `!!input.active`, so
 // 0 / null / "" all skipped assertNotLastAdmin yet still wrote active = false —
-// a reachable full lockout. Every falsy-but-not-strictly-false value must now
-// be refused identically to `active: false`.
-test('updateMember refuses to deactivate the last active admin for every falsy active value, not just false', async () => {
-  for (const falsyActive of [0, null, '']) {
-    const f = await seedAdmins();
-    await pool.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
+// a reachable full lockout. Fix-round-2 went further: rather than just making
+// the guard and the write agree on every falsy value, the library now rejects
+// any non-boolean `active` outright (BAD_ACTIVE) before either the guard or
+// the write ever runs, so the class of bug — guard and write disagreeing on
+// what a value means — can't recur under a different disguise.
+test('updateMember rejects a non-boolean active value instead of coercing it, for every falsy-but-not-false value that used to slip through', async () => {
+  const f = await seedAdmins();
+  for (const badActive of [0, null, '', 'false', 1, 'true', NaN]) {
     await assert.rejects(
-      () => roster.updateMember(pool, f.gablin, { active: falsyActive }, f.gablin),
-      /only person/i,
-      `active: ${JSON.stringify(falsyActive)} should have been refused`);
+      () => roster.updateMember(pool, f.gablin, { active: badActive }, f.gablin),
+      /active must be true or false/i,
+      `active: ${JSON.stringify(badActive)} should have been rejected`);
     const { rows: [row] } = await pool.query(`SELECT active FROM members WHERE id = $1`, [f.gablin]);
     assert.strictEqual(row.active, true,
-      `active: ${JSON.stringify(falsyActive)} should not have been written`);
+      `active: ${JSON.stringify(badActive)} should not have been written`);
   }
 });
 
@@ -553,4 +555,19 @@ test('updateMember rejects a shop_id that does not reference an existing shop', 
     () => roster.updateMember(pool, f.plain, { shop_id: 999999 }, f.gablin), /shop/i);
   const { rows: [row] } = await pool.query(`SELECT shop_id FROM members WHERE id = $1`, [f.plain]);
   assert.strictEqual(row.shop_id, f.shopId);
+});
+
+// ── Fix-round-2 MINOR: createMember stored NULL for an empty email
+// (`input.email || null`) while updateMember's generic EDITABLE branch stored
+// the literal string '' — the same field meaning two different things
+// depending on which path last wrote it. Reconciled on NULL.
+test('updateMember stores NULL for an empty-string email too, matching createMember', async () => {
+  const f = await seedAdmins();
+  await roster.updateMember(pool, f.plain, { email: 'gorey@example.mil' }, f.gablin);
+  const before = await pool.query(`SELECT email FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(before.rows[0].email, 'gorey@example.mil');
+
+  await roster.updateMember(pool, f.plain, { email: '' }, f.gablin);
+  const { rows: [row] } = await pool.query(`SELECT email FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(row.email, null);
 });
