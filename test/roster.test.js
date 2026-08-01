@@ -420,3 +420,58 @@ test('granting to the sole remaining admin is not blocked by the invariant', asy
   const m = await roster.setRosterAdmin(pool, f.gablin, true, f.gablin);
   assert.strictEqual(m.can_manage_roster, true);
 });
+
+// ── Fix-round-2 CRITICAL 1: editing a sign-in name could silently lock the
+// member out. `slug` was written verbatim (trimmed only), while nextSlug,
+// import-members.js and login's `WHERE m.slug = $1` all lowercase/normalise.
+// An admin retyping "Beltran" over a stored "beltran" produced a slug that
+// login could never match. normalizeSlug() is now the single source of truth
+// for both generation (nextSlug) and editing (updateMember).
+
+test('normalizeSlug lowercases, folds diacritics, and strips disallowed characters', () => {
+  assert.strictEqual(roster.normalizeSlug('Beltran'), 'beltran');
+  assert.strictEqual(roster.normalizeSlug('  Beltran  '), 'beltran');
+  assert.strictEqual(roster.normalizeSlug('Fernández'), 'fernandez');
+  assert.strictEqual(roster.normalizeSlug('Beltrán Jr.'), 'beltranjr');
+  assert.strictEqual(roster.normalizeSlug('Beljour-Sommer'), 'beljour-sommer');
+  assert.strictEqual(roster.normalizeSlug('   '), '');
+  assert.strictEqual(roster.normalizeSlug(null), '');
+});
+
+test('nextSlug folds a diacritic surname to its base letter rather than dropping it', async () => {
+  await resetDb();
+  await pool.query(`INSERT INTO shops (name) VALUES ('Electrical')`);
+  // Before the fix, the accented character fell outside [a-z0-9-] and was
+  // stripped by the character-class filter alone, producing "fernndez" — a
+  // dropped letter in the generated sign-in name, not just a missed accent.
+  assert.strictEqual(await roster.nextSlug(pool, 'Fernández', 'Jon'), 'fernandez');
+});
+
+test('updateMember normalises an edited slug so a differently-cased retype still resolves at login', async () => {
+  const f = await seedAdmins();   // f.plain's slug starts as 'gorey'
+  const updated = await roster.updateMember(pool, f.plain, { slug: 'Beltran' }, f.gablin);
+  assert.strictEqual(updated.slug, 'beltran');
+  const { rows: [row] } = await pool.query(`SELECT slug FROM members WHERE id = $1`, [f.plain]);
+  // Assert the stored value directly — login itself lowercases the typed
+  // slug before comparing, so a stored 'Beltran' would already never match
+  // regardless of what the user types.
+  assert.strictEqual(row.slug, 'beltran');
+});
+
+test('updateMember folds diacritics and strips punctuation in an edited slug', async () => {
+  const f = await seedAdmins();
+  const updated = await roster.updateMember(pool, f.plain, { slug: 'Beltrán Jr.' }, f.gablin);
+  assert.strictEqual(updated.slug, 'beltranjr');
+});
+
+test('updateMember rejects a slug that normalises to empty, leaving the stored slug unchanged', async () => {
+  const f = await seedAdmins();
+  for (const badSlug of ['   ', '!!!', '...']) {
+    await assert.rejects(
+      () => roster.updateMember(pool, f.plain, { slug: badSlug }, f.gablin),
+      /sign-in name/i,
+      `slug: ${JSON.stringify(badSlug)} should have been rejected`);
+  }
+  const { rows: [row] } = await pool.query(`SELECT slug FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(row.slug, 'gorey');
+});

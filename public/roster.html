@@ -105,6 +105,7 @@ input, select, textarea { font-family:inherit; }
 .field input:focus, .field select:focus { border-color:var(--text); }
 .field input:disabled, .field select:disabled { color:var(--t3); background:var(--cream); cursor:not-allowed; }
 .field-hint { font-size:11.5px; color:var(--t3); margin-top:5px; line-height:1.4; }
+.field-hint-warn { color:var(--urgent); font-weight:600; }
 .field-row { display:flex; gap:12px; }
 .field-row > .field { flex:1; min-width:0; }
 .field-check { display:flex; align-items:center; gap:8px; }
@@ -415,7 +416,9 @@ function formHTML(m) {
         <label for="f-slug">Sign-in name</label>
         <input type="text" id="f-slug" name="slug"
           ${isNew ? 'disabled placeholder="Assigned automatically when created"' : `value="${escapeHtml(m.slug)}"`}>
-        ${isNew ? '<div class="field-hint">The sign-in name and initial password are generated from the last name once this member is created — shown here and in a confirmation after you save.</div>' : ''}
+        ${isNew
+          ? '<div class="field-hint">The sign-in name and initial password are generated from the last name once this member is created — shown here and in a confirmation after you save.</div>'
+          : '<div class="field-hint field-hint-warn">Changing this changes how this member signs in. They will need to use the new sign-in name next time they log in.</div>'}
       </div>
       <div class="field field-check">
         <input type="checkbox" id="f-active" disabled ${isNew || m.active !== false ? 'checked' : ''}>
