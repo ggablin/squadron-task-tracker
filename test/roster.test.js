@@ -385,3 +385,28 @@ test('deleteMember refuses the last active admin', async () => {
   await pool.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
   await assert.rejects(() => roster.deleteMember(pool, f.gablin), /only person/i);
 });
+
+test('setRosterAdmin grants and revokes the capability', async () => {
+  const f = await seedAdmins();
+  const granted = await roster.setRosterAdmin(pool, f.plain, true, f.gablin);
+  assert.strictEqual(granted.can_manage_roster, true);
+  const revoked = await roster.setRosterAdmin(pool, f.plain, false, f.gablin);
+  assert.strictEqual(revoked.can_manage_roster, false);
+});
+
+test('setRosterAdmin refuses to revoke the last active holder', async () => {
+  const f = await seedAdmins();
+  await roster.setRosterAdmin(pool, f.mcnaughton, false, f.gablin);
+  await assert.rejects(
+    () => roster.setRosterAdmin(pool, f.gablin, false, f.gablin), /only person/i);
+  const { rows: [row] } = await pool.query(
+    `SELECT can_manage_roster FROM members WHERE id = $1`, [f.gablin]);
+  assert.strictEqual(row.can_manage_roster, true);
+});
+
+test('granting is never blocked by the invariant', async () => {
+  const f = await seedAdmins();
+  await roster.setRosterAdmin(pool, f.mcnaughton, false, f.gablin);
+  const m = await roster.setRosterAdmin(pool, f.mcnaughton, true, f.gablin);
+  assert.strictEqual(m.can_manage_roster, true);
+});
