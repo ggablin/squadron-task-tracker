@@ -12,6 +12,7 @@ const schedule = require('./lib/schedule');
 const events = require('./lib/events');
 const batches = require('./lib/batches');
 const records = require('./lib/records');
+const roster = require('./lib/roster');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -150,6 +151,15 @@ function requireRole(minRole) {
   };
 }
 
+// Roster management is a capability, not a rank. Twenty-one members hold
+// role='leadership' — the Commander, the Chief, the First Sergeant, four flight
+// superintendents and all nine shop NCOICs — so requireRole('leadership') would
+// grant roster control to twenty-one people rather than two.
+function requireRosterAdmin(req, res, next) {
+  if (req.session.canManageRoster) return next();
+  res.status(403).json({ error: 'Forbidden' });
+}
+
 // Blocks every state-changing endpoint until a defaulted account sets its own
 // password. Session flag is set from members.must_change_password at login and
 // cleared by POST /api/auth/password. Read-only endpoints are intentionally
@@ -205,6 +215,9 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.shopId   = member.shop_id;
     req.session.shopName = member.shop_name;
     req.session.mustChange = member.must_change_password;
+    // Capability, not derived from role — see requireRosterAdmin. member.* comes
+    // from `SELECT m.*` above, so can_manage_roster is already present here.
+    req.session.canManageRoster = !!member.can_manage_roster;
 
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Session save failed' });
@@ -330,7 +343,11 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
       [req.session.memberId]
     );
     if (!rows.length) return res.status(401).json({ error: 'Session invalid' });
-    res.json(rows[0]);
+    // Sourced from the session (set at login from members.can_manage_roster), not
+    // from this query — keeps this endpoint's SQL member-facing and unchanged, per
+    // the roster-management spec, while still surfacing the flag for the
+    // Leadership Tools button.
+    res.json({ ...rows[0], can_manage_roster: !!req.session.canManageRoster });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -1586,6 +1603,66 @@ app.post('/api/notifications/read', requireAuth, async (req, res) => {
   }
 });
 
+// ── Roster management (capability-gated: members.can_manage_roster) ──────────
+function rosterFail(res, e) {
+  if (e instanceof roster.RosterError) {
+    return res.status(e.status).json({ error: e.code, message: e.message });
+  }
+  console.error(e);
+  res.status(500).json({ error: 'Server error' });
+}
+
+// setRosterAdmin (lib/roster.js) branches on `!grant` and writes `!!grant` —
+// exact complements for any JS value, so the library is safe once it receives a
+// real boolean. But this is the HTTP boundary, and JSON/query values arrive as
+// whatever the caller sent: the *string* "false" is truthy, so a bare
+// `!!req.body.grant` would silently treat a revoke request as a grant. Accept
+// real booleans and the strings "true"/"false"; reject anything else with 400
+// instead of guessing at intent.
+function parseGrant(v) {
+  if (v === true || v === false) return v;
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return undefined;
+}
+
+app.get('/api/roster', requireAuth, requireRosterAdmin, async (req, res) => {
+  try {
+    res.json({
+      members: await roster.listRoster(pool),
+      shops: (await pool.query(`SELECT id, name FROM shops ORDER BY name`)).rows,
+      flights: roster.FLIGHTS,
+      placements: Object.fromEntries(
+        Object.entries(roster.PLACEMENTS).map(([k, v]) => [k, v.positions])),
+    });
+  } catch (e) { rosterFail(res, e); }
+});
+
+app.post('/api/roster/members', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  try { res.json(await roster.createMember(pool, req.body, req.session.memberId)); }
+  catch (e) { rosterFail(res, e); }
+});
+
+app.patch('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  try { res.json(await roster.updateMember(pool, req.params.id, req.body, req.session.memberId)); }
+  catch (e) { rosterFail(res, e); }
+});
+
+app.delete('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  try { res.json(await roster.deleteMember(pool, req.params.id)); }
+  catch (e) { rosterFail(res, e); }
+});
+
+app.patch('/api/roster/members/:id/admin', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const grant = parseGrant(req.body.grant);
+  if (grant === undefined) {
+    return res.status(400).json({ error: 'BAD_GRANT', message: 'grant must be true or false' });
+  }
+  try {
+    res.json(await roster.setRosterAdmin(pool, req.params.id, grant, req.session.memberId));
+  } catch (e) { rosterFail(res, e); }
+});
+
 // ── Static ────────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1613,6 +1690,14 @@ app.get('/build', requireLeadershipPage, (req, res) =>
 app.get('/records', requireLeadershipPage, (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'records.html'))
 );
+
+// Unlike /build and /records, the shell itself is gated: this page lists every
+// member including inactive ones, so there is no reason to serve the frame to
+// members who cannot use it. Must sit before the SPA catch-all.
+app.get('/roster', requireAuth, (req, res) => {
+  if (!req.session.canManageRoster) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'roster.html'));
+});
 
 // Unknown /api/* paths must fail as JSON. Without this they fall through to the
 // SPA catch-all below and return index.html with a 200, so the caller's .json()
