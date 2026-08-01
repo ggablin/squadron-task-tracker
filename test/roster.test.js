@@ -514,3 +514,43 @@ test('a round-trip save of that anomalous member does not escalate their role to
   const saved = await roster.updateMember(pool, m.id, { placement: fetched.placement }, f.gablin);
   assert.strictEqual(saved.role, 'member');
 });
+
+// ── Fix-round-2 IMPORTANT 3: createMember accepted a missing or invalid
+// shop_id. login and /api/auth/me both INNER JOIN shops, so a member created
+// without one is a live row that can never authenticate, with no error to
+// tell anyone. An invalid shop_id raised a raw 23503 that rosterFail reports
+// as a bare 500 "Server error" instead of a clear message.
+
+test('createMember requires a shop_id', async () => {
+  const f = await seedAdmins();
+  await assert.rejects(() => roster.createMember(pool, {
+    last_name: 'NoShop', first_name: 'Amy', rank: 'AB', placement: 'shop_member',
+  }, f.gablin), /shop/i);
+  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM members WHERE last_name = 'NoShop'`);
+  assert.strictEqual(rows[0].n, 0);
+});
+
+test('createMember rejects a shop_id that does not reference an existing shop', async () => {
+  const f = await seedAdmins();
+  await assert.rejects(() => roster.createMember(pool, {
+    last_name: 'BadShop', first_name: 'Amy', rank: 'AB', shop_id: 999999, placement: 'shop_member',
+  }, f.gablin), /shop/i);
+  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM members WHERE last_name = 'BadShop'`);
+  assert.strictEqual(rows[0].n, 0);
+});
+
+test('updateMember rejects clearing shop_id to null', async () => {
+  const f = await seedAdmins();
+  await assert.rejects(
+    () => roster.updateMember(pool, f.plain, { shop_id: null }, f.gablin), /shop/i);
+  const { rows: [row] } = await pool.query(`SELECT shop_id FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(row.shop_id, f.shopId);
+});
+
+test('updateMember rejects a shop_id that does not reference an existing shop', async () => {
+  const f = await seedAdmins();
+  await assert.rejects(
+    () => roster.updateMember(pool, f.plain, { shop_id: 999999 }, f.gablin), /shop/i);
+  const { rows: [row] } = await pool.query(`SELECT shop_id FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(row.shop_id, f.shopId);
+});
