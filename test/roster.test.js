@@ -277,3 +277,44 @@ test('updateMember reports a slug collision rather than throwing a raw error', a
   await assert.rejects(
     () => roster.updateMember(pool, f.plain, { slug: 'gablin' }, f.gablin), /already taken/i);
 });
+
+test('updateMember deactivates a member who is not the last active admin', async () => {
+  const f = await seedAdmins();   // gablin + mcnaughton both hold can_manage_roster
+  const updated = await roster.updateMember(pool, f.mcnaughton, { active: false }, f.gablin);
+  assert.strictEqual(updated.active, false);
+  const { rows: [row] } = await pool.query(
+    `SELECT active, can_manage_roster FROM members WHERE id = $1`, [f.mcnaughton]);
+  assert.strictEqual(row.active, false);
+  // The capability itself is untouched by this path — only setRosterAdmin changes it.
+  assert.strictEqual(row.can_manage_roster, true);
+});
+
+// Regression coverage for the fix-round-1 critical finding: the guard used to
+// branch on `input.active === false` while the write used `!!input.active`, so
+// 0 / null / "" all skipped assertNotLastAdmin yet still wrote active = false —
+// a reachable full lockout. Every falsy-but-not-strictly-false value must now
+// be refused identically to `active: false`.
+test('updateMember refuses to deactivate the last active admin for every falsy active value, not just false', async () => {
+  for (const falsyActive of [0, null, '']) {
+    const f = await seedAdmins();
+    await pool.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
+    await assert.rejects(
+      () => roster.updateMember(pool, f.gablin, { active: falsyActive }, f.gablin),
+      /only person/i,
+      `active: ${JSON.stringify(falsyActive)} should have been refused`);
+    const { rows: [row] } = await pool.query(`SELECT active FROM members WHERE id = $1`, [f.gablin]);
+    assert.strictEqual(row.active, true,
+      `active: ${JSON.stringify(falsyActive)} should not have been written`);
+  }
+});
+
+test('updateMember stores SQL NULL for an explicit null, not the string "null"', async () => {
+  const f = await seedAdmins();
+  await roster.updateMember(pool, f.plain, { email: 'gorey@example.mil' }, f.gablin);
+  const before = await pool.query(`SELECT email FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(before.rows[0].email, 'gorey@example.mil');
+
+  await roster.updateMember(pool, f.plain, { email: null }, f.gablin);
+  const { rows: [row] } = await pool.query(`SELECT email FROM members WHERE id = $1`, [f.plain]);
+  assert.strictEqual(row.email, null);
+});
