@@ -155,9 +155,27 @@ function requireRole(minRole) {
 // role='leadership' — the Commander, the Chief, the First Sergeant, four flight
 // superintendents and all nine shop NCOICs — so requireRole('leadership') would
 // grant roster control to twenty-one people rather than two.
-function requireRosterAdmin(req, res, next) {
-  if (req.session.canManageRoster) return next();
-  res.status(403).json({ error: 'Forbidden' });
+//
+// Reads can_manage_roster and active live from members on every request,
+// rather than trusting req.session.canManageRoster — which is written only at
+// login and good for the cookie's full 30-day life (see the session config
+// above). A session-only gate meant a revoked admin kept full roster control,
+// including granting the capability back to themselves, until their cookie
+// happened to expire. The session field still exists and is still set at
+// login, but only for the cheap UI hint (/api/auth/me, showing the Roster
+// button) — it must never be used to gate a request.
+async function requireRosterAdmin(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT can_manage_roster, active FROM members WHERE id = $1`, [req.session.memberId]);
+    if (!rows.length || !rows[0].active || !rows[0].can_manage_roster) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 }
 
 // Blocks every state-changing endpoint until a defaulted account sets its own
@@ -1644,10 +1662,14 @@ app.post('/api/roster/members', requireAuth, requireRosterAdmin, requireOnboarde
 });
 
 app.patch('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
-  // updateMember's own activeVal normalisation (lib/roster.js) is correct for
-  // real booleans but, like the unfixed `grant` route, coerces by truthiness —
-  // `{"active":"false"}` would activate instead of deactivate. `active` is
-  // optional (undefined means "don't touch it"), so only validate when present.
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid member id' });
+  // The HTTP boundary stays lenient on purpose: JSON can carry the *strings*
+  // "true"/"false" (naive clients), which parseStrictBool accepts and
+  // converts to real booleans before lib/roster.js ever sees them — that
+  // library now rejects any non-boolean `active` outright rather than
+  // coercing it. `active` is optional (undefined means "don't touch it"), so
+  // only validate when present.
   const body = { ...req.body };
   if (body.active !== undefined) {
     const active = parseStrictBool(body.active);
@@ -1656,22 +1678,26 @@ app.patch('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnb
     }
     body.active = active;
   }
-  try { res.json(await roster.updateMember(pool, req.params.id, body, req.session.memberId)); }
+  try { res.json(await roster.updateMember(pool, id, body, req.session.memberId)); }
   catch (e) { rosterFail(res, e); }
 });
 
 app.delete('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
-  try { res.json(await roster.deleteMember(pool, req.params.id)); }
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid member id' });
+  try { res.json(await roster.deleteMember(pool, id)); }
   catch (e) { rosterFail(res, e); }
 });
 
 app.patch('/api/roster/members/:id/admin', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid member id' });
   const grant = parseStrictBool(req.body.grant);
   if (grant === undefined) {
     return res.status(400).json({ error: 'BAD_GRANT', message: 'grant must be true or false' });
   }
   try {
-    res.json(await roster.setRosterAdmin(pool, req.params.id, grant, req.session.memberId));
+    res.json(await roster.setRosterAdmin(pool, id, grant, req.session.memberId));
   } catch (e) { rosterFail(res, e); }
 });
 
@@ -1728,25 +1754,35 @@ app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Exported so tests can drive the app in-process with fetch() against an
+// ephemeral port (app.listen(0, ...)), rather than re-deriving every route's
+// auth/authz behaviour by reading the middleware instead of exercising it.
+// Guarded below so merely requiring this module never binds PORT or starts
+// the cron schedules — both are startup side effects that belong only to the
+// actual running server, not to anything that requires server.js as a library.
+module.exports = app;
 
-// ── Scheduled jobs (in-process) ─────────────────────────────────────────────
-// Completion digests + email flushing run on a timer inside the web process.
-// Disable with ENABLE_CRON=false (e.g. for local/dev or one-off scripts).
-if (process.env.ENABLE_CRON !== 'false') {
-  const cron = require('node-cron');
-  const { runDigests } = require('./notify-digests');
-  const { flushEmails } = require('./notify-emails');
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-  // Completion digest once a day at 21:00 (end of a typical drill day).
-  cron.schedule('0 21 * * *', () => {
-    runDigests({ pool }).catch(e => console.error('digest job failed:', e.message));
-  });
+  // ── Scheduled jobs (in-process) ───────────────────────────────────────────
+  // Completion digests + email flushing run on a timer inside the web process.
+  // Disable with ENABLE_CRON=false (e.g. for local/dev or one-off scripts).
+  if (process.env.ENABLE_CRON !== 'false') {
+    const cron = require('node-cron');
+    const { runDigests } = require('./notify-digests');
+    const { flushEmails } = require('./notify-emails');
 
-  // Flush pending notification emails every 5 minutes.
-  cron.schedule('*/5 * * * *', () => {
-    flushEmails({ pool }).catch(e => console.error('email job failed:', e.message));
-  });
+    // Completion digest once a day at 21:00 (end of a typical drill day).
+    cron.schedule('0 21 * * *', () => {
+      runDigests({ pool }).catch(e => console.error('digest job failed:', e.message));
+    });
 
-  console.log('Scheduled jobs registered (digests 21:00 daily, email flush every 5m)');
+    // Flush pending notification emails every 5 minutes.
+    cron.schedule('*/5 * * * *', () => {
+      flushEmails({ pool }).catch(e => console.error('email job failed:', e.message));
+    });
+
+    console.log('Scheduled jobs registered (digests 21:00 daily, email flush every 5m)');
+  }
 }

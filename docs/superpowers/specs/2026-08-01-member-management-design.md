@@ -63,7 +63,7 @@ Orthogonal to `role`. `requireRole` is unchanged (`member:0, supervisor:1, leade
 
 This distinction is the point. **Twenty-one members currently hold `role = 'leadership'`** — the Commander, the Chief Enlisted Manager, the First Sergeant, four flight superintendents, and all nine shop NCOIC/SNCOICs. Gating on `requireRole('leadership')` would grant roster control, including deactivation and role changes, to twenty-one people rather than two. The Commander outranks McNaughton and does not manage the roster; a capability models that, a rank ladder cannot.
 
-`canManageRoster` is read into the session at login alongside `role` and the onboarded flag, so the gate costs no extra query per request.
+`canManageRoster` is read into the session at login alongside `role` and the onboarded flag, but only for cheap UI hints (`/api/auth/me`, showing or hiding the Roster button) — it is **not** the gate. `requireRosterAdmin` re-reads `can_manage_roster` and `active` from `members` on every request, by primary key. The one extra indexed lookup per roster-admin request is a deliberate trade against the alternative: a session-only gate means revoking the capability (or deactivating the holder) does nothing until their 30-day cookie happens to expire, during which a revoked admin keeps full roster control — including granting the capability back to themselves. For five routes used by two people, "revoke doesn't revoke" is not an acceptable trade for one query.
 
 ### 5.2 Accountability
 
