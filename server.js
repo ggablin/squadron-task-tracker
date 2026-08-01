@@ -1612,14 +1612,14 @@ function rosterFail(res, e) {
   res.status(500).json({ error: 'Server error' });
 }
 
-// setRosterAdmin (lib/roster.js) branches on `!grant` and writes `!!grant` —
-// exact complements for any JS value, so the library is safe once it receives a
-// real boolean. But this is the HTTP boundary, and JSON/query values arrive as
-// whatever the caller sent: the *string* "false" is truthy, so a bare
-// `!!req.body.grant` would silently treat a revoke request as a grant. Accept
-// real booleans and the strings "true"/"false"; reject anything else with 400
-// instead of guessing at intent.
-function parseGrant(v) {
+// Shared by `grant` below and `active` in the update route just below that:
+// both setRosterAdmin and updateMember (lib/roster.js) are safe once they
+// receive a real boolean, but this is the HTTP boundary, and JSON/query values
+// arrive as whatever the caller sent. The *string* "false" is truthy in JS, so
+// a bare `!!req.body.grant` (or `!!req.body.active`) would silently flip a
+// revoke or deactivate request into its opposite. Accept real booleans and the
+// strings "true"/"false"; reject anything else with 400 instead of guessing.
+function parseStrictBool(v) {
   if (v === true || v === false) return v;
   if (v === 'true') return true;
   if (v === 'false') return false;
@@ -1644,7 +1644,19 @@ app.post('/api/roster/members', requireAuth, requireRosterAdmin, requireOnboarde
 });
 
 app.patch('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
-  try { res.json(await roster.updateMember(pool, req.params.id, req.body, req.session.memberId)); }
+  // updateMember's own activeVal normalisation (lib/roster.js) is correct for
+  // real booleans but, like the unfixed `grant` route, coerces by truthiness —
+  // `{"active":"false"}` would activate instead of deactivate. `active` is
+  // optional (undefined means "don't touch it"), so only validate when present.
+  const body = { ...req.body };
+  if (body.active !== undefined) {
+    const active = parseStrictBool(body.active);
+    if (active === undefined) {
+      return res.status(400).json({ error: 'BAD_ACTIVE', message: 'active must be true or false' });
+    }
+    body.active = active;
+  }
+  try { res.json(await roster.updateMember(pool, req.params.id, body, req.session.memberId)); }
   catch (e) { rosterFail(res, e); }
 });
 
@@ -1654,7 +1666,7 @@ app.delete('/api/roster/members/:id', requireAuth, requireRosterAdmin, requireOn
 });
 
 app.patch('/api/roster/members/:id/admin', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
-  const grant = parseGrant(req.body.grant);
+  const grant = parseStrictBool(req.body.grant);
   if (grant === undefined) {
     return res.status(400).json({ error: 'BAD_GRANT', message: 'grant must be true or false' });
   }
@@ -1691,10 +1703,15 @@ app.get('/records', requireLeadershipPage, (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'records.html'))
 );
 
-// Unlike /build and /records, the shell itself is gated: this page lists every
-// member including inactive ones, so there is no reason to serve the frame to
-// members who cannot use it. Must sit before the SPA catch-all.
-app.get('/roster', requireAuth, (req, res) => {
+// Spec §9.1: /roster redirects unless the session holds can_manage_roster —
+// including when there is no session at all, same as /build and /records
+// (requireLeadershipPage redirects rather than 401-JSON-ing a logged-out or
+// expired-session browser landing here from a stale bookmark). Unlike /build
+// and /records, the shell itself is ALSO gated on the capability: this page
+// lists every member including inactive ones, so there is no reason to serve
+// the frame to a logged-in member who cannot use it either. Must sit before
+// the SPA catch-all.
+app.get('/roster', requireLeadershipPage, (req, res) => {
   if (!req.session.canManageRoster) return res.redirect('/');
   res.sendFile(path.join(__dirname, 'public', 'roster.html'));
 });
