@@ -318,3 +318,39 @@ test('updateMember stores SQL NULL for an explicit null, not the string "null"',
   const { rows: [row] } = await pool.query(`SELECT email FROM members WHERE id = $1`, [f.plain]);
   assert.strictEqual(row.email, null);
 });
+
+test('deleteMember removes an unreferenced member', async () => {
+  const f = await seedAdmins();
+  const m = await roster.createMember(pool, {
+    last_name: 'Typo', first_name: 'Ann', rank: 'AB',
+    shop_id: f.shopId, placement: 'shop_member',
+  }, f.gablin);
+  assert.deepStrictEqual(await roster.deleteMember(pool, m.id), { deleted: true });
+  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM members WHERE id = $1`, [m.id]);
+  assert.strictEqual(rows[0].n, 0);
+});
+
+test('deleteMember refuses a member with history and leaves them intact', async () => {
+  const f = await seedAdmins();
+  const m = await roster.createMember(pool, {
+    last_name: 'Hasty', first_name: 'Bob', rank: 'SrA',
+    shop_id: f.shopId, placement: 'shop_member',
+  }, f.gablin);
+  const { rows: [cyc] } = await pool.query(
+    `INSERT INTO uta_cycles (name, is_current, status) VALUES ('Aug 2026', true, 'live') RETURNING id`);
+  const { rows: [cat] } = await pool.query(
+    `INSERT INTO task_categories (code, label, sort_order) VALUES ('admin','Admin',1) RETURNING id`);
+  await pool.query(
+    `INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, urgency)
+     VALUES ($1,$2,$3,'Update vRED','this_uta')`, [cyc.id, m.id, cat.id]);
+
+  await assert.rejects(() => roster.deleteMember(pool, m.id), /history/i);
+  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM members WHERE id = $1`, [m.id]);
+  assert.strictEqual(rows[0].n, 1);
+});
+
+test('deleteMember refuses the last active admin', async () => {
+  const f = await seedAdmins();
+  await pool.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
+  await assert.rejects(() => roster.deleteMember(pool, f.gablin), /only person/i);
+});
