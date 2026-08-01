@@ -49,6 +49,9 @@ app.use(session({
       ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS can_manage_roster BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_by_id INTEGER REFERENCES members(id);
       ALTER TABLE uta_cycles ADD COLUMN IF NOT EXISTS status VARCHAR(20) CHECK (status IN ('draft','live','archived'));
       UPDATE uta_cycles SET status = CASE WHEN is_current THEN 'live' ELSE 'archived' END WHERE status IS NULL;
       ALTER TABLE uta_cycles ALTER COLUMN status SET DEFAULT 'draft';
