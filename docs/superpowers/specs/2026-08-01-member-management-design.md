@@ -242,7 +242,7 @@ Between steps 2 and 1 the Electrical shop momentarily holds two leads; between 1
 
 **Invariant (§6)** — revoking the last holder's flag refused; deactivating the last holder refused; deleting the last holder refused; two concurrent revocations cannot both succeed; revoking a non-last holder succeeds.
 
-**Delete guard** — a member referenced from each of the eight tables is refused and the transaction rolls back cleanly; a freshly created, unreferenced member is deleted.
+**Delete guard** — a member referenced from each of the nine tables is refused and the transaction rolls back cleanly; a freshly created, unreferenced member is deleted.
 
 **Placement derivation** — each placement writes the correct triple; a request carrying a `position` outside the allowed set for its placement is rejected. Paired with org-chart assertions: Shop lead lands in `shop.ncoic`, Flight leader lands in `flight.leaders`, Shop supervisor lands in `shop.supervisors`.
 

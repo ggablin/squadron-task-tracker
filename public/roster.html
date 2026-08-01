@@ -361,7 +361,9 @@ function flightOptionsHTML(selected) {
 function formHTML(m) {
   const isNew = !m;
   const placement = m ? m.placement : 'shop_member';
-  const headTitle = isNew ? 'Add member' : `${m.rank} ${m.last_name}, ${m.first_name}`;
+  // One active member has no first_name (spec §11) — without the conditional
+  // this renders "SrA Smith, " with a dangling comma and trailing space.
+  const headTitle = isNew ? 'Add member' : `${m.rank} ${m.last_name}` + (m.first_name ? `, ${m.first_name}` : '');
   const badges = !isNew ? `
       <div class="det-badges">
         ${m.active === false ? '<span class="pill pill-inactive">Inactive</span>' : ''}
