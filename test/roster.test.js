@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
+const bcrypt = require('bcrypt');
 const { pool, applySchema, resetDb } = require('./helpers/db');
 
 test.before(applySchema);
@@ -188,4 +189,48 @@ test('FOR UPDATE serialises two concurrent revocations so they cannot both succe
     c1.release();
     c2.release();
   }
+});
+
+test('createMember provisions a member with slug-as-password and forced change', async () => {
+  const f = await seedAdmins();
+  const m = await roster.createMember(pool, {
+    last_name: 'Fernandez', first_name: 'Gabriel', rank: 'MSgt',
+    shop_id: f.shopId, placement: 'shop_lead', position: 'SNCOIC', email: '',
+  }, f.gablin);
+
+  assert.strictEqual(m.slug, 'fernandez');
+  assert.strictEqual(m.role, 'leadership');
+  assert.strictEqual(m.position, 'SNCOIC');
+  assert.strictEqual(m.flight, null);
+  assert.strictEqual(m.active, true);
+  assert.strictEqual(m.can_manage_roster, false);
+
+  const { rows: [row] } = await pool.query(
+    `SELECT password_hash, must_change_password, updated_by_id FROM members WHERE id = $1`, [m.id]);
+  assert.strictEqual(row.must_change_password, true);
+  assert.strictEqual(row.updated_by_id, f.gablin);
+  assert.strictEqual(await bcrypt.compare('fernandez', row.password_hash), true);
+});
+
+test('createMember rejects an invalid placement before touching the database', async () => {
+  const f = await seedAdmins();
+  await assert.rejects(() => roster.createMember(pool, {
+    last_name: 'Smith', first_name: 'Ann', rank: 'SrA',
+    shop_id: f.shopId, placement: 'shop_lead', position: 'Ncoic',
+  }, f.gablin), /position/i);
+  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM members WHERE last_name = 'Smith'`);
+  assert.strictEqual(rows[0].n, 0);
+});
+
+test('listRoster returns active and inactive members with their placement', async () => {
+  const f = await seedAdmins();
+  await pool.query(`UPDATE members SET active = false WHERE id = $1`, [f.plain]);
+  const all = await roster.listRoster(pool);
+  assert.strictEqual(all.length, 3);
+  const inactive = all.find(m => m.id === f.plain);
+  assert.strictEqual(inactive.active, false);
+  // seedAdmins gives everyone role='leadership' with no flight and no position,
+  // which placementOf resolves to shop_member — leadership alone is not enough
+  // to be a lead or a flight leader.
+  assert.strictEqual(inactive.placement, 'shop_member');
 });
