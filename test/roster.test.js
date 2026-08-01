@@ -68,3 +68,30 @@ test('placementOf prefers shop_lead over flight_leader when both could match', (
     roster.placementOf({ role: 'leadership', flight: 'Construction', position: 'SNCOIC' }),
     'shop_lead');
 });
+
+test('nextSlug disambiguates duplicate surnames', async () => {
+  await resetDb();
+  const { rows: [shop] } = await pool.query(`INSERT INTO shops (name) VALUES ('Electrical') RETURNING id`);
+  const add = (last, first, slug) => pool.query(
+    `INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash)
+     VALUES ($1,$2,'SrA',$3,'member',$4,'x')`, [last, first, shop.id, slug]);
+
+  assert.strictEqual(await roster.nextSlug(pool, 'Fowler', 'Omar'), 'fowler');
+  await add('Fowler', 'Omar', 'fowler');
+  assert.strictEqual(await roster.nextSlug(pool, 'Fowler', 'Gina'), 'fowler-g');
+  await add('Fowler', 'Gina', 'fowler-g');
+  // Third Fowler whose initial is also taken falls through to a numeral.
+  assert.strictEqual(await roster.nextSlug(pool, 'Fowler', 'Greg'), 'fowler-2');
+});
+
+test('nextSlug handles a member with no first name', async () => {
+  await resetDb();
+  await pool.query(`INSERT INTO shops (name) VALUES ('EM')`);
+  assert.strictEqual(await roster.nextSlug(pool, 'Fowler', ''), 'fowler');
+});
+
+test('nextSlug preserves hyphenated surnames and rejects empty', async () => {
+  await resetDb();
+  assert.strictEqual(await roster.nextSlug(pool, 'Beljour-Sommer', 'Rose'), 'beljour-sommer');
+  await assert.rejects(() => roster.nextSlug(pool, '   ', 'Rose'), /last name/i);
+});
