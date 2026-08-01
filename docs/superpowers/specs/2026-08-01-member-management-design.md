@@ -203,7 +203,11 @@ renderMemberBrowser(host, members, { onSelect, showInactive, groupBadge })
 
 ### 9.3 Member app
 
-No change. No member-facing query is touched.
+Two additive changes, and no member-facing SQL is touched.
+
+`GET /api/auth/me` gains a `can_manage_roster` boolean, read from the session rather than from its query — the value is already there from login. `index.html` gains a Roster button in Leadership Tools that stays hidden unless that boolean is true.
+
+Nothing a member sees or does changes.
 
 ## 10. Key flows
 
