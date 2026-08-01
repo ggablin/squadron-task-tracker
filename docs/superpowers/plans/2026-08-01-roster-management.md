@@ -790,7 +790,7 @@ Expected: FAIL — `roster.deleteMember is not a function`
 - [ ] **Step 3: Add deleteMember**
 
 ```js
-// members(id) is referenced by thirteen columns across eight tables, and that
+// members(id) is referenced by twelve columns across nine tables, and that
 // list will grow. Rather than enumerating them — a list guaranteed to drift —
 // attempt the delete and let Postgres answer. Every one of those constraints is
 // NO ACTION by default, including the nullable *_by_id columns, so any
