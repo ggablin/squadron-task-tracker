@@ -330,6 +330,13 @@ function renderEmptyDetail() {
       <div class="dp-title">Select a member</div>
       <div>Choose a member from the list to edit them, or add a new one.</div>
     </div>`;
+  // The only path here is reload() finding no member to reselect — most often
+  // right after a delete, which just removed the Save/Delete button the user
+  // had focus on. renderForm's symmetric case (a real member) ends in
+  // form.last_name.focus(); without this, focus falls back to <body> and a
+  // keyboard user is stranded with no visible focus ring anywhere. The search
+  // box is the natural next step after losing a selection.
+  document.getElementById('search')?.focus();
 }
 
 function shopOptionsHTML(selectedId) {
@@ -544,18 +551,29 @@ async function handleSubmit(e, originalMember) {
 }
 
 async function doCreate(payload) {
+  let body;
   try {
     const res = await fetch('/api/roster/members', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const body = await res.json().catch(() => ({}));
+    body = await res.json().catch(() => ({}));
     if (!res.ok) { uiToast(body.message || 'Could not create member', 'error'); return; }
-    uiToast(`${body.rank} ${body.last_name} added — sign-in name: ${body.slug}`, 'success');
-    await reload(body.id);
   } catch (e) {
     uiToast('Could not create member', 'error');
+    return;
+  }
+  uiToast(`${body.rank} ${body.last_name} added — sign-in name: ${body.slug}`, 'success');
+  // Separate try: the member was genuinely created above. If *this* fetch
+  // fails (network layer, not an HTTP error — those are handled inside
+  // reload()/loadRoster() by bouncing to '/'), that's a refresh problem, not
+  // a create problem — say so, rather than reporting the create as failed
+  // when it actually succeeded.
+  try {
+    await reload(body.id);
+  } catch (e) {
+    uiToast("Added, but the list couldn't refresh — reload the page", 'error');
   }
 }
 
@@ -568,10 +586,18 @@ async function save(id, patch) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { uiToast(body.message || 'Could not save changes', 'error'); return; }
-    uiToast('Saved', 'success');
-    await reload(id);
   } catch (e) {
     uiToast('Could not save changes', 'error');
+    return;
+  }
+  uiToast('Saved', 'success');
+  // Separate try: the save above already succeeded. A failure reloading the
+  // list afterward is a refresh problem, not a save problem — report it as
+  // such instead of contradicting the success toast we just showed.
+  try {
+    await reload(id);
+  } catch (e) {
+    uiToast("Saved, but the list couldn't refresh — reload the page", 'error');
   }
 }
 
@@ -593,9 +619,30 @@ async function doDelete(m) {
     message: 'This removes the record entirely. Only possible for a member with no history.',
     confirmLabel: 'Delete', danger: true,
   })) return;
-  const res = await fetch(`/api/roster/members/${m.id}`, { method: 'DELETE' });
-  const body = await res.json().catch(() => ({}));
-  if (res.ok) { uiToast('Member deleted', 'success'); return reload(); }
+  let res, body;
+  try {
+    res = await fetch(`/api/roster/members/${m.id}`, { method: 'DELETE' });
+    body = await res.json().catch(() => ({}));
+  } catch (e) {
+    // This is the one irreversible action on the page — a network-layer
+    // failure here (the request never completing, not an HTTP error, which
+    // is handled below) must never fail silently. Without this catch the
+    // rejection went unhandled and the user was left not knowing whether
+    // the member was deleted.
+    uiToast('Could not delete member', 'error');
+    return;
+  }
+  if (res.ok) {
+    uiToast('Member deleted', 'success');
+    // Separate try: the delete above already succeeded. A failure reloading
+    // the list afterward is a refresh problem, not a delete problem.
+    try {
+      await reload();
+    } catch (e) {
+      uiToast("Deleted, but the list couldn't refresh — reload the page", 'error');
+    }
+    return;
+  }
   if (body.error === 'HAS_HISTORY') {
     if (await uiConfirm({
       title: 'This member has history',
@@ -627,10 +674,18 @@ async function setRosterAdminFlag(m, grant) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { uiToast(body.message || 'Could not update roster access', 'error'); return; }
-    uiToast(grant ? 'Roster access granted' : 'Roster access revoked', 'success');
-    await reload(m.id);
   } catch (e) {
     uiToast('Could not update roster access', 'error');
+    return;
+  }
+  uiToast(grant ? 'Roster access granted' : 'Roster access revoked', 'success');
+  // Separate try: the grant/revoke above already succeeded. A failure
+  // reloading the list afterward is a refresh problem, not an access-change
+  // problem.
+  try {
+    await reload(m.id);
+  } catch (e) {
+    uiToast("Updated, but the list couldn't refresh — reload the page", 'error');
   }
 }
 
