@@ -55,3 +55,16 @@ test('placementOf round-trips every placement', () => {
     assert.strictEqual(roster.placementOf(roster.derivePlacement(name, opts)), name, name);
   }
 });
+
+test('placementOf prefers shop_lead over flight_leader when both could match', () => {
+  // Mirrors the org chart's guard at server.js:1503 — a leadership member with a
+  // flight set AND an NCOIC/SNCOIC position is a shop lead, not a flight leader.
+  // derivePlacement never produces this combination, so the round-trip cases
+  // above cannot catch a reordering of the two checks in placementOf.
+  assert.strictEqual(
+    roster.placementOf({ role: 'leadership', flight: 'Infrastructure', position: 'NCOIC' }),
+    'shop_lead');
+  assert.strictEqual(
+    roster.placementOf({ role: 'leadership', flight: 'Construction', position: 'SNCOIC' }),
+    'shop_lead');
+});
