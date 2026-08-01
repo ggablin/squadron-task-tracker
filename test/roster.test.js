@@ -106,3 +106,59 @@ test('nextSlug falls through to a numeral when there is no first name and the su
   // never generated and the numeral is the only remaining option.
   assert.strictEqual(await roster.nextSlug(pool, 'Fowler', ''), 'fowler-2');
 });
+
+async function seedAdmins() {
+  await resetDb();
+  const { rows: [shop] } = await pool.query(`INSERT INTO shops (name) VALUES ('C2') RETURNING id`);
+  const mk = async (slug, isAdmin, active = true) => {
+    const { rows: [m] } = await pool.query(
+      `INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash, active, can_manage_roster)
+       VALUES ($1,'A','MSgt',$2,'leadership',$1,'x',$3,$4) RETURNING id`,
+      [slug, shop.id, active, isAdmin]);
+    return m.id;
+  };
+  return { shopId: shop.id, gablin: await mk('gablin', true), mcnaughton: await mk('mcnaughton', true),
+           plain: await mk('gorey', false) };
+}
+
+test('assertNotLastAdmin allows removing a non-last holder', async () => {
+  const f = await seedAdmins();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await roster.assertNotLastAdmin(client, f.gablin);   // two holders, fine
+    await client.query('ROLLBACK');
+  } finally { client.release(); }
+});
+
+test('assertNotLastAdmin refuses the last active holder', async () => {
+  const f = await seedAdmins();
+  await pool.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await assert.rejects(() => roster.assertNotLastAdmin(client, f.gablin), /only person/i);
+    await client.query('ROLLBACK');
+  } finally { client.release(); }
+});
+
+test('an inactive holder does not count toward the invariant', async () => {
+  const f = await seedAdmins();
+  await pool.query(`UPDATE members SET active = false WHERE id = $1`, [f.mcnaughton]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await assert.rejects(() => roster.assertNotLastAdmin(client, f.gablin), /only person/i);
+    await client.query('ROLLBACK');
+  } finally { client.release(); }
+});
+
+test('a non-holder is never treated as the last holder', async () => {
+  const f = await seedAdmins();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await roster.assertNotLastAdmin(client, f.plain);
+    await client.query('ROLLBACK');
+  } finally { client.release(); }
+});
