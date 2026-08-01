@@ -162,3 +162,30 @@ test('a non-holder is never treated as the last holder', async () => {
     await client.query('ROLLBACK');
   } finally { client.release(); }
 });
+
+test('FOR UPDATE serialises two concurrent revocations so they cannot both succeed', async () => {
+  const f = await seedAdmins();               // gablin + mcnaughton both hold it
+  const c1 = await pool.connect();
+  const c2 = await pool.connect();
+  try {
+    await c1.query('BEGIN');
+    await roster.assertNotLastAdmin(c1, f.mcnaughton);   // 2 holders — passes
+    await c1.query(`UPDATE members SET can_manage_roster = false WHERE id = $1`, [f.mcnaughton]);
+    // c1 has written but NOT committed. c2 must block on the row lock rather
+    // than reading a stale count of two and also proceeding.
+    await c2.query('BEGIN');
+    const pending = roster.assertNotLastAdmin(c2, f.gablin);
+    let settled = false;
+    pending.then(() => { settled = true; }, () => { settled = true; });
+    await new Promise(r => setTimeout(r, 400));
+    assert.strictEqual(settled, false, 'second revocation should block while the first transaction is open');
+
+    await c1.query('COMMIT');
+    // Now c2 re-reads post-commit state and sees itself as the last holder.
+    await assert.rejects(() => pending, /only person/i);
+    await c2.query('ROLLBACK');
+  } finally {
+    c1.release();
+    c2.release();
+  }
+});
