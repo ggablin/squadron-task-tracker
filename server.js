@@ -192,6 +192,10 @@ function requireOnboarded(req, res, next) {
 function reqId(v) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
 
 const VALID_URGENCY = ['overdue', 'this_uta', 'next_uta', 'future', 'info'];
+const URGENCY_LABEL = {
+  overdue: 'Overdue', this_uta: 'This UTA', next_uta: 'Next UTA',
+  future: 'Future', info: 'Info',
+};
 
 // Collect only the keys the caller actually sent, so lib/tasks.js can tell
 // "leave unchanged" from "set to null".
@@ -917,15 +921,16 @@ app.put('/api/cycles/:id/groups', requireAuth, requireRole('leadership'), requir
     return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
   }
   try {
-    const result = await tasksLib.updateGroup(pool, cycleId, { category_code, title }, fields);
-    if (result.escalated_member_ids?.length) {
-      await notify(result.escalated_member_ids, {
+    const out = await tasksLib.updateGroup(pool, cycleId, { category_code, title }, fields);
+    if (out.escalated_member_ids?.length) {
+      await notify(out.escalated_member_ids, {
         type: 'task_escalated',
-        title: title,
-        body: `Task urgency has been escalated`,
+        title: `Urgency changed: ${title}`,
+        body: `Now marked ${URGENCY_LABEL[fields.urgency]}.`,
+        link: 'member',
       });
     }
-    res.json(result);
+    res.json(out);
   } catch (e) { sendTaskError(res, e); }
 });
 
@@ -949,14 +954,17 @@ app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), req
   }
 
   try {
-    const result = await tasksLib.updateTask(pool, taskId, fields);
-    if (result.escalated_member_ids?.length) {
-      await notify(result.escalated_member_ids, {
+    const out = await tasksLib.updateTask(pool, taskId, fields);
+    if (out.escalated_member_ids?.length) {
+      const { rows: [t] } = await pool.query(`SELECT title FROM tasks WHERE id=$1`, [taskId]);
+      await notify(out.escalated_member_ids, {
         type: 'task_escalated',
-        title: 'Task urgency escalated',
+        title: `Urgency changed: ${t.title}`,
+        body: `Now marked ${URGENCY_LABEL[fields.urgency]}.`,
+        link: 'member',
       });
     }
-    res.json(result);
+    res.json(out);
   } catch (e) { sendTaskError(res, e); }
 });
 

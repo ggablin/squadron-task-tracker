@@ -173,29 +173,33 @@ test('leadership can edit a group and a single row on a live cycle', async () =>
   assert.deepStrictEqual(row, { urgency: 'this_uta', appt_time: '0900' });
 });
 
-test('escalating a group sends task_escalated notifications to escalated members', async () => {
+test('escalating a group notifies only members whose urgency rose', async () => {
   await resetDb(); const w = await world();
   const live = await mkCycle('live', true);
-  // Create a task at 'future' urgency
+  // Two members: mem1 at 'future' (will rise), mem2 at 'overdue' (will stay same)
   await mkTask(live, w.mem1, w.catId, 'CBT', 'future');
+  await mkTask(live, w.mem2, w.catId, 'CBT', 'overdue');
   const cookie = await login('lead', 'pw');
 
-  // Escalate the group to 'this_uta' (escalates mem1 from future to this_uta)
+  // Escalate the group to 'overdue'
   const res = await fetch(`${baseUrl}/api/cycles/${live}/groups`, {
     method: 'PUT', headers: { cookie, 'content-type': 'application/json' },
-    body: JSON.stringify({ category_code: w.catCode, title: 'CBT', urgency: 'this_uta' }),
+    body: JSON.stringify({ category_code: w.catCode, title: 'CBT', urgency: 'overdue' }),
   });
   assert.strictEqual(res.status, 200);
 
-  // Check that mem1 got a task_escalated notification
+  // Only mem1 should be notified (mem2's urgency did not rise)
   const { rows: notifs } = await pool.query(
-    `SELECT member_id, type FROM notifications WHERE type = 'task_escalated'`);
-  assert.strictEqual(notifs.length, 1, 'one notification should be sent for one escalated member');
+    `SELECT member_id, type, title, body, link FROM notifications WHERE type = 'task_escalated' ORDER BY member_id`);
+  assert.strictEqual(notifs.length, 1, 'only one member escalated');
   assert.strictEqual(notifs[0].member_id, w.mem1);
   assert.strictEqual(notifs[0].type, 'task_escalated');
+  assert.strictEqual(notifs[0].title, 'Urgency changed: CBT');
+  assert.strictEqual(notifs[0].body, 'Now marked Overdue.');
+  assert.strictEqual(notifs[0].link, 'member');
 });
 
-test('escalating a single task sends task_escalated notification', async () => {
+test('escalating a single task sends notification with title and urgency label', async () => {
   await resetDb(); const w = await world();
   const live = await mkCycle('live', true);
   const t = await mkTask(live, w.mem1, w.catId, 'CBT', 'future');
@@ -208,9 +212,12 @@ test('escalating a single task sends task_escalated notification', async () => {
   assert.strictEqual(res.status, 200);
 
   const { rows: [notif] } = await pool.query(
-    `SELECT member_id, type FROM notifications WHERE type = 'task_escalated'`);
+    `SELECT member_id, type, title, body, link FROM notifications WHERE type = 'task_escalated'`);
   assert.strictEqual(notif.member_id, w.mem1);
   assert.strictEqual(notif.type, 'task_escalated');
+  assert.strictEqual(notif.title, 'Urgency changed: CBT');
+  assert.strictEqual(notif.body, 'Now marked Overdue.');
+  assert.strictEqual(notif.link, 'member');
 });
 
 test('de-escalation and details-only edits do not send notifications', async () => {
