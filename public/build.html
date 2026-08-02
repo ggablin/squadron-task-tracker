@@ -391,6 +391,12 @@ button { font-family:inherit; cursor:pointer; }
 .lc-appt { font-size: 11.5px; color: var(--t2); }
 .lc-btn { font-family: inherit; font-size: 12px; font-weight: 600; min-height: 44px; padding: 0 12px; border-radius: var(--rs); border: 2px solid var(--bm); background: transparent; color: var(--text); cursor: pointer; }
 .lc-btn-danger { color: var(--urgent); border-color: var(--urgent); }
+#lc-picker { display: flex; gap: 8px; margin: 0 0 14px; }
+.lc-pick { font-family: inherit; font-size: 12.5px; font-weight: 700; min-height: 44px;
+           padding: 0 14px; border-radius: var(--rs); cursor: pointer;
+           border: 2px solid var(--bm); background: transparent; color: var(--t2); }
+.lc-pick.sel { background: var(--text); color: var(--bg); border-color: var(--text); }
+.lc-pick-name { display: block; font-size: 11px; font-weight: 600; opacity: .75; }
 .lc-editor { padding: 14px; border-top: 1px solid var(--border); }
 .lc-lbl { display: block; font-size: 11.5px; font-weight: 700; color: var(--t2);
           text-transform: uppercase; letter-spacing: .05em; margin: 0 0 5px; }
@@ -491,6 +497,8 @@ button { font-family:inherit; cursor:pointer; }
     <section id="livecycle" hidden>
       <h2 class="sec-title" id="lc-head">Live cycle</h2>
       <p class="lc-sub" id="lc-sub"></p>
+      <!-- Only rendered when BOTH a live and a draft cycle exist. -->
+      <div id="lc-picker" role="group" aria-label="Which cycle to edit" hidden></div>
       <div id="lc-list"></div>
     </section>
 
@@ -895,6 +903,8 @@ async function loadHome() {
   const draft = cycles.find(c => c.status === 'draft');
   const working = draft || live;
   WORKING_CYCLE = working || null;
+  // The Live cycle section picks its own target from these; see lcTarget().
+  LC_CYCLES = { live: live || null, draft: draft || null };
 
   renderCycleBar({ live, draft });
 
@@ -1106,14 +1116,53 @@ let LC_MEDIT = null;  // task_id (string) of the member row being edited, or nul
 let LC_GROUPS = [];   // last groups payload from lcRender's fetch, so the delegated
                        // click handler can look a group back up by its key
 
+// This section deliberately does NOT follow WORKING_CYCLE. WORKING_CYCLE is
+// `draft || live` because every other part of the builder — adding tasks, the
+// batch list, schedule, work orders — should target the cycle being built. But
+// this section exists to CORRECT a cycle, and the one that usually needs
+// correcting is the live one members can already see. Binding it to
+// WORKING_CYCLE made the live cycle unreachable the moment a draft existed,
+// which is exactly when you are most likely to spot a mistake in what already
+// shipped.
+let LC_CYCLES = { live: null, draft: null };
+let LC_TARGET_ID = null;   // which cycle this section is editing
+
+// Live wins when both exist: editing the cycle 70 people can see is the case
+// with consequences, and the draft is reachable in one tap.
+function lcDefaultTarget() {
+  return (LC_CYCLES.live || LC_CYCLES.draft || null);
+}
+
+function lcTarget() {
+  const both = [LC_CYCLES.live, LC_CYCLES.draft].filter(Boolean);
+  return both.find(c => c.id === LC_TARGET_ID) || lcDefaultTarget();
+}
+
+// Two buttons, shown only when there is a genuine choice to make. With one
+// cycle the heading already says which it is, so a picker would be noise.
+function lcRenderPicker(current) {
+  const host = document.getElementById('lc-picker');
+  const { live, draft } = LC_CYCLES;
+  if (!live || !draft) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML = [live, draft].map(c => `
+    <button class="lc-pick${c.id === current.id ? ' sel' : ''}"
+            data-lc-cycle="${c.id}" aria-pressed="${c.id === current.id}">
+      ${c.status === 'live' ? 'Live' : 'Draft'}
+      <span class="lc-pick-name">${lcEsc(c.name)}</span>
+    </button>`).join('');
+}
+
 async function lcRender() {
-  const cyc = WORKING_CYCLE;
+  const cyc = lcTarget();
   const host = document.getElementById('livecycle');
   if (!cyc) { host.hidden = true; return; }
   host.hidden = false;
+  LC_TARGET_ID = cyc.id;
 
   const live = cyc.status === 'live';
   document.getElementById('lc-head').textContent = live ? 'Live cycle' : 'Draft cycle';
+  lcRenderPicker(cyc);
   let groups = [];
   try {
     groups = await fetch(`/api/cycles/${cyc.id}/groups`).then(r => r.json());
@@ -1180,7 +1229,7 @@ async function lcDeleteGroup(categoryCode, title) {
         message: `"${title}" will be removed from every member who has it.`,
         danger: true })) return;
 
-  let res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/groups/delete`, {
+  let res = await fetch(`/api/cycles/${lcTarget().id}/groups/delete`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ category_code: categoryCode, title }),
   });
@@ -1190,7 +1239,7 @@ async function lcDeleteGroup(categoryCode, title) {
     if (!await uiConfirm({ title: 'Members have already done this',
           message: `${checked_off_count} member${checked_off_count === 1 ? ' has' : 's have'} checked this off. Deleting removes their notes too.`,
           confirmLabel: 'Delete anyway', danger: true })) return;
-    res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/groups/delete`, {
+    res = await fetch(`/api/cycles/${lcTarget().id}/groups/delete`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ category_code: categoryCode, title, force: true }),
     });
@@ -1269,7 +1318,7 @@ async function lcSaveGroup(categoryCode, title, group) {
   // sending a request that writes nothing but would still claim success.
   if (!('urgency' in body) && !('details' in body)) { LC_EDIT = null; await lcRender(); return; }
 
-  const res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/groups`, {
+  const res = await fetch(`/api/cycles/${lcTarget().id}/groups`, {
     method: 'PUT', headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
@@ -1347,6 +1396,19 @@ async function lcSaveMember(taskId) {
 
 // One delegated listener for the whole list — #lc-list itself is never
 // replaced, only its innerHTML, so this survives every lcRender().
+// Switching cycles closes any open editor: its contents belong to the cycle
+// you were looking at, and carrying them across would save the wrong values.
+document.getElementById('lc-picker').addEventListener('click', e => {
+  const btn = e.target.closest('[data-lc-cycle]');
+  if (!btn) return;
+  const id = Number(btn.dataset.lcCycle);
+  if (id === LC_TARGET_ID) return;
+  LC_TARGET_ID = id;
+  LC_EDIT = null;
+  LC_MEDIT = null;
+  lcRender();
+});
+
 document.getElementById('lc-list').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
