@@ -91,4 +91,31 @@ test('listGroups reports a uniform group as not mixed', async () => {
   assert.strictEqual(g.urgency_mixed, false);
 });
 
+test('listGroups flags a group with different non-null details', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t1 = await mkTask(c, f.m1, f.catId, 'PT Test', 'this_uta');
+  const t2 = await mkTask(c, f.m2, f.catId, 'PT Test', 'this_uta');
+  // Set different details on each task
+  await pool.query('UPDATE tasks SET details = $1 WHERE id = $2', ['bring your CAC', t1]);
+  await pool.query('UPDATE tasks SET details = $1 WHERE id = $2', ['wear PT uniform', t2]);
+
+  const [g] = await tasks.listGroups(pool, c);
+  assert.strictEqual(g.count, 2);
+  assert.strictEqual(g.details_mixed, true, 'two distinct non-null values must be reported as mixed');
+});
+
+test('listGroups flags a group with mixed NULL and non-null details', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t1 = await mkTask(c, f.m1, f.catId, 'Dental', 'this_uta');
+  const t2 = await mkTask(c, f.m2, f.catId, 'Dental', 'this_uta');
+  // Set details on only one task, leave the other NULL
+  await pool.query('UPDATE tasks SET details = $1 WHERE id = $2', ['appointment at 1400', t1]);
+
+  const [g] = await tasks.listGroups(pool, c);
+  assert.strictEqual(g.count, 2);
+  assert.strictEqual(g.details_mixed, true, 'NULL and non-null must be reported as mixed (regression for Finding 1)');
+});
+
 module.exports = { mkCycle, mkTask };
