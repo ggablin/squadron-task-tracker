@@ -250,4 +250,96 @@ test('updateGroup rejects an unknown category and a missing group', async () => 
     (e) => e.code === 'NOT_FOUND');
 });
 
+const batches = require('../lib/batches');
+
+test('deleteTask refuses to destroy a completion unless forced', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t = await mkTask(c, f.m1, f.catId, 'CBT');
+  await pool.query(
+    `INSERT INTO task_completions (task_id, completed_by_id, state, note)
+     VALUES ($1,$2,'done','finished at drill')`, [t, f.m1]);
+
+  await assert.rejects(() => tasks.deleteTask(pool, t, { force: false }),
+    (e) => e.code === 'HAS_COMPLETIONS' && e.checked_off_count === 1);
+
+  const { rows: still } = await pool.query(`SELECT 1 FROM tasks WHERE id=$1`, [t]);
+  assert.strictEqual(still.length, 1, 'the refused delete must not have removed anything');
+
+  const r = await tasks.deleteTask(pool, t, { force: true });
+  assert.strictEqual(r.deleted, 1);
+  const { rows: gone } = await pool.query(`SELECT 1 FROM tasks WHERE id=$1`, [t]);
+  assert.strictEqual(gone.length, 0);
+});
+
+test('deleteTask with no completion needs no force', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t = await mkTask(c, f.m1, f.catId, 'CBT');
+  const r = await tasks.deleteTask(pool, t, {});
+  assert.strictEqual(r.deleted, 1);
+});
+
+test('a state of none does not count as a completion', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t = await mkTask(c, f.m1, f.catId, 'CBT');
+  await pool.query(`INSERT INTO task_completions (task_id, completed_by_id, state)
+                    VALUES ($1,$2,'none')`, [t, f.m1]);
+  await assert.doesNotReject(() => tasks.deleteTask(pool, t, {}));
+});
+
+test('deleteTask refuses an archived cycle', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('archived');
+  const t = await mkTask(c, f.m1, f.catId, 'CBT');
+  await assert.rejects(() => tasks.deleteTask(pool, t, { force: true }),
+    (e) => e.code === 'NOT_EDITABLE');
+});
+
+test('deleteGroup counts completions across every member', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const a = await mkTask(c, f.m1, f.catId, 'CBT');
+  const b = await mkTask(c, f.m2, f.catId, 'CBT');
+  await pool.query(`INSERT INTO task_completions (task_id, completed_by_id, state)
+                    VALUES ($1,$2,'done'), ($3,$4,'done')`, [a, f.m1, b, f.m2]);
+
+  await assert.rejects(() => tasks.deleteGroup(pool, c,
+    { category_code: f.catCode, title: 'CBT' }, { force: false }),
+    (e) => e.code === 'HAS_COMPLETIONS' && e.checked_off_count === 2);
+
+  const r = await tasks.deleteGroup(pool, c,
+    { category_code: f.catCode, title: 'CBT' }, { force: true });
+  assert.strictEqual(r.deleted, 2);
+});
+
+test('deleting every row individually removes the group from listGroups', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const a = await mkTask(c, f.m1, f.catId, 'CBT');
+  const b = await mkTask(c, f.m2, f.catId, 'CBT');
+
+  await tasks.deleteTask(pool, a, {});
+  assert.strictEqual((await tasks.listGroups(pool, c)).length, 1, 'one row left, group survives');
+  await tasks.deleteTask(pool, b, {});
+  assert.strictEqual((await tasks.listGroups(pool, c)).length, 0, 'group disappears on its own');
+});
+
+test('listBatches drops a batch whose tasks have all been deleted', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const r = await tasks.addTaskBatch(pool, c, {
+    title: 'SGLI', category_code: f.catCode, details: null,
+    assignments: [{ member_ids: [f.m1], urgency: 'this_uta' }], created_by_id: f.leadId });
+
+  assert.strictEqual((await batches.listBatches(pool, c)).length, 1);
+
+  const { rows: [t] } = await pool.query(`SELECT id FROM tasks WHERE batch_id=$1`, [r.batch_id]);
+  await tasks.deleteTask(pool, t.id, {});
+
+  assert.strictEqual((await batches.listBatches(pool, c)).length, 0,
+    'a batch with nothing left to undo must not offer an Undo button');
+});
+
 module.exports = { mkCycle, mkTask };
