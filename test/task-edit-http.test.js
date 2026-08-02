@@ -244,3 +244,78 @@ test('de-escalation and details-only edits do not send notifications', async () 
     `SELECT COUNT(*)::int as count FROM notifications WHERE type = 'task_escalated'`);
   assert.strictEqual(notifs[0].count, 0, 'no escalation notifications should be sent');
 });
+
+// POST /api/cycles/:id/groups/delete: no route-level coverage existed before
+// this, despite it being the most destructive route in the branch (up to a
+// whole group's worth of task rows plus every completion against them).
+test('a supervisor cannot delete a whole group', async () => {
+  await resetDb(); const w = await world();
+  const live = await mkCycle('live', true);
+  await mkTask(live, w.mem1, w.catId, 'CBT');
+  const cookie = await login('sup1', 'pw');
+
+  const res = await fetch(`${baseUrl}/api/cycles/${live}/groups/delete`, {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ category_code: w.catCode, title: 'CBT' }),
+  });
+  assert.strictEqual(res.status, 403, 'group delete is leadership-only');
+});
+
+test('deleting a group with completions warns with the checked-off count', async () => {
+  await resetDb(); const w = await world();
+  const live = await mkCycle('live', true);
+  const a = await mkTask(live, w.mem1, w.catId, 'CBT');
+  const b = await mkTask(live, w.mem2, w.catId, 'CBT');
+  await pool.query(`INSERT INTO task_completions (task_id, completed_by_id, state)
+                    VALUES ($1,$2,'done'), ($3,$4,'done')`, [a, w.mem1, b, w.mem2]);
+  const cookie = await login('lead', 'pw');
+
+  const res = await fetch(`${baseUrl}/api/cycles/${live}/groups/delete`, {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ category_code: w.catCode, title: 'CBT' }),
+  });
+  assert.strictEqual(res.status, 409);
+  assert.strictEqual((await res.json()).checked_off_count, 2);
+
+  const { rows } = await pool.query(`SELECT 1 FROM tasks WHERE id = ANY($1)`, [[a, b]]);
+  assert.strictEqual(rows.length, 2, 'the refused delete must not have removed anything');
+});
+
+test('retrying a checked-off group delete with force in the body succeeds', async () => {
+  await resetDb(); const w = await world();
+  const live = await mkCycle('live', true);
+  const a = await mkTask(live, w.mem1, w.catId, 'CBT');
+  await pool.query(`INSERT INTO task_completions (task_id, completed_by_id, state)
+                    VALUES ($1,$2,'done')`, [a, w.mem1]);
+  const cookie = await login('lead', 'pw');
+
+  const res = await fetch(`${baseUrl}/api/cycles/${live}/groups/delete`, {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ category_code: w.catCode, title: 'CBT', force: true }),
+  });
+  assert.strictEqual(res.status, 200, 'force in the JSON body is this route\'s own established idiom');
+
+  const { rows } = await pool.query(`SELECT 1 FROM tasks WHERE id=$1`, [a]);
+  assert.strictEqual(rows.length, 0);
+});
+
+test('retrying a checked-off group delete with ?force=true in the query also succeeds', async () => {
+  await resetDb(); const w = await world();
+  const live = await mkCycle('live', true);
+  const a = await mkTask(live, w.mem1, w.catId, 'CBT');
+  await pool.query(`INSERT INTO task_completions (task_id, completed_by_id, state)
+                    VALUES ($1,$2,'done')`, [a, w.mem1]);
+  const cookie = await login('lead', 'pw');
+
+  // Every sibling force-capable route (DELETE /api/tasks/:id, DELETE
+  // /api/batches/:id) reads force from the query string. A caller reaching
+  // for that same idiom here must not be silently un-forced.
+  const res = await fetch(`${baseUrl}/api/cycles/${live}/groups/delete?force=true`, {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ category_code: w.catCode, title: 'CBT' }),
+  });
+  assert.strictEqual(res.status, 200, 'the ?force=true query idiom must work here too');
+
+  const { rows } = await pool.query(`SELECT 1 FROM tasks WHERE id=$1`, [a]);
+  assert.strictEqual(rows.length, 0);
+});

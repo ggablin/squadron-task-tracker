@@ -587,14 +587,19 @@ app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), requireOnbo
   const taskId = reqId(req.params.id);
   if (!taskId) return res.status(400).json({ error: 'Invalid id' });
 
-  const { rows: tr } = await pool.query(
-    `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
-  if (!tr.length) return res.status(404).json({ error: 'Task not found' });
-  if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
-    return res.status(403).json({ error: 'Cannot delete tasks outside your shop' });
-  }
-
+  // The pre-check query and its 404/403 responses live inside this try, not
+  // before it: Express 4 does not adopt a handler's returned promise, and
+  // there is no process-level unhandledRejection handler, so an unguarded
+  // await that rejects (a pool timeout, a Postgres failover) would crash the
+  // whole process instead of just failing this request.
   try {
+    const { rows: tr } = await pool.query(
+      `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
+    if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+    if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot delete tasks outside your shop' });
+    }
+
     res.json(await tasksLib.deleteTask(pool, taskId, { force: req.query.force === 'true' }));
   } catch (e) { sendTaskError(res, e); }
 });
@@ -949,14 +954,17 @@ app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), req
     return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
   }
 
-  const { rows: tr } = await pool.query(
-    `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
-  if (!tr.length) return res.status(404).json({ error: 'Task not found' });
-  if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
-    return res.status(403).json({ error: 'Cannot edit tasks outside your shop' });
-  }
-
+  // The pre-check query and its 404/403 responses live inside this try, not
+  // before it — see the matching comment on DELETE /api/tasks/:id above: an
+  // unguarded await that rejects would otherwise crash the whole process.
   try {
+    const { rows: tr } = await pool.query(
+      `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
+    if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+    if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot edit tasks outside your shop' });
+    }
+
     const out = await tasksLib.updateTask(pool, taskId, fields);
     if (out.escalated_member_ids?.length) {
       const { rows: [t] } = await pool.query(`SELECT title FROM tasks WHERE id=$1`, [taskId]);
@@ -980,8 +988,14 @@ app.post('/api/cycles/:id/groups/delete', requireAuth, requireRole('leadership')
   const { category_code, title, force } = req.body || {};
   if (!category_code || !title) return res.status(400).json({ error: 'category_code and title are required' });
 
+  // Accept force from either the JSON body (this route's own idiom) or the
+  // query string (?force=true, the idiom every other force-capable route in
+  // this file uses). A caller reaching for the established query idiom here
+  // would otherwise silently not force and loop on 409 forever.
+  const forced = force === true || req.query.force === 'true';
+
   try {
-    res.json(await tasksLib.deleteGroup(pool, cycleId, { category_code, title }, { force: force === true }));
+    res.json(await tasksLib.deleteGroup(pool, cycleId, { category_code, title }, { force: forced }));
   } catch (e) { sendTaskError(res, e); }
 });
 
@@ -1014,10 +1028,9 @@ app.delete('/api/batches/:id', requireAuth, requireRole('leadership'), requireOn
     if (!id) return res.status(400).json({ error: 'Invalid id' });
     res.json(await batches.undoBatch(pool, id, { force: req.query.force === 'true' }));
   }
-  catch (e) {
-    if (e.code === 'HAS_COMPLETIONS') return res.status(409).json({ error: 'HAS_COMPLETIONS', checked_off_count: e.checked_off_count });
-    console.error(e); res.status(500).json({ error: 'Server error' });
-  }
+  // Shares sendTaskError with the task/group routes so a NOT_EDITABLE (archived
+  // cycle) answers identically everywhere, not just HAS_COMPLETIONS here.
+  catch (e) { sendTaskError(res, e); }
 });
 
 // ── My Shop ───────────────────────────────────────────────────────────────────

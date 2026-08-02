@@ -807,9 +807,13 @@ let CF_SOURCE = null;  // the source cycle for copy-forward (set by startCopyFor
 let CF_GROUPS = [];    // groups fetched from /api/cycles/:id/groups, each with a client-side .sel flag
 let LAST_BATCH_ID = null; // batch_id returned by the most recent commitNewTask, for the success screen's Undo
 
-// Mockup urgency labels -> backend urgency codes.
-const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Info':'info' };
-const URG_CODE_TO_LABEL = { 'overdue':'Overdue', 'this_uta':'This UTA', 'next_uta':'Next UTA', 'info':'Info' };
+// Mockup urgency labels -> backend urgency codes. 'Future' has no button in
+// the #f-urg segmented control below (New Task never offers it directly),
+// but a recurring catalog item can still hold urgency:'future' (set via the
+// Live Cycle group editor), so both maps need the pair or prefillFromCatalog
+// silently downgrades it to This UTA on "Use again" instead of preserving it.
+const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Future':'future', 'Info':'info' };
+const URG_CODE_TO_LABEL = { 'overdue':'Overdue', 'this_uta':'This UTA', 'next_uta':'Next UTA', 'future':'Future', 'info':'Info' };
 
 let urgency = 'This UTA';
 let urgBatches = []; // [{ urg: label, code, member_ids:[int] }]  ("batches so far", client-side)
@@ -910,17 +914,24 @@ async function loadHome() {
   }
 
   // Added-this-cycle batches: the working cycle's batches.
-  if (working) {
-    let cycleBatches = [];
-    try {
-      cycleBatches = await fetch(`/api/cycles/${working.id}/batches`).then(r => r.json());
-    } catch (e) { cycleBatches = []; }
-    renderBatches(cycleBatches);
-  } else {
-    renderBatches([]);
-  }
+  await refreshCycleBatches();
 
   await lcRender();
+}
+
+// Re-fetches and re-renders just the "added this cycle" batch list, keyed off
+// WORKING_CYCLE (set above just before this is first called). Split out of
+// loadHome() so the live-cycle delete flows below can refresh it too — a
+// delete can empty a batch (HAVING COUNT(t.id) > 0 in listBatches drops it),
+// and without this it kept showing, with an Undo button that did nothing,
+// until the next full page load.
+async function refreshCycleBatches() {
+  if (!WORKING_CYCLE) { renderBatches([]); return; }
+  let cycleBatches = [];
+  try {
+    cycleBatches = await fetch(`/api/cycles/${WORKING_CYCLE.id}/batches`).then(r => r.json());
+  } catch (e) { cycleBatches = []; }
+  renderBatches(cycleBatches);
 }
 
 function renderCycleBar({ live, draft }) {
@@ -1103,7 +1114,10 @@ async function lcRender() {
 
   const live = cyc.status === 'live';
   document.getElementById('lc-head').textContent = live ? 'Live cycle' : 'Draft cycle';
-  const groups = await (await fetch(`/api/cycles/${cyc.id}/groups`)).json();
+  let groups = [];
+  try {
+    groups = await fetch(`/api/cycles/${cyc.id}/groups`).then(r => r.json());
+  } catch (e) { groups = []; }
   LC_GROUPS = groups;
   const people = new Set(groups.flatMap(g => g.members.map(m => m.id))).size;
   document.getElementById('lc-sub').textContent = live
@@ -1130,12 +1144,22 @@ async function lcRender() {
         <button class="lc-btn lc-btn-danger" data-lc-del="${lcEsc(key)}">Delete</button>
       </div>`;
     // Same in-place-of-the-row swap for a single member being edited.
-    const membersHtml = g.members.map(m => String(m.task_id) === LC_MEDIT ? lcMemberEditorHtml(m) : `
+    const membersHtml = g.members.map(m => {
+      if (String(m.task_id) === LC_MEDIT) return lcMemberEditorHtml(m);
+      // A member row is never "mixed" (that's a group-level concept), so its
+      // chip always shows this member's own single urgency value.
+      const apptParts = [m.appt_day, m.appt_time, m.appt_location].filter(Boolean);
+      const apptHtml = apptParts.length
+        ? `<span class="lc-appt">${lcEsc(apptParts.join(' · '))}</span>` : '';
+      return `
         <div class="lc-member">
           <span style="flex:1">${lcEsc(m.rank)} ${lcEsc(m.last_name)}</span>
+          <span class="lc-urg">${lcEsc(LC_URG[m.urgency] || m.urgency)}</span>
+          ${apptHtml}
           <button class="lc-btn" data-lc-medit="${m.task_id}">Edit</button>
           <button class="lc-btn lc-btn-danger" data-lc-mdel="${m.task_id}">Delete</button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
     return `
     <div class="lc-group">
       ${gheadHtml}
@@ -1174,7 +1198,9 @@ async function lcDeleteGroup(categoryCode, title) {
 
   if (!res.ok) return uiToast('Could not delete that task', 'error');
   uiToast('Task deleted', 'success');
-  await lcRender();
+  // A group delete can empty a batch; refresh both so the batch list doesn't
+  // keep showing an Undo button for something that's already gone.
+  await Promise.all([lcRender(), refreshCycleBatches()]);
 }
 
 async function lcDeleteMember(taskId) {
@@ -1191,7 +1217,8 @@ async function lcDeleteMember(taskId) {
   }
   if (!res.ok) return uiToast('Could not delete that task', 'error');
   uiToast('Task removed', 'success');
-  await lcRender();
+  // A member delete can empty a batch; refresh both — see lcDeleteGroup.
+  await Promise.all([lcRender(), refreshCycleBatches()]);
 }
 
 // Group edit. An inline editor, not window.prompt(): the builder already edits
@@ -1253,32 +1280,34 @@ async function lcSaveGroup(categoryCode, title, group) {
 }
 
 // Member edit: fixes one person's copy without touching groupmates.
-// GET /api/cycles/:id/groups deliberately reports only the group-level MIN()
-// summary, not each member's own urgency/details/appt_* (and this task adds no
-// new interface to fetch a single task's current values). So every field here
-// starts blank, and only a field the operator actually fills in is sent —
+// listGroups' JSON_AGG carries each member's own urgency/appt_* now, so those
+// four fields are prefilled from the member's current values below. Details
+// is NOT in that payload (group-level MIN(details) only) and stays blank —
+// leave it blank to leave it as-is. Only what you fill in or change is sent —
 // PUT /api/tasks/:id/definition's pickFields()/buildSet() leave every column
-// whose key is absent from the body untouched, so a blank field never
+// whose key is absent from the body untouched, so a blank/unmoved field never
 // overwrites something the operator didn't mean to touch.
 function lcMemberEditorHtml(m) {
   return `
     <div class="lc-editor">
       <div class="lc-title" style="margin-bottom:10px">${lcEsc(m.rank)} ${lcEsc(m.last_name)}</div>
-      <p class="lc-warn" role="note">This member's current values aren't shown here — leave a
-        field blank to leave it as-is. Only what you fill in below changes.</p>
+      <p class="lc-warn" role="note">Urgency and appointment are prefilled with this member's
+        current values. Details isn't shown here — leave it blank to leave it as-is.</p>
       <label class="lc-lbl" for="lc-murg-in">Urgency</label>
       <select id="lc-murg-in" class="lc-input">
         <option value="">Leave unchanged</option>
-        ${Object.entries(LC_URG).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}
+        ${Object.entries(LC_URG).map(([v, label]) =>
+          `<option value="${v}"${m.urgency === v ? ' selected' : ''}>${label}</option>`
+        ).join('')}
       </select>
       <label class="lc-lbl" for="lc-mdet-in">Details</label>
       <input id="lc-mdet-in" class="lc-input" type="text" placeholder="Leave unchanged">
       <label class="lc-lbl" for="lc-mday-in">Appointment day</label>
-      <input id="lc-mday-in" class="lc-input" type="text" placeholder="e.g. Saturday">
+      <input id="lc-mday-in" class="lc-input" type="text" placeholder="e.g. Saturday" value="${lcEsc(m.appt_day || '')}">
       <label class="lc-lbl" for="lc-mtime-in">Appointment time</label>
-      <input id="lc-mtime-in" class="lc-input" type="text" placeholder="e.g. 0900">
+      <input id="lc-mtime-in" class="lc-input" type="text" placeholder="e.g. 0900" value="${lcEsc(m.appt_time || '')}">
       <label class="lc-lbl" for="lc-mloc-in">Appointment location</label>
-      <input id="lc-mloc-in" class="lc-input" type="text" placeholder="e.g. Bldg 110, Rm 5">
+      <input id="lc-mloc-in" class="lc-input" type="text" placeholder="e.g. Bldg 110, Rm 5" value="${lcEsc(m.appt_location || '')}">
       <div class="lc-actions">
         <button class="lc-btn" data-lc-mcancel="1">Cancel</button>
         <button class="lc-btn lc-btn-primary" data-lc-msave="${m.task_id}">Save</button>
@@ -1326,6 +1355,11 @@ document.getElementById('lc-list').addEventListener('click', e => {
     const idx = LC_EDIT.indexOf('|');
     const categoryCode = LC_EDIT.slice(0, idx), title = LC_EDIT.slice(idx + 1);
     const group = LC_GROUPS.find(g => g.category_code === categoryCode && g.title === title);
+    // The group can vanish out from under an open editor (deleted elsewhere,
+    // or the list refreshed) between render and click. Without this guard,
+    // lcSaveGroup(..., undefined) throws reading group.details_mixed and Save
+    // does nothing with no explanation.
+    if (!group) { uiToast('That task no longer exists — refresh and try again', 'error'); return; }
     return lcSaveGroup(categoryCode, title, group);
   }
   if (d.lcDel !== undefined) {

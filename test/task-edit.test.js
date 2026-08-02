@@ -342,4 +342,18 @@ test('listBatches drops a batch whose tasks have all been deleted', async () => 
     'a batch with nothing left to undo must not offer an Undo button');
 });
 
+test('undoBatch refuses a batch in an archived cycle even with force', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('archived');
+  const r = await tasks.addTaskBatch(pool, c, {
+    title: 'SGLI', category_code: f.catCode, details: null,
+    assignments: [{ member_ids: [f.m1], urgency: 'this_uta' }], created_by_id: f.leadId });
+
+  await assert.rejects(() => batches.undoBatch(pool, r.batch_id, { force: true }),
+    (e) => e.code === 'NOT_EDITABLE');
+
+  const { rows: still } = await pool.query(`SELECT 1 FROM tasks WHERE batch_id=$1`, [r.batch_id]);
+  assert.strictEqual(still.length, 1, 'the refused undo must not have removed anything, force or not');
+});
+
 module.exports = { mkCycle, mkTask };
