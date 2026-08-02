@@ -6,6 +6,7 @@ const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
+const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const attendance = require('./lib/attendance');
 const schedule = require('./lib/schedule');
@@ -105,6 +106,9 @@ app.use(session({
       );
       CREATE INDEX IF NOT EXISTS idx_notifications_member ON notifications (member_id, read_at);
       CREATE INDEX IF NOT EXISTS idx_notifications_unemailed ON notifications (emailed_at) WHERE emailed_at IS NULL;
+      ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+      ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+        CHECK (type IN ('tasks_live','task_assigned','completion_digest','task_escalated'));
       DO $$ BEGIN
         ALTER TABLE tasks ADD CONSTRAINT tasks_cycle_member_cat_title_uniq
           UNIQUE (uta_cycle_id, member_id, category_id, title);
@@ -189,6 +193,33 @@ function requireOnboarded(req, res, next) {
 
 // Parse a route :id param to a positive integer, or null if malformed.
 function reqId(v) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
+
+const VALID_URGENCY = ['overdue', 'this_uta', 'next_uta', 'future', 'info'];
+const URGENCY_LABEL = {
+  overdue: 'Overdue', this_uta: 'This UTA', next_uta: 'Next UTA',
+  future: 'Future', info: 'Info',
+};
+
+// Collect only the keys the caller actually sent, so lib/tasks.js can tell
+// "leave unchanged" from "set to null".
+function pickFields(body, allowed) {
+  const out = {};
+  for (const k of allowed) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) out[k] = body[k];
+  }
+  return out;
+}
+
+// Single mapping from lib/tasks.js error codes to HTTP responses, so all four
+// routes answer identically.
+function sendTaskError(res, e) {
+  if (e.code === 'NOT_EDITABLE')    return res.status(403).json({ error: 'This cycle is closed to changes' });
+  if (e.code === 'NOT_FOUND')       return res.status(404).json({ error: 'Not found' });
+  if (e.code === 'BAD_CATEGORY')    return res.status(400).json({ error: 'Unknown category' });
+  if (e.code === 'HAS_COMPLETIONS') return res.status(409).json({ error: 'HAS_COMPLETIONS', checked_off_count: e.checked_off_count });
+  console.error(e);
+  return res.status(500).json({ error: 'Server error' });
+}
 
 // ── Notifications ────────────────────────────────────────────────────────────
 // Single source of truth for both the in-app center and the email channel.
@@ -548,28 +579,29 @@ app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), requireO
 
 // ── Delete Task (supervisor: own shop, leadership: any) ─────────────────────
 
+// Repaired: this route previously had neither an editable-cycle guard nor a
+// completions guard, so a supervisor could delete a task out of an ARCHIVED
+// cycle (rewriting history Records presents as frozen) and silently destroy a
+// member's recorded state and note. It is reachable from public/index.html.
 app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
-  try {
-    const taskId = parseInt(req.params.id);
+  const taskId = reqId(req.params.id);
+  if (!taskId) return res.status(400).json({ error: 'Invalid id' });
 
-    // Check task exists and caller has permission
-    const { rows: tr } = await pool.query(`
-      SELECT t.member_id, m.shop_id FROM tasks t
-      JOIN members m ON m.id = t.member_id
-      WHERE t.id = $1
-    `, [taskId]);
+  // The pre-check query and its 404/403 responses live inside this try, not
+  // before it: Express 4 does not adopt a handler's returned promise, and
+  // there is no process-level unhandledRejection handler, so an unguarded
+  // await that rejects (a pool timeout, a Postgres failover) would crash the
+  // whole process instead of just failing this request.
+  try {
+    const { rows: tr } = await pool.query(
+      `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
     if (!tr.length) return res.status(404).json({ error: 'Task not found' });
     if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
       return res.status(403).json({ error: 'Cannot delete tasks outside your shop' });
     }
 
-    await pool.query('DELETE FROM task_completions WHERE task_id = $1', [taskId]);
-    await pool.query('DELETE FROM tasks WHERE id = $1', [taskId]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
+    res.json(await tasksLib.deleteTask(pool, taskId, { force: req.query.force === 'true' }));
+  } catch (e) { sendTaskError(res, e); }
 });
 
 // ── Flag Task (supervisor: own shop, leadership: any) ───────────────────────
@@ -883,6 +915,90 @@ app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requir
   }
 });
 
+// ── Edit a whole task group (leadership only) ────────────────────────────────
+// Leadership-only because a group can span shops: a supervisor editing one
+// would silently do a partial update.
+app.put('/api/cycles/:id/groups', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  const cycleId = reqId(req.params.id);
+  if (!cycleId) return res.status(400).json({ error: 'Invalid id' });
+  const { category_code, title } = req.body || {};
+  if (!category_code || !title) return res.status(400).json({ error: 'category_code and title are required' });
+
+  const fields = pickFields(req.body, ['urgency', 'details']);
+  if ('urgency' in fields && !VALID_URGENCY.includes(fields.urgency)) {
+    return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
+  }
+  try {
+    const out = await tasksLib.updateGroup(pool, cycleId, { category_code, title }, fields);
+    if (out.escalated_member_ids?.length) {
+      await notify(out.escalated_member_ids, {
+        type: 'task_escalated',
+        title: `Urgency changed: ${title}`,
+        body: `Now marked ${URGENCY_LABEL[fields.urgency]}.`,
+        link: 'member',
+      });
+    }
+    res.json(out);
+  } catch (e) { sendTaskError(res, e); }
+});
+
+// ── Edit one member's task row ───────────────────────────────────────────────
+// /definition, not /:id — PUT /api/tasks/:id is already the member's completion
+// state, and overloading that path would be genuinely confusing to read.
+app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
+  const taskId = reqId(req.params.id);
+  if (!taskId) return res.status(400).json({ error: 'Invalid id' });
+
+  const fields = pickFields(req.body, ['urgency', 'details', 'appt_day', 'appt_time', 'appt_location']);
+  if ('urgency' in fields && !VALID_URGENCY.includes(fields.urgency)) {
+    return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
+  }
+
+  // The pre-check query and its 404/403 responses live inside this try, not
+  // before it — see the matching comment on DELETE /api/tasks/:id above: an
+  // unguarded await that rejects would otherwise crash the whole process.
+  try {
+    const { rows: tr } = await pool.query(
+      `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
+    if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+    if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+      return res.status(403).json({ error: 'Cannot edit tasks outside your shop' });
+    }
+
+    const out = await tasksLib.updateTask(pool, taskId, fields);
+    if (out.escalated_member_ids?.length) {
+      const { rows: [t] } = await pool.query(`SELECT title FROM tasks WHERE id=$1`, [taskId]);
+      await notify(out.escalated_member_ids, {
+        type: 'task_escalated',
+        title: `Urgency changed: ${t.title}`,
+        body: `Now marked ${URGENCY_LABEL[fields.urgency]}.`,
+        link: 'member',
+      });
+    }
+    res.json(out);
+  } catch (e) { sendTaskError(res, e); }
+});
+
+// ── Delete a whole task group (leadership only) ──────────────────────────────
+// POST, not DELETE: a group's identity is a (category, title) pair rather than
+// a URL id, matching the existing /copy-forward and /go-live idiom.
+app.post('/api/cycles/:id/groups/delete', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  const cycleId = reqId(req.params.id);
+  if (!cycleId) return res.status(400).json({ error: 'Invalid id' });
+  const { category_code, title, force } = req.body || {};
+  if (!category_code || !title) return res.status(400).json({ error: 'category_code and title are required' });
+
+  // Accept force from either the JSON body (this route's own idiom) or the
+  // query string (?force=true, the idiom every other force-capable route in
+  // this file uses). A caller reaching for the established query idiom here
+  // would otherwise silently not force and loop on 409 forever.
+  const forced = force === true || req.query.force === 'true';
+
+  try {
+    res.json(await tasksLib.deleteGroup(pool, cycleId, { category_code, title }, { force: forced }));
+  } catch (e) { sendTaskError(res, e); }
+});
+
 app.post('/api/cycles/:id/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
   try {
     const id = reqId(req.params.id);
@@ -912,10 +1028,9 @@ app.delete('/api/batches/:id', requireAuth, requireRole('leadership'), requireOn
     if (!id) return res.status(400).json({ error: 'Invalid id' });
     res.json(await batches.undoBatch(pool, id, { force: req.query.force === 'true' }));
   }
-  catch (e) {
-    if (e.code === 'HAS_COMPLETIONS') return res.status(409).json({ error: 'HAS_COMPLETIONS', checked_off_count: e.checked_off_count });
-    console.error(e); res.status(500).json({ error: 'Server error' });
-  }
+  // Shares sendTaskError with the task/group routes so a NOT_EDITABLE (archived
+  // cycle) answers identically everywhere, not just HAS_COMPLETIONS here.
+  catch (e) { sendTaskError(res, e); }
 });
 
 // ── My Shop ───────────────────────────────────────────────────────────────────

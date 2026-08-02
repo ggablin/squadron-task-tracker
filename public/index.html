@@ -5230,7 +5230,17 @@ async function deleteTask(taskId, memberId) {
     danger: true,
   })) return;
   try {
-    const res = await fetch('/api/tasks/' + taskId, { method: 'DELETE' });
+    let res = await fetch('/api/tasks/' + taskId, { method: 'DELETE' });
+    if (res.status === 409) {
+      const { checked_off_count } = await res.json();
+      if (!await uiConfirm({
+        title: 'Already checked off',
+        message: `This member has already checked it off. Deleting removes their note too. (${checked_off_count})`,
+        confirmLabel: 'Delete anyway',
+        danger: true,
+      })) return;
+      res = await fetch('/api/tasks/' + taskId + '?force=true', { method: 'DELETE' });
+    }
     if (!res.ok) throw new Error();
     showToast('Task deleted', 'success');
     await renderMemberTasks(memberId);

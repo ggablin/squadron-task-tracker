@@ -372,6 +372,38 @@ button { font-family:inherit; cursor:pointer; }
 .success-sub { font-size:13.5px; color:var(--t2); margin-top:8px; line-height:1.5; }
 
 .foot-note { margin-top:34px; font-size:11.5px; color:var(--t3); line-height:1.6; text-align:center; }
+
+/* Live cycle — group list + inline group/member editors (Task 8). Tokens only,
+   no new colour values: reuses --text/--bg/--t2/--border/--bm/--urgent/--warn/
+   --ok/--rs/--wrn-bg exactly as used elsewhere in this file. */
+#livecycle { margin-top: 28px; }
+.lc-sub { font-size: 12.5px; color: var(--t2); margin: -4px 0 14px; }
+.lc-group { border: 2px solid var(--border); border-radius: var(--rs); margin-bottom: 10px; }
+.lc-ghead { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+.lc-title { font-weight: 700; font-size: 14px; flex: 1; }
+.lc-cat { font-size: 11px; font-weight: 600; color: var(--t2); text-transform: uppercase; letter-spacing: .05em; }
+.lc-count { font-size: 12px; color: var(--t2); }
+.lc-urg { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 12px; }
+.lc-urg-mixed { background: var(--wrn-bg); color: var(--warn); }
+.lc-members { border-top: 1px solid var(--border); }
+.lc-member { display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 26px; border-top: 1px solid var(--border); font-size: 13px; }
+.lc-member:first-child { border-top: none; }
+.lc-appt { font-size: 11.5px; color: var(--t2); }
+.lc-btn { font-family: inherit; font-size: 12px; font-weight: 600; min-height: 44px; padding: 0 12px; border-radius: var(--rs); border: 2px solid var(--bm); background: transparent; color: var(--text); cursor: pointer; }
+.lc-btn-danger { color: var(--urgent); border-color: var(--urgent); }
+.lc-editor { padding: 14px; border-top: 1px solid var(--border); }
+.lc-lbl { display: block; font-size: 11.5px; font-weight: 700; color: var(--t2);
+          text-transform: uppercase; letter-spacing: .05em; margin: 0 0 5px; }
+.lc-input { width: 100%; padding: 10px 12px; margin-bottom: 12px;
+            border: 2px solid var(--border); border-radius: var(--rs);
+            font-family: inherit; font-size: 13.5px;
+            color: var(--text); background: var(--bg); }
+.lc-input:focus { border-color: var(--text); outline: none; }
+.lc-warn { font-size: 12.5px; line-height: 1.45; color: var(--warn);
+           background: var(--wrn-bg); padding: 10px 12px;
+           border-radius: var(--rs); margin: 0 0 12px; }
+.lc-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.lc-btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
 </style>
 </head>
 <body>
@@ -455,6 +487,12 @@ button { font-family:inherit; cursor:pointer; }
       </div>
     </div>
     <div class="card" id="cycle-batches"></div>
+
+    <section id="livecycle" hidden>
+      <h2 class="sec-title" id="lc-head">Live cycle</h2>
+      <p class="lc-sub" id="lc-sub"></p>
+      <div id="lc-list"></div>
+    </section>
 
     </div><!-- /#sect-tasks -->
 
@@ -769,9 +807,13 @@ let CF_SOURCE = null;  // the source cycle for copy-forward (set by startCopyFor
 let CF_GROUPS = [];    // groups fetched from /api/cycles/:id/groups, each with a client-side .sel flag
 let LAST_BATCH_ID = null; // batch_id returned by the most recent commitNewTask, for the success screen's Undo
 
-// Mockup urgency labels -> backend urgency codes.
-const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Info':'info' };
-const URG_CODE_TO_LABEL = { 'overdue':'Overdue', 'this_uta':'This UTA', 'next_uta':'Next UTA', 'info':'Info' };
+// Mockup urgency labels -> backend urgency codes. 'Future' has no button in
+// the #f-urg segmented control below (New Task never offers it directly),
+// but a recurring catalog item can still hold urgency:'future' (set via the
+// Live Cycle group editor), so both maps need the pair or prefillFromCatalog
+// silently downgrades it to This UTA on "Use again" instead of preserving it.
+const URG_LABEL_TO_CODE = { 'Overdue':'overdue', 'This UTA':'this_uta', 'Next UTA':'next_uta', 'Future':'future', 'Info':'info' };
+const URG_CODE_TO_LABEL = { 'overdue':'Overdue', 'this_uta':'This UTA', 'next_uta':'Next UTA', 'future':'Future', 'info':'Info' };
 
 let urgency = 'This UTA';
 let urgBatches = []; // [{ urg: label, code, member_ids:[int] }]  ("batches so far", client-side)
@@ -872,15 +914,24 @@ async function loadHome() {
   }
 
   // Added-this-cycle batches: the working cycle's batches.
-  if (working) {
-    let cycleBatches = [];
-    try {
-      cycleBatches = await fetch(`/api/cycles/${working.id}/batches`).then(r => r.json());
-    } catch (e) { cycleBatches = []; }
-    renderBatches(cycleBatches);
-  } else {
-    renderBatches([]);
-  }
+  await refreshCycleBatches();
+
+  await lcRender();
+}
+
+// Re-fetches and re-renders just the "added this cycle" batch list, keyed off
+// WORKING_CYCLE (set above just before this is first called). Split out of
+// loadHome() so the live-cycle delete flows below can refresh it too — a
+// delete can empty a batch (HAVING COUNT(t.id) > 0 in listBatches drops it),
+// and without this it kept showing, with an Undo button that did nothing,
+// until the next full page load.
+async function refreshCycleBatches() {
+  if (!WORKING_CYCLE) { renderBatches([]); return; }
+  let cycleBatches = [];
+  try {
+    cycleBatches = await fetch(`/api/cycles/${WORKING_CYCLE.id}/batches`).then(r => r.json());
+  } catch (e) { cycleBatches = []; }
+  renderBatches(cycleBatches);
 }
 
 function renderCycleBar({ live, draft }) {
@@ -1041,6 +1092,288 @@ async function undoLastBatchFromSuccess() {
   LAST_BATCH_ID = null;
   go('home');
 }
+
+// ═══ Live cycle (Task 8) ═══════════════════════════════════════════════════
+// Lists this cycle's task groups, lets a leader edit or delete a whole group,
+// and drills into a group to fix one member's copy. All writes go through the
+// guarded routes added in Tasks 3-6: a 409 means a member already checked
+// something off, and the UI asks a second, more specific question before
+// retrying with force=true rather than silently destroying recorded work.
+const LC_URG = { overdue:'Overdue', this_uta:'This UTA', next_uta:'Next UTA', future:'Future', info:'Info' };
+
+let LC_EDIT = null;   // "categoryCode|title" of the group being edited, or null
+let LC_MEDIT = null;  // task_id (string) of the member row being edited, or null
+let LC_GROUPS = [];   // last groups payload from lcRender's fetch, so the delegated
+                       // click handler can look a group back up by its key
+
+async function lcRender() {
+  const cyc = WORKING_CYCLE;
+  const host = document.getElementById('livecycle');
+  if (!cyc) { host.hidden = true; return; }
+  host.hidden = false;
+
+  const live = cyc.status === 'live';
+  document.getElementById('lc-head').textContent = live ? 'Live cycle' : 'Draft cycle';
+  let groups = [];
+  try {
+    groups = await fetch(`/api/cycles/${cyc.id}/groups`).then(r => r.json());
+  } catch (e) { groups = []; }
+  LC_GROUPS = groups;
+  const people = new Set(groups.flatMap(g => g.members.map(m => m.id))).size;
+  document.getElementById('lc-sub').textContent = live
+    ? `${people} members can see this now. Changes apply immediately.`
+    : 'Not yet visible to members.';
+
+  const list = document.getElementById('lc-list');
+  if (!groups.length) {
+    list.innerHTML = '<div class="empty-state">No tasks in this cycle yet.</div>';
+    return;
+  }
+  list.innerHTML = groups.map(g => {
+    const key = `${g.category_code}|${g.title}`;
+    // In place of the group header when this group's editor is open, so only
+    // one group is ever open at a time.
+    const gheadHtml = LC_EDIT === key ? lcEditorHtml(g) : `
+      <div class="lc-ghead">
+        <span class="lc-cat">${lcEsc(g.category_code)}</span>
+        <span class="lc-title">${lcEsc(g.title)}</span>
+        <span class="lc-urg ${g.urgency_mixed ? 'lc-urg-mixed' : ''}">${
+          g.urgency_mixed ? 'Mixed' : lcEsc(LC_URG[g.urgency] || g.urgency)}</span>
+        <span class="lc-count">${g.count} member${g.count === 1 ? '' : 's'}</span>
+        <button class="lc-btn" data-lc-edit="${lcEsc(key)}">Edit</button>
+        <button class="lc-btn lc-btn-danger" data-lc-del="${lcEsc(key)}">Delete</button>
+      </div>`;
+    // Same in-place-of-the-row swap for a single member being edited.
+    const membersHtml = g.members.map(m => {
+      if (String(m.task_id) === LC_MEDIT) return lcMemberEditorHtml(m);
+      // A member row is never "mixed" (that's a group-level concept), so its
+      // chip always shows this member's own single urgency value.
+      const apptParts = [m.appt_day, m.appt_time, m.appt_location].filter(Boolean);
+      const apptHtml = apptParts.length
+        ? `<span class="lc-appt">${lcEsc(apptParts.join(' · '))}</span>` : '';
+      return `
+        <div class="lc-member">
+          <span style="flex:1">${lcEsc(m.rank)} ${lcEsc(m.last_name)}</span>
+          <span class="lc-urg">${lcEsc(LC_URG[m.urgency] || m.urgency)}</span>
+          ${apptHtml}
+          <button class="lc-btn" data-lc-medit="${m.task_id}">Edit</button>
+          <button class="lc-btn lc-btn-danger" data-lc-mdel="${m.task_id}">Delete</button>
+        </div>`;
+    }).join('');
+    return `
+    <div class="lc-group">
+      ${gheadHtml}
+      <div class="lc-members">${membersHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function lcEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+// Group delete: confirm, then re-confirm naming the cost if members have
+// already checked it off, mirroring how batch undo behaves.
+async function lcDeleteGroup(categoryCode, title) {
+  if (!await uiConfirm({ title: 'Delete this task?',
+        message: `"${title}" will be removed from every member who has it.`,
+        danger: true })) return;
+
+  let res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/groups/delete`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ category_code: categoryCode, title }),
+  });
+
+  if (res.status === 409) {
+    const { checked_off_count } = await res.json();
+    if (!await uiConfirm({ title: 'Members have already done this',
+          message: `${checked_off_count} member${checked_off_count === 1 ? ' has' : 's have'} checked this off. Deleting removes their notes too.`,
+          confirmLabel: 'Delete anyway', danger: true })) return;
+    res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/groups/delete`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ category_code: categoryCode, title, force: true }),
+    });
+  }
+
+  if (!res.ok) return uiToast('Could not delete that task', 'error');
+  uiToast('Task deleted', 'success');
+  // A group delete can empty a batch; refresh both so the batch list doesn't
+  // keep showing an Undo button for something that's already gone.
+  await Promise.all([lcRender(), refreshCycleBatches()]);
+}
+
+async function lcDeleteMember(taskId) {
+  if (!await uiConfirm({ title: 'Remove this task from this member?',
+        message: 'Other members keep theirs.', danger: true })) return;
+
+  let res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+  if (res.status === 409) {
+    const { checked_off_count } = await res.json();
+    if (!await uiConfirm({ title: 'Already checked off',
+          message: `This member has completed it. Deleting removes their note too. (${checked_off_count})`,
+          confirmLabel: 'Delete anyway', danger: true })) return;
+    res = await fetch(`/api/tasks/${taskId}?force=true`, { method: 'DELETE' });
+  }
+  if (!res.ok) return uiToast('Could not delete that task', 'error');
+  uiToast('Task removed', 'success');
+  // A member delete can empty a batch; refresh both — see lcDeleteGroup.
+  await Promise.all([lcRender(), refreshCycleBatches()]);
+}
+
+// Group edit. An inline editor, not window.prompt(): the builder already edits
+// schedule items and work orders inline (SCHED_EDIT_REF, WO_EDIT_ID), and a
+// native prompt cannot offer a constrained list of five urgencies, cannot be
+// styled, and is unreachable to a screen reader in the way the rest of this app
+// is not.
+function lcEditorHtml(g) {
+  return `
+    <div class="lc-editor">
+      <label class="lc-lbl" for="lc-urg-in">Urgency</label>
+      <select id="lc-urg-in" class="lc-input">
+        <option value=""${g.urgency_mixed ? ' selected' : ''}>Leave unchanged</option>
+        ${Object.entries(LC_URG).map(([v, label]) =>
+          `<option value="${v}"${!g.urgency_mixed && g.urgency === v ? ' selected' : ''}>${label}</option>`
+        ).join('')}
+      </select>
+      <label class="lc-lbl" for="lc-det-in">Details</label>
+      <input id="lc-det-in" class="lc-input" type="text"
+             value="${g.details_mixed ? '' : lcEsc(g.details || '')}"
+             placeholder="${g.details_mixed ? 'Members have different details' : 'Optional'}">
+      ${g.urgency_mixed ? `<p class="lc-warn" role="note">Members of this group
+        currently have different urgencies. Choosing one here applies it to all
+        ${g.count}; leaving this as "Leave unchanged" keeps each member's own.</p>` : ''}
+      <div class="lc-actions">
+        <button class="lc-btn" data-lc-cancel="1">Cancel</button>
+        <button class="lc-btn lc-btn-primary" data-lc-save="1">Save</button>
+      </div>
+    </div>`;
+}
+
+async function lcSaveGroup(categoryCode, title, group) {
+  const urgencyEl = document.getElementById('lc-urg-in');
+  const detailsEl = document.getElementById('lc-det-in');
+
+  const body = { category_code: categoryCode, title };
+  // Only send urgency when the operator actually chose one. The select's
+  // leading "Leave unchanged" option is selected by default whenever the
+  // group is mixed, precisely so an untouched select can never flatten every
+  // member to whichever urgency happens to sort first.
+  if (urgencyEl.value) body.urgency = urgencyEl.value;
+  // Only send details when the group is uniform, or when the operator actually
+  // typed something. Otherwise an untouched placeholder on a mixed group would
+  // silently blank every member's details.
+  if (!group.details_mixed || detailsEl.value.trim()) body.details = detailsEl.value || null;
+
+  // Neither field actually changed: treat Save as a no-op Cancel rather than
+  // sending a request that writes nothing but would still claim success.
+  if (!('urgency' in body) && !('details' in body)) { LC_EDIT = null; await lcRender(); return; }
+
+  const res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/groups`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return uiToast('Could not save that change', 'error');
+  LC_EDIT = null;
+  uiToast('Task updated', 'success');
+  await lcRender();
+}
+
+// Member edit: fixes one person's copy without touching groupmates.
+// listGroups' JSON_AGG carries each member's own urgency/appt_* now, so those
+// four fields are prefilled from the member's current values below. Details
+// is NOT in that payload (group-level MIN(details) only) and stays blank —
+// leave it blank to leave it as-is. Only what you fill in or change is sent —
+// PUT /api/tasks/:id/definition's pickFields()/buildSet() leave every column
+// whose key is absent from the body untouched, so a blank/unmoved field never
+// overwrites something the operator didn't mean to touch.
+function lcMemberEditorHtml(m) {
+  return `
+    <div class="lc-editor">
+      <div class="lc-title" style="margin-bottom:10px">${lcEsc(m.rank)} ${lcEsc(m.last_name)}</div>
+      <p class="lc-warn" role="note">Urgency and appointment are prefilled with this member's
+        current values. Details isn't shown here — leave it blank to leave it as-is.</p>
+      <label class="lc-lbl" for="lc-murg-in">Urgency</label>
+      <select id="lc-murg-in" class="lc-input">
+        <option value="">Leave unchanged</option>
+        ${Object.entries(LC_URG).map(([v, label]) =>
+          `<option value="${v}"${m.urgency === v ? ' selected' : ''}>${label}</option>`
+        ).join('')}
+      </select>
+      <label class="lc-lbl" for="lc-mdet-in">Details</label>
+      <input id="lc-mdet-in" class="lc-input" type="text" placeholder="Leave unchanged">
+      <label class="lc-lbl" for="lc-mday-in">Appointment day</label>
+      <input id="lc-mday-in" class="lc-input" type="text" placeholder="e.g. Saturday" value="${lcEsc(m.appt_day || '')}">
+      <label class="lc-lbl" for="lc-mtime-in">Appointment time</label>
+      <input id="lc-mtime-in" class="lc-input" type="text" placeholder="e.g. 0900" value="${lcEsc(m.appt_time || '')}">
+      <label class="lc-lbl" for="lc-mloc-in">Appointment location</label>
+      <input id="lc-mloc-in" class="lc-input" type="text" placeholder="e.g. Bldg 110, Rm 5" value="${lcEsc(m.appt_location || '')}">
+      <div class="lc-actions">
+        <button class="lc-btn" data-lc-mcancel="1">Cancel</button>
+        <button class="lc-btn lc-btn-primary" data-lc-msave="${m.task_id}">Save</button>
+      </div>
+    </div>`;
+}
+
+async function lcSaveMember(taskId) {
+  const body = {};
+  const urg = document.getElementById('lc-murg-in').value;
+  if (urg) body.urgency = urg;
+  const det = document.getElementById('lc-mdet-in').value.trim();
+  if (det) body.details = det;
+  // appt_day/appt_time/appt_location are prefilled with the member's current
+  // values (see lcMemberEditorHtml), unlike details, which always opens
+  // blank. So here a blank box means "operator cleared this", not "operator
+  // didn't touch it" — send an explicit null so buildSet() (lib/tasks.js)
+  // clears the column instead of leaving stale data in place while the UI
+  // reports success.
+  body.appt_day = document.getElementById('lc-mday-in').value.trim() || null;
+  body.appt_time = document.getElementById('lc-mtime-in').value.trim() || null;
+  body.appt_location = document.getElementById('lc-mloc-in').value.trim() || null;
+
+  // Nothing filled in: treat Save as a no-op Cancel instead of sending an
+  // empty PUT.
+  if (!Object.keys(body).length) { LC_MEDIT = null; await lcRender(); return; }
+
+  const res = await fetch(`/api/tasks/${taskId}/definition`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return uiToast('Could not save that change', 'error');
+  LC_MEDIT = null;
+  uiToast('Task updated', 'success');
+  await lcRender();
+}
+
+// One delegated listener for the whole list — #lc-list itself is never
+// replaced, only its innerHTML, so this survives every lcRender().
+document.getElementById('lc-list').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const d = btn.dataset;
+
+  if (d.lcEdit !== undefined) { LC_EDIT = d.lcEdit; LC_MEDIT = null; return lcRender(); }
+  if (d.lcCancel !== undefined) { LC_EDIT = null; return lcRender(); }
+  if (d.lcSave !== undefined) {
+    const idx = LC_EDIT.indexOf('|');
+    const categoryCode = LC_EDIT.slice(0, idx), title = LC_EDIT.slice(idx + 1);
+    const group = LC_GROUPS.find(g => g.category_code === categoryCode && g.title === title);
+    // The group can vanish out from under an open editor (deleted elsewhere,
+    // or the list refreshed) between render and click. Without this guard,
+    // lcSaveGroup(..., undefined) throws reading group.details_mixed and Save
+    // does nothing with no explanation.
+    if (!group) { uiToast('That task no longer exists — refresh and try again', 'error'); return; }
+    return lcSaveGroup(categoryCode, title, group);
+  }
+  if (d.lcDel !== undefined) {
+    const idx = d.lcDel.indexOf('|');
+    return lcDeleteGroup(d.lcDel.slice(0, idx), d.lcDel.slice(idx + 1));
+  }
+  if (d.lcMedit !== undefined) { LC_MEDIT = d.lcMedit; LC_EDIT = null; return lcRender(); }
+  if (d.lcMcancel !== undefined) { LC_MEDIT = null; return lcRender(); }
+  if (d.lcMsave !== undefined) return lcSaveMember(d.lcMsave);
+  if (d.lcMdel !== undefined) return lcDeleteMember(d.lcMdel);
+});
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 

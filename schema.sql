@@ -188,6 +188,23 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_member ON notifications (member_id, read_at);
 CREATE INDEX IF NOT EXISTS idx_notifications_unemailed ON notifications (emailed_at) WHERE emailed_at IS NULL;
 
+-- Widen the notifications type CHECK to include task_escalated.
+-- MUST stay after CREATE TABLE notifications above. This used to live in the
+-- earlier migration DO block (schema.sql:132), before the table existed on a
+-- fresh database — the ALTER hit "relation does not exist", got swallowed by
+-- that block's EXCEPTION WHEN others THEN NULL, and silently rolled back
+-- everything else the block had done, including shop_events.event_group_id,
+-- which then made the CREATE INDEX right after it fail with undefined_column
+-- and abort the whole script: a fresh database ended up with NO TABLES AT
+-- ALL. Fixed in the commit that added this comment; see also commit bdbebe6,
+-- which fixed the same bug once already for server.js's copy of this migration.
+DO $$ BEGIN
+  ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+  ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+    CHECK (type IN ('tasks_live','task_assigned','completion_digest','task_escalated'));
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
 -- Per-period UTA attendance, marked by shop supervisors.
 -- A row's EXISTENCE means "marked" — there is deliberately no 'unmarked'
 -- status and no implicit 'present', so a supervisor who never opens the app
