@@ -917,7 +917,15 @@ app.put('/api/cycles/:id/groups', requireAuth, requireRole('leadership'), requir
     return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
   }
   try {
-    res.json(await tasksLib.updateGroup(pool, cycleId, { category_code, title }, fields));
+    const result = await tasksLib.updateGroup(pool, cycleId, { category_code, title }, fields);
+    if (result.escalated_member_ids?.length) {
+      await notify(result.escalated_member_ids, {
+        type: 'task_escalated',
+        title: title,
+        body: `Task urgency has been escalated`,
+      });
+    }
+    res.json(result);
   } catch (e) { sendTaskError(res, e); }
 });
 
@@ -941,7 +949,14 @@ app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), req
   }
 
   try {
-    res.json(await tasksLib.updateTask(pool, taskId, fields));
+    const result = await tasksLib.updateTask(pool, taskId, fields);
+    if (result.escalated_member_ids?.length) {
+      await notify(result.escalated_member_ids, {
+        type: 'task_escalated',
+        title: 'Task urgency escalated',
+      });
+    }
+    res.json(result);
   } catch (e) { sendTaskError(res, e); }
 });
 

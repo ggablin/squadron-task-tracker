@@ -172,3 +172,68 @@ test('leadership can edit a group and a single row on a live cycle', async () =>
     `SELECT urgency, appt_time FROM tasks WHERE id=$1`, [a]);
   assert.deepStrictEqual(row, { urgency: 'this_uta', appt_time: '0900' });
 });
+
+test('escalating a group sends task_escalated notifications to escalated members', async () => {
+  await resetDb(); const w = await world();
+  const live = await mkCycle('live', true);
+  // Create a task at 'future' urgency
+  await mkTask(live, w.mem1, w.catId, 'CBT', 'future');
+  const cookie = await login('lead', 'pw');
+
+  // Escalate the group to 'this_uta' (escalates mem1 from future to this_uta)
+  const res = await fetch(`${baseUrl}/api/cycles/${live}/groups`, {
+    method: 'PUT', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ category_code: w.catCode, title: 'CBT', urgency: 'this_uta' }),
+  });
+  assert.strictEqual(res.status, 200);
+
+  // Check that mem1 got a task_escalated notification
+  const { rows: notifs } = await pool.query(
+    `SELECT member_id, type FROM notifications WHERE type = 'task_escalated'`);
+  assert.strictEqual(notifs.length, 1, 'one notification should be sent for one escalated member');
+  assert.strictEqual(notifs[0].member_id, w.mem1);
+  assert.strictEqual(notifs[0].type, 'task_escalated');
+});
+
+test('escalating a single task sends task_escalated notification', async () => {
+  await resetDb(); const w = await world();
+  const live = await mkCycle('live', true);
+  const t = await mkTask(live, w.mem1, w.catId, 'CBT', 'future');
+  const cookie = await login('sup1', 'pw');
+
+  const res = await fetch(`${baseUrl}/api/tasks/${t}/definition`, {
+    method: 'PUT', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ urgency: 'overdue' }),
+  });
+  assert.strictEqual(res.status, 200);
+
+  const { rows: [notif] } = await pool.query(
+    `SELECT member_id, type FROM notifications WHERE type = 'task_escalated'`);
+  assert.strictEqual(notif.member_id, w.mem1);
+  assert.strictEqual(notif.type, 'task_escalated');
+});
+
+test('de-escalation and details-only edits do not send notifications', async () => {
+  await resetDb(); const w = await world();
+  const live = await mkCycle('live', true);
+  const t = await mkTask(live, w.mem1, w.catId, 'CBT', 'this_uta');
+  const cookie = await login('sup1', 'pw');
+
+  // De-escalate: should not notify
+  const de = await fetch(`${baseUrl}/api/tasks/${t}/definition`, {
+    method: 'PUT', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ urgency: 'future' }),
+  });
+  assert.strictEqual(de.status, 200);
+
+  // Details-only edit: should not notify
+  const det = await fetch(`${baseUrl}/api/tasks/${t}/definition`, {
+    method: 'PUT', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ details: 'New details', appt_time: '1000' }),
+  });
+  assert.strictEqual(det.status, 200);
+
+  const { rows: notifs } = await pool.query(
+    `SELECT COUNT(*)::int as count FROM notifications WHERE type = 'task_escalated'`);
+  assert.strictEqual(notifs[0].count, 0, 'no escalation notifications should be sent');
+});
