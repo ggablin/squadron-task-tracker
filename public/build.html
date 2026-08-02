@@ -1321,12 +1321,15 @@ async function lcSaveMember(taskId) {
   if (urg) body.urgency = urg;
   const det = document.getElementById('lc-mdet-in').value.trim();
   if (det) body.details = det;
-  const day = document.getElementById('lc-mday-in').value.trim();
-  if (day) body.appt_day = day;
-  const time = document.getElementById('lc-mtime-in').value.trim();
-  if (time) body.appt_time = time;
-  const loc = document.getElementById('lc-mloc-in').value.trim();
-  if (loc) body.appt_location = loc;
+  // appt_day/appt_time/appt_location are prefilled with the member's current
+  // values (see lcMemberEditorHtml), unlike details, which always opens
+  // blank. So here a blank box means "operator cleared this", not "operator
+  // didn't touch it" — send an explicit null so buildSet() (lib/tasks.js)
+  // clears the column instead of leaving stale data in place while the UI
+  // reports success.
+  body.appt_day = document.getElementById('lc-mday-in').value.trim() || null;
+  body.appt_time = document.getElementById('lc-mtime-in').value.trim() || null;
+  body.appt_location = document.getElementById('lc-mloc-in').value.trim() || null;
 
   // Nothing filled in: treat Save as a no-op Cancel instead of sending an
   // empty PUT.
