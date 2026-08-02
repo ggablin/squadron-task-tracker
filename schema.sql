@@ -157,6 +157,9 @@ DO $$ BEGIN
   -- Mirroring it here means switching an event's audience from All to a shop
   -- no longer silently discards the value.
   ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS kind VARCHAR(20);
+  ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+  ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+    CHECK (type IN ('tasks_live','task_assigned','completion_digest','task_escalated'));
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
