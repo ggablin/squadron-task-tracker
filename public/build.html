@@ -1204,6 +1204,7 @@ function lcEditorHtml(g) {
     <div class="lc-editor">
       <label class="lc-lbl" for="lc-urg-in">Urgency</label>
       <select id="lc-urg-in" class="lc-input">
+        <option value=""${g.urgency_mixed ? ' selected' : ''}>Leave unchanged</option>
         ${Object.entries(LC_URG).map(([v, label]) =>
           `<option value="${v}"${!g.urgency_mixed && g.urgency === v ? ' selected' : ''}>${label}</option>`
         ).join('')}
@@ -1213,8 +1214,8 @@ function lcEditorHtml(g) {
              value="${g.details_mixed ? '' : lcEsc(g.details || '')}"
              placeholder="${g.details_mixed ? 'Members have different details' : 'Optional'}">
       ${g.urgency_mixed ? `<p class="lc-warn" role="note">Members of this group
-        currently have different urgencies. Saving applies your choice to all
-        ${g.count}.</p>` : ''}
+        currently have different urgencies. Choosing one here applies it to all
+        ${g.count}; leaving this as "Leave unchanged" keeps each member's own.</p>` : ''}
       <div class="lc-actions">
         <button class="lc-btn" data-lc-cancel="1">Cancel</button>
         <button class="lc-btn lc-btn-primary" data-lc-save="1">Save</button>
@@ -1223,14 +1224,23 @@ function lcEditorHtml(g) {
 }
 
 async function lcSaveGroup(categoryCode, title, group) {
-  const urgency = document.getElementById('lc-urg-in').value;
+  const urgencyEl = document.getElementById('lc-urg-in');
   const detailsEl = document.getElementById('lc-det-in');
 
-  const body = { category_code: categoryCode, title, urgency };
+  const body = { category_code: categoryCode, title };
+  // Only send urgency when the operator actually chose one. The select's
+  // leading "Leave unchanged" option is selected by default whenever the
+  // group is mixed, precisely so an untouched select can never flatten every
+  // member to whichever urgency happens to sort first.
+  if (urgencyEl.value) body.urgency = urgencyEl.value;
   // Only send details when the group is uniform, or when the operator actually
   // typed something. Otherwise an untouched placeholder on a mixed group would
   // silently blank every member's details.
   if (!group.details_mixed || detailsEl.value.trim()) body.details = detailsEl.value || null;
+
+  // Neither field actually changed: treat Save as a no-op Cancel rather than
+  // sending a request that writes nothing but would still claim success.
+  if (!('urgency' in body) && !('details' in body)) { LC_EDIT = null; await lcRender(); return; }
 
   const res = await fetch(`/api/cycles/${WORKING_CYCLE.id}/groups`, {
     method: 'PUT', headers: { 'content-type': 'application/json' },
