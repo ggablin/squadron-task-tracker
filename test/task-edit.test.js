@@ -118,4 +118,81 @@ test('listGroups flags a group with mixed NULL and non-null details', async () =
   assert.strictEqual(g.details_mixed, true, 'NULL and non-null must be reported as mixed (regression for Finding 1)');
 });
 
+test('updateTask changes one row and leaves its group siblings alone', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const mine = await mkTask(c, f.m1, f.catId, 'CBT', 'future');
+  const theirs = await mkTask(c, f.m2, f.catId, 'CBT', 'future');
+
+  const r = await tasks.updateTask(pool, mine, { urgency: 'overdue' });
+  assert.strictEqual(r.updated, 1);
+
+  const { rows } = await pool.query(`SELECT id, urgency FROM tasks WHERE id = ANY($1)`, [[mine, theirs]]);
+  const by = Object.fromEntries(rows.map(r => [r.id, r.urgency]));
+  assert.strictEqual(by[mine], 'overdue');
+  assert.strictEqual(by[theirs], 'future', 'the sibling row must not move');
+});
+
+test('updateTask writes all three appointment fields', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t = await mkTask(c, f.m1, f.catId, 'Dental');
+
+  await tasks.updateTask(pool, t, {
+    appt_day: 'Saturday', appt_time: '0900', appt_location: 'Med Group' });
+
+  const { rows: [row] } = await pool.query(
+    `SELECT appt_day, appt_time, appt_location FROM tasks WHERE id=$1`, [t]);
+  assert.deepStrictEqual(row,
+    { appt_day: 'Saturday', appt_time: '0900', appt_location: 'Med Group' });
+});
+
+test('updateTask reports escalation only when urgency rises', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+
+  const up = await mkTask(c, f.m1, f.catId, 'A', 'this_uta');
+  const rUp = await tasks.updateTask(pool, up, { urgency: 'overdue' });
+  assert.deepStrictEqual(rUp.escalated_member_ids, [f.m1], 'this_uta -> overdue escalates');
+
+  const down = await mkTask(c, f.m1, f.catId, 'B', 'overdue');
+  const rDown = await tasks.updateTask(pool, down, { urgency: 'future' });
+  assert.deepStrictEqual(rDown.escalated_member_ids, [], 'overdue -> future does not');
+
+  const same = await mkTask(c, f.m1, f.catId, 'C', 'this_uta');
+  const rSame = await tasks.updateTask(pool, same, { details: 'typo fixed' });
+  assert.deepStrictEqual(rSame.escalated_member_ids, [], 'a details-only edit does not');
+});
+
+test('updateTask leaves omitted fields alone and clears explicit nulls', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t = await mkTask(c, f.m1, f.catId, 'CBT', 'this_uta');
+  await pool.query(`UPDATE tasks SET details='keep me', appt_day='Sunday' WHERE id=$1`, [t]);
+
+  await tasks.updateTask(pool, t, { appt_day: null });
+
+  const { rows: [row] } = await pool.query(
+    `SELECT details, appt_day, urgency FROM tasks WHERE id=$1`, [t]);
+  assert.strictEqual(row.details, 'keep me', 'omitted field untouched');
+  assert.strictEqual(row.appt_day, null, 'explicit null clears');
+  assert.strictEqual(row.urgency, 'this_uta', 'omitted urgency untouched');
+});
+
+test('updateTask refuses an archived cycle', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('archived');
+  const t = await mkTask(c, f.m1, f.catId, 'CBT');
+  await assert.rejects(() => tasks.updateTask(pool, t, { urgency: 'overdue' }),
+    (e) => e.code === 'NOT_EDITABLE');
+});
+
+test('updateTask with no fields is a no-op', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const t = await mkTask(c, f.m1, f.catId, 'CBT');
+  const r = await tasks.updateTask(pool, t, {});
+  assert.deepStrictEqual(r, { updated: 0, escalated_member_ids: [] });
+});
+
 module.exports = { mkCycle, mkTask };
