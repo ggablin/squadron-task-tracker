@@ -6,6 +6,7 @@ const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
+const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const attendance = require('./lib/attendance');
 const schedule = require('./lib/schedule');
@@ -189,6 +190,29 @@ function requireOnboarded(req, res, next) {
 
 // Parse a route :id param to a positive integer, or null if malformed.
 function reqId(v) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
+
+const VALID_URGENCY = ['overdue', 'this_uta', 'next_uta', 'future', 'info'];
+
+// Collect only the keys the caller actually sent, so lib/tasks.js can tell
+// "leave unchanged" from "set to null".
+function pickFields(body, allowed) {
+  const out = {};
+  for (const k of allowed) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) out[k] = body[k];
+  }
+  return out;
+}
+
+// Single mapping from lib/tasks.js error codes to HTTP responses, so all four
+// routes answer identically.
+function sendTaskError(res, e) {
+  if (e.code === 'NOT_EDITABLE')    return res.status(403).json({ error: 'This cycle is closed to changes' });
+  if (e.code === 'NOT_FOUND')       return res.status(404).json({ error: 'Not found' });
+  if (e.code === 'BAD_CATEGORY')    return res.status(400).json({ error: 'Unknown category' });
+  if (e.code === 'HAS_COMPLETIONS') return res.status(409).json({ error: 'HAS_COMPLETIONS', checked_off_count: e.checked_off_count });
+  console.error(e);
+  return res.status(500).json({ error: 'Server error' });
+}
 
 // ── Notifications ────────────────────────────────────────────────────────────
 // Single source of truth for both the in-app center and the email channel.
@@ -548,28 +572,24 @@ app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), requireO
 
 // ── Delete Task (supervisor: own shop, leadership: any) ─────────────────────
 
+// Repaired: this route previously had neither an editable-cycle guard nor a
+// completions guard, so a supervisor could delete a task out of an ARCHIVED
+// cycle (rewriting history Records presents as frozen) and silently destroy a
+// member's recorded state and note. It is reachable from public/index.html.
 app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
-  try {
-    const taskId = parseInt(req.params.id);
+  const taskId = reqId(req.params.id);
+  if (!taskId) return res.status(400).json({ error: 'Invalid id' });
 
-    // Check task exists and caller has permission
-    const { rows: tr } = await pool.query(`
-      SELECT t.member_id, m.shop_id FROM tasks t
-      JOIN members m ON m.id = t.member_id
-      WHERE t.id = $1
-    `, [taskId]);
-    if (!tr.length) return res.status(404).json({ error: 'Task not found' });
-    if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
-      return res.status(403).json({ error: 'Cannot delete tasks outside your shop' });
-    }
-
-    await pool.query('DELETE FROM task_completions WHERE task_id = $1', [taskId]);
-    await pool.query('DELETE FROM tasks WHERE id = $1', [taskId]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+  const { rows: tr } = await pool.query(
+    `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
+  if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+  if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+    return res.status(403).json({ error: 'Cannot delete tasks outside your shop' });
   }
+
+  try {
+    res.json(await tasksLib.deleteTask(pool, taskId, { force: req.query.force === 'true' }));
+  } catch (e) { sendTaskError(res, e); }
 });
 
 // ── Flag Task (supervisor: own shop, leadership: any) ───────────────────────
@@ -881,6 +901,62 @@ app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requir
     if (e.code === 'BAD_CATEGORY') return res.status(400).json({ error: 'Invalid category' });
     console.error(e); res.status(500).json({ error: 'Server error' });
   }
+});
+
+// ── Edit a whole task group (leadership only) ────────────────────────────────
+// Leadership-only because a group can span shops: a supervisor editing one
+// would silently do a partial update.
+app.put('/api/cycles/:id/groups', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  const cycleId = reqId(req.params.id);
+  if (!cycleId) return res.status(400).json({ error: 'Invalid id' });
+  const { category_code, title } = req.body || {};
+  if (!category_code || !title) return res.status(400).json({ error: 'category_code and title are required' });
+
+  const fields = pickFields(req.body, ['urgency', 'details']);
+  if ('urgency' in fields && !VALID_URGENCY.includes(fields.urgency)) {
+    return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
+  }
+  try {
+    res.json(await tasksLib.updateGroup(pool, cycleId, { category_code, title }, fields));
+  } catch (e) { sendTaskError(res, e); }
+});
+
+// ── Edit one member's task row ───────────────────────────────────────────────
+// /definition, not /:id — PUT /api/tasks/:id is already the member's completion
+// state, and overloading that path would be genuinely confusing to read.
+app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
+  const taskId = reqId(req.params.id);
+  if (!taskId) return res.status(400).json({ error: 'Invalid id' });
+
+  const fields = pickFields(req.body, ['urgency', 'details', 'appt_day', 'appt_time', 'appt_location']);
+  if ('urgency' in fields && !VALID_URGENCY.includes(fields.urgency)) {
+    return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
+  }
+
+  const { rows: tr } = await pool.query(
+    `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
+  if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+  if (req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
+    return res.status(403).json({ error: 'Cannot edit tasks outside your shop' });
+  }
+
+  try {
+    res.json(await tasksLib.updateTask(pool, taskId, fields));
+  } catch (e) { sendTaskError(res, e); }
+});
+
+// ── Delete a whole task group (leadership only) ──────────────────────────────
+// POST, not DELETE: a group's identity is a (category, title) pair rather than
+// a URL id, matching the existing /copy-forward and /go-live idiom.
+app.post('/api/cycles/:id/groups/delete', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  const cycleId = reqId(req.params.id);
+  if (!cycleId) return res.status(400).json({ error: 'Invalid id' });
+  const { category_code, title, force } = req.body || {};
+  if (!category_code || !title) return res.status(400).json({ error: 'category_code and title are required' });
+
+  try {
+    res.json(await tasksLib.deleteGroup(pool, cycleId, { category_code, title }, { force: force === true }));
+  } catch (e) { sendTaskError(res, e); }
 });
 
 app.post('/api/cycles/:id/copy-forward', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
