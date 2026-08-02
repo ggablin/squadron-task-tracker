@@ -69,4 +69,26 @@ test('assertCycleEditable rejects an archived cycle by id', async () => {
   await assert.doesNotReject(() => tasks.assertCycleEditable(pool, draft));
 });
 
+test('listGroups flags a group whose members hold different urgencies', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  await mkTask(c, f.m1, f.catId, 'CBT', 'this_uta');
+  await mkTask(c, f.m2, f.catId, 'CBT', 'overdue');
+
+  const [g] = await tasks.listGroups(pool, c);
+  assert.strictEqual(g.count, 2);
+  assert.strictEqual(g.urgency_mixed, true, 'divergent urgency must be reported');
+  assert.strictEqual(g.details_mixed, false, 'both details are NULL, so not mixed');
+});
+
+test('listGroups reports a uniform group as not mixed', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  await mkTask(c, f.m1, f.catId, 'CBT', 'this_uta');
+  await mkTask(c, f.m2, f.catId, 'CBT', 'this_uta');
+
+  const [g] = await tasks.listGroups(pool, c);
+  assert.strictEqual(g.urgency_mixed, false);
+});
+
 module.exports = { mkCycle, mkTask };
