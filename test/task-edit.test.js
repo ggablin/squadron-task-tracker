@@ -195,4 +195,59 @@ test('updateTask with no fields is a no-op', async () => {
   assert.deepStrictEqual(r, { updated: 0, escalated_member_ids: [] });
 });
 
+test('updateGroup changes every row in the group and nothing outside it', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  const a1 = await mkTask(c, f.m1, f.catId, 'CBT', 'future');
+  const a2 = await mkTask(c, f.m2, f.catId, 'CBT', 'future');
+  const other = await mkTask(c, f.m1, f.catId, 'Dental', 'future');
+
+  const r = await tasks.updateGroup(pool, c,
+    { category_code: f.catCode, title: 'CBT' }, { urgency: 'this_uta' });
+  assert.strictEqual(r.updated, 2);
+
+  const { rows } = await pool.query(`SELECT id, urgency FROM tasks WHERE id = ANY($1)`,
+    [[a1, a2, other]]);
+  const by = Object.fromEntries(rows.map(r => [r.id, r.urgency]));
+  assert.strictEqual(by[a1], 'this_uta');
+  assert.strictEqual(by[a2], 'this_uta');
+  assert.strictEqual(by[other], 'future', 'a different group must not be touched');
+});
+
+test('updateGroup escalates only the members who actually moved up', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  await mkTask(c, f.m1, f.catId, 'CBT', 'future');    // future -> overdue: escalates
+  await mkTask(c, f.m2, f.catId, 'CBT', 'overdue');   // overdue -> overdue: no change
+
+  const r = await tasks.updateGroup(pool, c,
+    { category_code: f.catCode, title: 'CBT' }, { urgency: 'overdue' });
+
+  assert.deepStrictEqual(r.escalated_member_ids, [f.m1],
+    'only the member whose urgency rose is notified');
+});
+
+test('updateGroup refuses an archived cycle', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('archived');
+  await mkTask(c, f.m1, f.catId, 'CBT', 'future');
+  await assert.rejects(() => tasks.updateGroup(pool, c,
+    { category_code: f.catCode, title: 'CBT' }, { urgency: 'overdue' }),
+    (e) => e.code === 'NOT_EDITABLE');
+});
+
+test('updateGroup rejects an unknown category and a missing group', async () => {
+  await resetDb(); const f = await seedFixtures();
+  const c = await mkCycle('live', true);
+  await mkTask(c, f.m1, f.catId, 'CBT', 'future');
+
+  await assert.rejects(() => tasks.updateGroup(pool, c,
+    { category_code: 'nope', title: 'CBT' }, { urgency: 'overdue' }),
+    (e) => e.code === 'BAD_CATEGORY');
+
+  await assert.rejects(() => tasks.updateGroup(pool, c,
+    { category_code: f.catCode, title: 'Does Not Exist' }, { urgency: 'overdue' }),
+    (e) => e.code === 'NOT_FOUND');
+});
+
 module.exports = { mkCycle, mkTask };
