@@ -106,6 +106,9 @@ app.use(session({
       );
       CREATE INDEX IF NOT EXISTS idx_notifications_member ON notifications (member_id, read_at);
       CREATE INDEX IF NOT EXISTS idx_notifications_unemailed ON notifications (emailed_at) WHERE emailed_at IS NULL;
+      ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+      ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+        CHECK (type IN ('tasks_live','task_assigned','completion_digest','task_escalated'));
       DO $$ BEGIN
         ALTER TABLE tasks ADD CONSTRAINT tasks_cycle_member_cat_title_uniq
           UNIQUE (uta_cycle_id, member_id, category_id, title);
