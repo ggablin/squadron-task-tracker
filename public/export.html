@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<title>Shop Handouts — 108th CES</title>
+<style>
+/* A print document, not an app screen — deliberately styled after the June
+   2026 hand-built to-do lists the shop leads already know (Calibri, blue
+   section bars, gold sub-heads, checkbox lines), not after design.css. It is
+   always light: this page exists to be printed. */
+@page { margin: 0.65in; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: #e9e9e4; }
+body {
+  font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+  font-size: 11pt; line-height: 1.45; color: #1a1a1a;
+}
+
+/* Screen chrome: sticky toolbar + paper look. All of it vanishes in print. */
+.toolbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px; background: #1f1f1f; color: #f6f7ed; flex-wrap: wrap;
+}
+.toolbar .tb-sub { color: #b8b9b0; font-size: 10pt; }
+.toolbar a { color: #b8b9b0; text-decoration: none; margin-right: 14px; font-size: 10.5pt; }
+.toolbar a:hover { color: #f6f7ed; }
+.toolbar button {
+  font-family: inherit; font-size: 11pt; font-weight: 700; cursor: pointer;
+  padding: 9px 18px; border: none; border-radius: 8px;
+  background: #f6f7ed; color: #1f1f1f;
+}
+#doc { max-width: 8.5in; margin: 24px auto; }
+.shop {
+  background: #fff; padding: 0.65in; margin-bottom: 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.12);
+}
+.msg { text-align: center; padding: 60px 20px; color: #444; font-size: 13pt; }
+
+/* The document itself — matches the June handout vocabulary. */
+h1 { font-size: 24pt; text-align: center; margin-bottom: 2px; }
+.subtitle { font-size: 11pt; color: #444; text-align: center; margin-bottom: 10px; }
+.top-rule { border: none; border-top: 3px solid #B8860B; margin-bottom: 16px; }
+.section-header {
+  background: #2B5797; color: #fff; font-weight: bold; font-size: 12.5pt;
+  padding: 6px 12px; margin: 18px 0 10px 0;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.sub-header { color: #B8860B; font-style: italic; font-weight: bold; font-size: 11pt; margin: 12px 0 4px 0; }
+.task { margin: 3px 0 3px 18px; line-height: 1.5; }
+.task.overdue { font-weight: bold; }
+.task .done-note, .status-note { font-style: italic; color: #666; }
+.member-name { font-size: 14pt; font-weight: bold; margin: 16px 0 4px 0; }
+.member-rule { border: none; border-top: 1px solid #ccc; margin: 14px 0; }
+.status-note { margin: 4px 0 8px 0; }
+
+@media print {
+  html { background: #fff; }
+  .toolbar { display: none; }
+  #doc { max-width: none; margin: 0; }
+  .shop {
+    box-shadow: none; padding: 0; margin: 0;
+    break-before: page; page-break-before: always;
+  }
+  .shop:first-child { break-before: auto; page-break-before: auto; }
+  .member-name, .sub-header { break-after: avoid; page-break-after: avoid; }
+  .task { break-inside: avoid; page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div>
+    <strong>Shop Handouts</strong>
+    <span class="tb-sub" id="tb-sub"></span>
+  </div>
+  <div>
+    <a href="/">&larr; Back to app</a>
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</div>
+
+<div id="doc"><div class="msg">Loading&hellip;</div></div>
+
+<script>
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+const BOX = '☐', BOX_DONE = '☑';
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// DATE columns arrive as ISO strings; parse as UTC so the day name can't
+// slip across midnight in local time.
+function utc(d) {
+  if (!d) return null;
+  const t = new Date(String(d).slice(0, 10) + 'T00:00:00Z');
+  return isNaN(t) ? null : t;
+}
+
+// day-name -> "Saturday Events (8 Aug)" using the cycle's date range. A day
+// string the range doesn't contain (or a compound like "Friday/Saturday")
+// just renders without a date.
+function buildDayInfo(cycle) {
+  const start = utc(cycle.start_date), end = utc(cycle.end_date);
+  const order = [], dateFor = {};
+  if (start && end) {
+    for (let t = start.getTime(); t <= end.getTime(); t += 86400000) {
+      const d = new Date(t), name = DAY_NAMES[d.getUTCDay()];
+      if (!(name in dateFor)) { order.push(name); dateFor[name] = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; }
+    }
+  } else {
+    order.push('Friday', 'Saturday', 'Sunday');
+  }
+  return { order, dateFor };
+}
+
+function cycleDatesLabel(cycle) {
+  const s = utc(cycle.start_date), e = utc(cycle.end_date);
+  if (!s || !e) return '';
+  const sm = MONTHS[s.getUTCMonth()], em = MONTHS[e.getUTCMonth()];
+  return sm === em && s.getUTCFullYear() === e.getUTCFullYear()
+    ? `${s.getUTCDate()}–${e.getUTCDate()} ${em} ${e.getUTCFullYear()}`
+    : `${s.getUTCDate()} ${sm} – ${e.getUTCDate()} ${em} ${e.getUTCFullYear()}`;
+}
+
+function timeLabel(ev) {
+  if (!ev.start_time) return '';
+  return ev.start_time + (ev.end_time ? `–${ev.end_time}` : '');
+}
+
+function eventLine(ev) {
+  const bits = [timeLabel(ev), esc(ev.title)].filter(Boolean).join(' — ');
+  const det = ev.details ? ` — ${esc(ev.details)}` : '';
+  return `<div class="task">${BOX} ${bits}${det}</div>`;
+}
+
+// Schedule section: squadron-wide timeline events merged with the shop's own,
+// grouped by day. A formation belongs on every shop's handout.
+function scheduleHtml(shopSchedule, squadronEvents, dayInfo) {
+  const all = squadronEvents.concat(shopSchedule);
+  if (!all.length) return '<div class="status-note">No scheduled events.</div>';
+
+  const byDay = {};
+  for (const ev of all) {
+    const key = ev.day && String(ev.day).trim() ? ev.day : 'Unscheduled';
+    (byDay[key] = byDay[key] || []).push(ev);
+  }
+  // Days in cycle order, then compounds like "Friday/Saturday" after their
+  // first component, then anything unrecognized, then Unscheduled.
+  const keys = Object.keys(byDay).filter(k => k !== 'Unscheduled');
+  keys.sort((a, b) => {
+    const idx = k => {
+      const i = dayInfo.order.indexOf(String(k).split('/')[0]);
+      return i === -1 ? 99 : i * 2 + (k.includes('/') ? 1 : 0);
+    };
+    return idx(a) - idx(b);
+  });
+  if (byDay['Unscheduled']) keys.push('Unscheduled');
+
+  let html = '';
+  for (const day of keys) {
+    byDay[day].sort((a, b) => (a.start_time || '9999').localeCompare(b.start_time || '9999'));
+    const date = dayInfo.dateFor[day];
+    const hd = day === 'Unscheduled' ? 'Unscheduled'
+      : `${esc(day)} Events${date ? ` (${date})` : ''}`;
+    html += `<div class="sub-header">${hd}</div>`;
+    for (const ev of byDay[day]) html += eventLine(ev);
+  }
+  return html;
+}
+
+function workOrdersHtml(list) {
+  if (!list.length) return '<div class="status-note">No work orders this UTA.</div>';
+  let html = '';
+  for (const wo of list) {
+    const done = wo.status === 'complete';
+    const box = done ? BOX_DONE : BOX;
+    const num = wo.wo_number ? `<b>WO# ${esc(wo.wo_number)}</b> — ` : '';
+    const det = wo.details ? ` — ${esc(wo.details)}` : '';
+    const st = done ? ' <span class="done-note">(complete)</span>'
+      : wo.status === 'in_progress' ? ' <span class="done-note">(in progress)</span>' : '';
+    html += `<div class="task">${box} ${num}${esc(wo.title)}${det}${st}</div>`;
+  }
+  return html;
+}
+
+function taskLine(t) {
+  const done = t.state === 'done';
+  const box = done ? BOX_DONE : BOX;
+  const appt = [t.appt_day, t.appt_time].filter(Boolean).join(' ');
+  const loc = t.appt_location ? ` (${esc(t.appt_location)})` : '';
+  const lead = appt ? `<b>${esc(appt)}</b> — ` : '';
+  const det = t.details ? ` — ${esc(t.details)}` : '';
+  const over = t.urgency === 'overdue' ? ' — OVERDUE' : '';
+  const part = t.state === 'partial' ? ' <span class="done-note">(in progress)</span>' : '';
+  const cls = t.urgency === 'overdue' ? 'task overdue' : 'task';
+  return `<div class="${cls}">${box} ${lead}${esc(t.title)}${loc}${det}${over}${part}</div>`;
+}
+
+function membersHtml(members) {
+  if (!members.length) return '<div class="status-note">No members assigned to this shop.</div>';
+  let html = '';
+  members.forEach((m, i) => {
+    html += `<div class="member-name">${esc(m.rank)} ${esc(m.last_name)}</div>`;
+    if (!m.tasks.length) {
+      html += '<div class="status-note">No individual tasks this UTA.</div>';
+    } else {
+      let lastCat = null;
+      for (const t of m.tasks) {
+        if (t.category_label !== lastCat) {
+          html += `<div class="sub-header">${esc(t.category_label)}</div>`;
+          lastCat = t.category_label;
+        }
+        html += taskLine(t);
+      }
+    }
+    if (i < members.length - 1) html += '<hr class="member-rule">';
+  });
+  return html;
+}
+
+function shopHtml(shop, data, dayInfo, datesLabel) {
+  const sub = [datesLabel || esc(data.cycle.name), '108 CES'].filter(Boolean).join(' &nbsp;|&nbsp; ');
+  let html = `<div class="shop">
+    <h1>${esc(shop.name)} To-Do List</h1>
+    <p class="subtitle">${sub}</p>
+    <hr class="top-rule">
+    <div class="section-header">SHOP SCHEDULE</div>
+    ${scheduleHtml(shop.schedule, data.squadron_events, dayInfo)}
+    <div class="section-header">WORK ORDERS</div>
+    ${workOrdersHtml(shop.work_orders)}`;
+  if (shop.emphasis.length) {
+    html += `<div class="section-header">SHOP EMPHASIS / REQUIREMENTS</div>`;
+    for (const e of shop.emphasis) {
+      const det = e.details ? ` — ${esc(e.details)}` : '';
+      html += `<div class="task">${BOX} ${esc(e.title)}${det}</div>`;
+    }
+  }
+  html += `<div class="section-header">INDIVIDUAL TASKS BY MEMBER</div>
+    ${membersHtml(shop.members)}
+  </div>`;
+  return html;
+}
+
+async function load() {
+  const doc = document.getElementById('doc');
+  let res;
+  try {
+    res = await fetch('/api/export/shop-lists');
+  } catch {
+    doc.innerHTML = '<div class="msg">Could not reach the server.</div>';
+    return;
+  }
+  if (res.status === 401) { window.location.href = '/'; return; }
+  if (res.status === 403) {
+    doc.innerHTML = '<div class="msg">This page is for squadron leadership.</div>';
+    return;
+  }
+  if (res.status === 404) {
+    doc.innerHTML = '<div class="msg">No live cycle is published, so there is nothing to hand out yet.<br>Publish a cycle in the Task Builder first.</div>';
+    return;
+  }
+  if (!res.ok) {
+    doc.innerHTML = '<div class="msg">Something went wrong loading the handouts.</div>';
+    return;
+  }
+
+  const data = await res.json();
+  const dayInfo = buildDayInfo(data.cycle);
+  const datesLabel = cycleDatesLabel(data.cycle);
+
+  document.getElementById('tb-sub').textContent =
+    `${data.cycle.name} · ${data.shops.length} shops · each shop starts on a new page`;
+  document.title = `Shop Handouts — ${data.cycle.name} — 108th CES`;
+
+  doc.innerHTML = data.shops.map(s => shopHtml(s, data, dayInfo, datesLabel)).join('');
+}
+
+load();
+</script>
+</body>
+</html>
