@@ -45,9 +45,9 @@
       transition: background .25s, color .25s, border-color .25s;
     }
 
-    [data-theme="dark"] .sb-item.active { background: var(--text); color: var(--bg); }
-    [data-theme="dark"] .sb-av          { background: var(--text); color: var(--bg); }
-    [data-theme="dark"] .avatar         { background: var(--text); color: var(--bg); }
+    /* The dark-mode foreground flips for .sb-item.active, .sb-av and .avatar
+       used to live here. Their base rules now say `color: var(--bg)`, which is
+       already correct in both themes. See the convention note in /design.css. */
 
     body {
       font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -90,11 +90,11 @@
       margin-bottom: 2px;
     }
     .sb-item:hover { background: var(--cream); color: var(--text); }
-    .sb-item.active { background: var(--text); color: #fff; }
+    .sb-item.active { background: var(--text); color: var(--bg); }
     .sb-item svg { width: 17px; height: 17px; flex-shrink: 0; }
     .sb-badge {
       margin-left: auto;
-      background: var(--urgent); color: #fff;
+      background: var(--urgent); color: var(--bg);
       font-size: 10.5px; font-weight: 700;
       padding: 1px 7px; border-radius: 10px;
     }
@@ -119,7 +119,7 @@
     .sb-user:hover .sb-logout { opacity: 1; pointer-events: auto; }
     .sb-av {
       width: 34px; height: 34px; border-radius: 50%;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       font-size: 12px; font-weight: 600;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
@@ -511,7 +511,7 @@
     .mem-row.readonly:hover { background: transparent; }
     .avatar {
       width: 36px; height: 36px; border-radius: 50%;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       font-size: 12px; font-weight: 600;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
@@ -644,7 +644,7 @@
       min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
       align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700; line-height: 1;
-      color: #fff; background: var(--urgent);
+      color: var(--bg); background: var(--urgent);
       border: 2px solid var(--bg); border-radius: 9px;
     }
     .mob-badge:not([hidden]) { display: flex; }
@@ -985,7 +985,7 @@
     .login-field input:focus { border-color: var(--text); }
     .login-btn {
       width: 100%; padding: 13px;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       border: none; border-radius: 10px;
       font-family: inherit; font-size: 15px; font-weight: 600;
       cursor: pointer; margin-top: 8px;
@@ -998,7 +998,7 @@
     .note-save-btn {
       display: inline-block; margin-top: 6px;
       padding: 5px 14px;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       border: none; border-radius: 6px;
       font-family: inherit; font-size: 12px; font-weight: 600;
       cursor: pointer;
@@ -1078,7 +1078,7 @@
     #shop-switcher:focus { border-color: var(--text); }
     .modal-submit {
       width: 100%; padding: 13px;
-      background: var(--text); color: #fff;
+      background: var(--text); color: var(--bg);
       border: none; border-radius: 10px;
       font-family: inherit; font-size: 15px; font-weight: 600;
       cursor: pointer; margin-top: 8px;
@@ -1154,7 +1154,7 @@
     .mt-tab-badge {
       margin-left: 5px; padding: 1px 6px;
       font-size: 10px; font-weight: 700;
-      color: #fff; background: var(--urgent);
+      color: var(--bg); background: var(--urgent);
       border-radius: 9px;
     }
     .mt-tab.active .mt-tab-badge { background: rgba(255,255,255,.22); }
@@ -1388,7 +1388,7 @@
       min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
       display: flex; align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700; line-height: 1;
-      color: #fff; background: var(--urgent);
+      color: var(--bg); background: var(--urgent);
       border: 2px solid var(--bg); border-radius: 9px;
     }
     .notif-dot[hidden] { display: none; }
@@ -1448,7 +1448,7 @@
       font-weight: 600; white-space: nowrap; padding: 10px 12px; border-radius: 6px;
       min-height: 44px; margin: -8px -6px -8px 0;
     }
-    .onboard-banner button:hover { background: var(--ok); color: #fff; }
+    .onboard-banner button:hover { background: var(--ok); color: var(--bg); }
 
     /* ── Hero differentiation ───────────────────── */
     #hero-member     { border-bottom: 2px solid var(--bm); }
@@ -1501,7 +1501,7 @@
     .all-clear-emoji {
       width: 40px; height: 40px; margin: 0 auto 10px;
       display: flex; align-items: center; justify-content: center;
-      border-radius: 50%; background: var(--ok); color: #fff;
+      border-radius: 50%; background: var(--ok); color: var(--bg);
       font-size: 22px; font-weight: 700;
     }
     .all-clear-title { font-size: 16px; font-weight: 700; color: var(--text); }
