@@ -1816,6 +1816,99 @@ app.patch('/api/roster/members/:id/admin', requireAuth, requireRosterAdmin, requ
   } catch (e) { rosterFail(res, e); }
 });
 
+// ── Export: printable shop handouts ──────────────────────────────────────────
+// One payload for the whole squadron: the live cycle, every shop's schedule
+// items / work orders / emphasis items, and every member's task list. The
+// /export page renders it as a single print document, one shop per page, so
+// the training NCO can hand each shop lead their pages. Squadron-wide timeline
+// events ship once at the top level; the page merges them into each shop's
+// per-day schedule (a formation belongs on every handout).
+
+// Seniority for the handout's high-to-low member ordering. Nothing else in the
+// app sorts by rank, so this map lives here with its only consumer. Unknown
+// ranks sort last rather than throwing — a data typo shouldn't break printing.
+const RANK_SENIORITY = {
+  'AB': 1, 'Amn': 2, 'A1C': 3, 'SrA': 4, 'SSgt': 5, 'TSgt': 6,
+  'MSgt': 7, 'SMSgt': 8, 'CMSgt': 9,
+  'Lt Select': 10, '2d Lt': 11, '1st Lt': 12, 'Capt': 13,
+  'Maj': 14, 'Lt Col': 15, 'Col': 16,
+};
+
+app.get('/api/export/shop-lists', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows: [cycle] } = await pool.query(
+      `SELECT id, name, start_date, end_date FROM uta_cycles WHERE is_current = true LIMIT 1`);
+    if (!cycle) return res.status(404).json({ error: 'No live cycle' });
+
+    const [shopsQ, sqEventsQ, shopEventsQ, membersQ, tasksQ] = await Promise.all([
+      pool.query(`SELECT id, name FROM shops ORDER BY name`),
+      pool.query(
+        `SELECT day, start_time, end_time, title, details
+         FROM squadron_events WHERE uta_cycle_id = $1
+         ORDER BY sort_order, id`, [cycle.id]),
+      pool.query(
+        `SELECT shop_id, event_type, day, start_time, end_time, title, details,
+                wo_number, status
+         FROM shop_events WHERE uta_cycle_id = $1
+         ORDER BY sort_order, id`, [cycle.id]),
+      pool.query(
+        `SELECT id, shop_id, rank, first_name, last_name
+         FROM members WHERE active = true`),
+      // Same ordering as the member task view, so a handout reads like the
+      // app: category blocks in category order, flagged items first within.
+      pool.query(`
+        SELECT t.member_id, t.title, t.details, t.urgency, t.is_upcoming,
+               t.appt_day, t.appt_time, t.appt_location,
+               cat.label AS category_label,
+               COALESCE(tc.state, 'none') AS state
+        FROM tasks t
+        JOIN task_categories cat ON cat.id = t.category_id
+        LEFT JOIN task_completions tc ON tc.task_id = t.id
+        WHERE t.uta_cycle_id = $1
+        ORDER BY cat.sort_order, t.is_flagged DESC NULLS LAST, t.sort_order, t.id
+      `, [cycle.id]),
+    ]);
+
+    const tasksByMember = new Map();
+    for (const t of tasksQ.rows) {
+      const { member_id, ...task } = t;
+      if (!tasksByMember.has(member_id)) tasksByMember.set(member_id, []);
+      tasksByMember.get(member_id).push(task);
+    }
+
+    const membersByShop = new Map();
+    for (const m of membersQ.rows) {
+      if (!membersByShop.has(m.shop_id)) membersByShop.set(m.shop_id, []);
+      membersByShop.get(m.shop_id).push({
+        rank: m.rank, first_name: m.first_name, last_name: m.last_name,
+        tasks: tasksByMember.get(m.id) || [],
+      });
+    }
+    for (const list of membersByShop.values()) {
+      list.sort((a, b) =>
+        ((RANK_SENIORITY[b.rank] ?? 0) - (RANK_SENIORITY[a.rank] ?? 0))
+        || a.last_name.localeCompare(b.last_name));
+    }
+
+    const shops = shopsQ.rows.map(s => {
+      const evs = shopEventsQ.rows.filter(e => e.shop_id === s.id);
+      const strip = ({ shop_id, event_type, ...rest }) => rest;
+      return {
+        id: s.id, name: s.name,
+        schedule:    evs.filter(e => e.event_type === 'schedule').map(strip),
+        work_orders: evs.filter(e => e.event_type === 'work_order').map(strip),
+        emphasis:    evs.filter(e => e.event_type === 'emphasis').map(strip),
+        members: membersByShop.get(s.id) || [],
+      };
+    });
+
+    res.json({ cycle, squadron_events: sqEventsQ.rows, shops });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Static ────────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1856,6 +1949,13 @@ app.get('/roster', requireLeadershipPage, (req, res) => {
   if (!req.session.canManageRoster) return res.redirect('/');
   res.sendFile(path.join(__dirname, 'public', 'roster.html'));
 });
+
+// Printable shop handouts. Gated like /build; the API it calls enforces
+// requireRole('leadership'), so a non-leader who lands here sees the 403
+// message rather than data. Must sit before the SPA catch-all.
+app.get('/export', requireLeadershipPage, (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'export.html'))
+);
 
 // Unknown /api/* paths must fail as JSON. Without this they fall through to the
 // SPA catch-all below and return index.html with a 200, so the caller's .json()

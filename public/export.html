@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<title>Shop Handouts — 108th CES</title>
+<style>
+/* A print document in the app's own design language: General Sans, the
+   design.css palette, badge pills, rounded checkbox squares, uppercase group
+   labels. Tokens are inlined as literals rather than linking design.css —
+   this page is always light (it exists to be printed) and must not invert
+   with the viewer's theme.
+
+   Print reality check: browsers default "background graphics" OFF, so every
+   surface here works from borders and text color first; backgrounds are an
+   enhancement (print-color-adjust: exact) rather than the load-bearing part. */
+
+@font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-500.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-600.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-700.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+
+@page { margin: 0.6in; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: #eceded; }
+body {
+  font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px; line-height: 1.5; color: #1f1f1f;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Screen chrome — vanishes in print ─────────────────────────────────── */
+.toolbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px; background: #1f1f1f; color: #f6f7ed; flex-wrap: wrap;
+}
+.toolbar .tb-sub { color: #b8b9b0; font-size: 12px; }
+.toolbar a { color: #b8b9b0; text-decoration: none; margin-right: 14px; font-size: 12.5px; }
+.toolbar a:hover { color: #f6f7ed; }
+.toolbar button {
+  font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  padding: 10px 18px; border: none; border-radius: 10px;
+  background: #f6f7ed; color: #1f1f1f;
+}
+#doc { max-width: 8.5in; margin: 24px auto; }
+.shop {
+  background: #fdfdfa; padding: 0.55in; margin-bottom: 24px;
+  border-radius: 14px; box-shadow: 0 2px 12px rgba(31,31,31,.10);
+}
+.msg { text-align: center; padding: 60px 20px; color: #6f7066; font-size: 15px; }
+
+/* ── Shop header band — the app's cream strip ──────────────────────────── */
+.shop-hd {
+  background: #f6f7ed; border: 2px solid #e8e9e0; border-radius: 14px;
+  padding: 18px 20px; margin-bottom: 20px;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.kicker {
+  font-size: 10px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: #6f7066; margin-bottom: 3px;
+}
+.shop-name { font-size: 24px; font-weight: 700; letter-spacing: -.015em; }
+.shop-sub { font-size: 12.5px; color: #6f7066; margin-top: 2px; }
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+.sec {
+  margin: 20px 0 10px;
+  padding-bottom: 6px; border-bottom: 2px solid #f1f1ea;
+}
+.sec-title { font-size: 16px; font-weight: 600; letter-spacing: -.005em; }
+.grp-lbl {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: #1f1f1f;
+  margin: 14px 0 6px; padding: 0 2px;
+}
+.empty-note { font-size: 12.5px; color: #6f7066; margin: 4px 2px 10px; }
+
+/* ── Rows — the app's task cards, tightened for paper ──────────────────── */
+.row {
+  background: #fdfdfa; border: 2px solid #f1f1ea; border-radius: 10px;
+  padding: 8px 11px; margin-bottom: 5px;
+  display: flex; align-items: flex-start; gap: 10px;
+  break-inside: avoid; page-break-inside: avoid;
+}
+.chk {
+  width: 18px; height: 18px; border-radius: 6px;
+  border: 2px solid #b8b9b0; background: #fdfdfa;
+  flex-shrink: 0; margin-top: 2px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #55704f; line-height: 1;
+}
+.row.done .chk { border-color: #55704f; }
+.row.done .row-title { color: #6f7066; }
+.row-body { flex: 1; min-width: 0; }
+.row-title { font-size: 13px; font-weight: 600; letter-spacing: -.005em; }
+.row-title .tm { font-weight: 700; }
+.row-title .loc { font-weight: 500; color: #6f7066; }
+.row-det { font-size: 11.5px; color: #6f7066; margin-top: 1px; }
+.wo-label { font-size: 11px; color: #6f7066; margin-bottom: 2px; }
+
+/* ── Badges — app pills, with a border so they survive background-off ──── */
+.badge {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
+  padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+  flex-shrink: 0; margin-top: 2px;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.b-urgent   { background: #f5ece9; color: #a8472f; border: 1px solid #a8472f; }
+.b-urgent::before {
+  content: ''; display: inline-block; width: 5px; height: 5px;
+  border-radius: 50%; background: #a8472f; margin-right: 5px; vertical-align: middle;
+}
+.b-warn { background: #f5eedf; color: #7d5f2a; border: 1px solid #7d5f2a; }
+.b-done { background: #edf2eb; color: #55704f; border: 1px solid #55704f; }
+.b-open { background: #fdfdfa; color: #6f7066; border: 1px solid #b8b9b0; }
+
+/* ── Members ───────────────────────────────────────────────────────────── */
+.member-hd {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 16px 0 6px; padding-top: 12px; border-top: 1px solid #e8e9e0;
+}
+.member-hd:first-of-type { border-top: none; padding-top: 0; }
+.rk {
+  font-size: 10.5px; font-weight: 600; color: #6f7066;
+  background: #f6f7ed; border: 1px solid #e8e9e0;
+  border-radius: 12px; padding: 2px 8px; flex-shrink: 0;
+  align-self: center;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.member-last { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.member-first { font-size: 12px; color: #6f7066; font-weight: 500; }
+
+@media print {
+  html { background: #fff; }
+  .toolbar { display: none; }
+  #doc { max-width: none; margin: 0; }
+  .shop {
+    box-shadow: none; border-radius: 0; padding: 0; margin: 0;
+    break-before: page; page-break-before: always;
+  }
+  .shop:first-child { break-before: auto; page-break-before: auto; }
+  .grp-lbl, .sec, .member-hd { break-after: avoid; page-break-after: avoid; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div>
+    <strong>Shop Handouts</strong>
+    <span class="tb-sub" id="tb-sub"></span>
+  </div>
+  <div>
+    <a href="/">&larr; Back to app</a>
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</div>
+
+<div id="doc"><div class="msg">Loading&hellip;</div></div>
+
+<script>
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// DATE columns arrive as ISO strings; parse as UTC so the day name can't
+// slip across midnight in local time.
+function utc(d) {
+  if (!d) return null;
+  const t = new Date(String(d).slice(0, 10) + 'T00:00:00Z');
+  return isNaN(t) ? null : t;
+}
+
+// day-name -> "Saturday (8 Aug)" using the cycle's date range. A day string
+// the range doesn't contain (or a compound like "Friday/Saturday") just
+// renders without a date.
+function buildDayInfo(cycle) {
+  const start = utc(cycle.start_date), end = utc(cycle.end_date);
+  const order = [], dateFor = {};
+  if (start && end) {
+    for (let t = start.getTime(); t <= end.getTime(); t += 86400000) {
+      const d = new Date(t), name = DAY_NAMES[d.getUTCDay()];
+      if (!(name in dateFor)) { order.push(name); dateFor[name] = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; }
+    }
+  } else {
+    order.push('Friday', 'Saturday', 'Sunday');
+  }
+  return { order, dateFor };
+}
+
+function cycleDatesLabel(cycle) {
+  const s = utc(cycle.start_date), e = utc(cycle.end_date);
+  if (!s || !e) return '';
+  const sm = MONTHS[s.getUTCMonth()], em = MONTHS[e.getUTCMonth()];
+  return sm === em && s.getUTCFullYear() === e.getUTCFullYear()
+    ? `${s.getUTCDate()}–${e.getUTCDate()} ${em} ${e.getUTCFullYear()}`
+    : `${s.getUTCDate()} ${sm} – ${e.getUTCDate()} ${em} ${e.getUTCFullYear()}`;
+}
+
+function row({ done, title, det, woLabel, badge, checked }) {
+  const badgeHtml = badge ? `<div class="badge ${badge.cls}">${badge.text}</div>` : '';
+  return `<div class="row${done ? ' done' : ''}">
+    <div class="chk">${checked ? '✓' : ''}</div>
+    <div class="row-body">
+      ${woLabel ? `<div class="wo-label">${woLabel}</div>` : ''}
+      <div class="row-title">${title}</div>
+      ${det ? `<div class="row-det">${det}</div>` : ''}
+    </div>${badgeHtml}
+  </div>`;
+}
+
+function timeLabel(ev) {
+  if (!ev.start_time) return '';
+  return ev.start_time + (ev.end_time ? `–${ev.end_time}` : '');
+}
+
+function eventRow(ev) {
+  const t = timeLabel(ev);
+  const title = [t ? `<span class="tm">${esc(t)}</span>` : '', esc(ev.title)]
+    .filter(Boolean).join(' — ');
+  return row({ title, det: ev.details ? esc(ev.details) : '' });
+}
+
+// Schedule section: squadron-wide timeline events merged with the shop's own,
+// grouped by day. A formation belongs on every shop's handout.
+function scheduleHtml(shopSchedule, squadronEvents, dayInfo) {
+  const all = squadronEvents.concat(shopSchedule);
+  if (!all.length) return '<div class="empty-note">No scheduled events.</div>';
+
+  const byDay = {};
+  for (const ev of all) {
+    const key = ev.day && String(ev.day).trim() ? ev.day : 'Unscheduled';
+    (byDay[key] = byDay[key] || []).push(ev);
+  }
+  // Days in cycle order, then compounds like "Friday/Saturday" after their
+  // first component, then anything unrecognized, then Unscheduled.
+  const keys = Object.keys(byDay).filter(k => k !== 'Unscheduled');
+  keys.sort((a, b) => {
+    const idx = k => {
+      const i = dayInfo.order.indexOf(String(k).split('/')[0]);
+      return i === -1 ? 99 : i * 2 + (k.includes('/') ? 1 : 0);
+    };
+    return idx(a) - idx(b);
+  });
+  if (byDay['Unscheduled']) keys.push('Unscheduled');
+
+  let html = '';
+  for (const day of keys) {
+    byDay[day].sort((a, b) => (a.start_time || '9999').localeCompare(b.start_time || '9999'));
+    const date = dayInfo.dateFor[day];
+    const hd = day === 'Unscheduled' ? 'Unscheduled'
+      : `${esc(day)}${date ? ` (${date})` : ''}`;
+    html += `<div class="grp-lbl">${hd}</div>`;
+    for (const ev of byDay[day]) html += eventRow(ev);
+  }
+  return html;
+}
+
+// Same status vocabulary as the app's work-order badges.
+function woBadge(status) {
+  if (status === 'complete')    return { cls: 'b-done', text: 'Done' };
+  if (status === 'in_progress') return { cls: 'b-warn', text: 'In progress' };
+  return { cls: 'b-open', text: 'Open' };
+}
+
+function workOrdersHtml(list) {
+  if (!list.length) return '<div class="empty-note">No work orders this UTA.</div>';
+  return list.map(wo => row({
+    done: wo.status === 'complete',
+    checked: wo.status === 'complete',
+    woLabel: wo.wo_number ? `WO# ${esc(wo.wo_number)}` : '',
+    title: esc(wo.title),
+    det: wo.details ? esc(wo.details) : '',
+    badge: woBadge(wo.status),
+  })).join('');
+}
+
+// Same urgency-to-pill mapping the app's task rows use.
+function taskBadge(t) {
+  if (t.state === 'done')       return { cls: 'b-done',   text: 'Done' };
+  if (t.state === 'partial')    return { cls: 'b-warn',   text: 'In progress' };
+  if (t.urgency === 'overdue')  return { cls: 'b-urgent', text: 'Overdue' };
+  if (t.urgency === 'this_uta') return { cls: 'b-urgent', text: 'This UTA' };
+  if (t.urgency === 'next_uta') return { cls: 'b-warn',   text: 'Next UTA' };
+  if (t.is_upcoming)            return { cls: 'b-warn',   text: 'Upcoming' };
+  return { cls: 'b-warn', text: 'Info' };
+}
+
+function taskRow(t) {
+  const appt = [t.appt_day, t.appt_time].filter(Boolean).join(' ');
+  const title = [
+    appt ? `<span class="tm">${esc(appt)}</span>` : '',
+    esc(t.title) + (t.appt_location ? ` <span class="loc">(${esc(t.appt_location)})</span>` : ''),
+  ].filter(Boolean).join(' — ');
+  return row({
+    done: t.state === 'done',
+    checked: t.state === 'done',
+    title,
+    det: t.details ? esc(t.details) : '',
+    badge: taskBadge(t),
+  });
+}
+
+function membersHtml(members) {
+  if (!members.length) return '<div class="empty-note">No members assigned to this shop.</div>';
+  let html = '';
+  for (const m of members) {
+    html += `<div class="member-hd">
+      <span class="rk">${esc(m.rank)}</span>
+      <span class="member-last">${esc(m.last_name)}</span>
+      <span class="member-first">${esc(m.first_name)}</span>
+    </div>`;
+    if (!m.tasks.length) {
+      html += '<div class="empty-note">No individual tasks this UTA.</div>';
+    } else {
+      let lastCat = null;
+      for (const t of m.tasks) {
+        if (t.category_label !== lastCat) {
+          html += `<div class="grp-lbl">${esc(t.category_label)}</div>`;
+          lastCat = t.category_label;
+        }
+        html += taskRow(t);
+      }
+    }
+  }
+  return html;
+}
+
+function shopHtml(shop, data, dayInfo, datesLabel) {
+  const sub = [esc(data.cycle.name), datesLabel].filter(Boolean).join(' · ');
+  let html = `<div class="shop">
+    <div class="shop-hd">
+      <div class="kicker">108 CES · UTA Task Tracker</div>
+      <div class="shop-name">${esc(shop.name)}</div>
+      <div class="shop-sub">${sub}</div>
+    </div>
+    <div class="sec"><div class="sec-title">Shop Schedule</div></div>
+    ${scheduleHtml(shop.schedule, data.squadron_events, dayInfo)}
+    <div class="sec"><div class="sec-title">Work Orders</div></div>
+    ${workOrdersHtml(shop.work_orders)}`;
+  if (shop.emphasis.length) {
+    html += `<div class="sec"><div class="sec-title">Shop Emphasis / Requirements</div></div>`;
+    html += shop.emphasis.map(e => row({
+      title: esc(e.title),
+      det: e.details ? esc(e.details) : '',
+      badge: { cls: 'b-urgent', text: 'Emphasis' },
+    })).join('');
+  }
+  html += `<div class="sec"><div class="sec-title">Individual Tasks by Member</div></div>
+    ${membersHtml(shop.members)}
+  </div>`;
+  return html;
+}
+
+async function load() {
+  const doc = document.getElementById('doc');
+  let res;
+  try {
+    res = await fetch('/api/export/shop-lists');
+  } catch {
+    doc.innerHTML = '<div class="msg">Could not reach the server.</div>';
+    return;
+  }
+  if (res.status === 401) { window.location.href = '/'; return; }
+  if (res.status === 403) {
+    doc.innerHTML = '<div class="msg">This page is for squadron leadership.</div>';
+    return;
+  }
+  if (res.status === 404) {
+    doc.innerHTML = '<div class="msg">No live cycle is published, so there is nothing to hand out yet.<br>Publish a cycle in the Task Builder first.</div>';
+    return;
+  }
+  if (!res.ok) {
+    doc.innerHTML = '<div class="msg">Something went wrong loading the handouts.</div>';
+    return;
+  }
+
+  const data = await res.json();
+  const dayInfo = buildDayInfo(data.cycle);
+  const datesLabel = cycleDatesLabel(data.cycle);
+
+  document.getElementById('tb-sub').textContent =
+    `${data.cycle.name} · ${data.shops.length} shops · each shop starts on a new page`;
+  document.title = `Shop Handouts — ${data.cycle.name} — 108th CES`;
+
+  doc.innerHTML = data.shops.map(s => shopHtml(s, data, dayInfo, datesLabel)).join('');
+}
+
+load();
+</script>
+</body>
+</html>
