@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node seed.js",
-    "test": "node --test"
+    "test": "node --env-file=.env.test --test --test-concurrency=1 test/*.test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
