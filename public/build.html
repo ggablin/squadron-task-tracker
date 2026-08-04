@@ -71,9 +71,9 @@ button { font-family:inherit; cursor:pointer; }
   font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;
 }
 .step.active { color:var(--text); border-color:var(--bm); }
-.step.active .n { background:var(--text); color:#fff; }
+.step.active .n { background:var(--text); color:var(--bg); }
 .step.done { color:var(--ok); }
-.step.done .n { background:var(--ok); color:#fff; }
+.step.done .n { background:var(--ok); color:var(--bg); }
 
 .screen { display:none; }
 .screen.active { display:block; }
@@ -183,7 +183,7 @@ button { font-family:inherit; cursor:pointer; }
   flex:1; min-width:72px; border:0; background:transparent; border-radius:8px; padding:8px 6px;
   font-size:12px; font-weight:600; color:var(--t2);
 }
-.seg button.active { background:var(--text); color:#fff; }
+.seg button.active { background:var(--text); color:var(--bg); }
 .seg button.u-overdue.active { background:var(--urgent); }
 .seg button.u-this.active { background:var(--text); }
 
@@ -195,7 +195,7 @@ button { font-family:inherit; cursor:pointer; }
 }
 .chip-quick:hover { background:var(--cream); color:var(--text); }
 .count-pill {
-  font-size:12px; font-weight:700; color:#fff; background:var(--text);
+  font-size:12px; font-weight:700; color:var(--bg); background:var(--text);
   border-radius:20px; padding:6px 14px; min-width:96px; text-align:center;
 }
 .shop-group { border-top:1px solid var(--border); }
@@ -218,7 +218,7 @@ button { font-family:inherit; cursor:pointer; }
   transition:background .1s, border-color .1s;
 }
 .mchip .rk { font-size:10.5px; font-weight:600; color:var(--t2); background:var(--cream); border-radius:12px; padding:2px 7px; }
-.mchip.sel { background:var(--text); border-color:var(--text); color:#fff; }
+.mchip.sel { background:var(--text); border-color:var(--text); color:var(--bg); }
 .mchip.sel .rk { background:rgba(255,255,255,.18); color:rgba(255,255,255,.85); }
 [data-theme="dark"] .mchip.sel .rk { background:rgba(0,0,0,.18); color:rgba(0,0,0,.65); }
 
@@ -288,7 +288,7 @@ button { font-family:inherit; cursor:pointer; }
 
 .builder-foot { display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
 .btn-primary {
-  background:var(--text); color:#fff; border:none; border-radius:var(--rs);
+  background:var(--text); color:var(--bg); border:none; border-radius:var(--rs);
   padding:13px 26px; font-size:14.5px; font-weight:600;
 }
 .btn-primary:hover { opacity:.87; }
@@ -333,7 +333,7 @@ button { font-family:inherit; cursor:pointer; }
 .cf-group:last-child { border-bottom:none; }
 .cf-check {
   width:20px; height:20px; border-radius:6px; border:2px solid var(--bm); background:var(--bg);
-  flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; cursor:pointer;
+  flex-shrink:0; display:flex; align-items:center; justify-content:center; color:var(--bg); font-size:12px; cursor:pointer;
 }
 .cf-group.sel .cf-check { background:var(--ok); border-color:var(--ok); }
 .cf-meta { flex:1; min-width:0; }
@@ -365,7 +365,7 @@ button { font-family:inherit; cursor:pointer; }
 /* success */
 .success-box { text-align:center; padding:56px 24px; }
 .success-ico {
-  width:56px; height:56px; border-radius:50%; background:var(--ok); color:#fff;
+  width:56px; height:56px; border-radius:50%; background:var(--ok); color:var(--bg);
   font-size:26px; display:flex; align-items:center; justify-content:center; margin:0 auto 18px;
 }
 .success-title { font-size:20px; font-weight:700; letter-spacing:-.015em; }

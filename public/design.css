@@ -62,17 +62,31 @@
   --gon:      #ece8e0;  --goff:    #3a3633;
 }
 
-/* --text becomes light in dark mode, so "background:var(--text); color:#fff"
-   combinations (fine on light, where --text is near-black) need the foreground
-   flipped to stay legible. Selectors from all three pages are collected here. */
-[data-theme="dark"] .step.active .n,
-[data-theme="dark"] .seg button.active,
-[data-theme="dark"] .count-pill,
-[data-theme="dark"] .mchip.sel,
-[data-theme="dark"] .btn-primary,
-[data-theme="dark"] .member-row.sel {
-  color: var(--bg);
-}
+/* ── Foreground on an inverting background ────────────────────────────────
+   Any swatch that has a dark-mode value inverts: --text goes near-black to
+   near-white, and --ok / --urgent lighten so they can sit on a dark surface.
+   A hardcoded `color:#fff` on top of one of those is correct in light mode
+   and illegible in dark — #fff on --text measured 1.22:1.
+
+   The rule: pair an inverting background with `color: var(--bg)`, never
+   #fff. --bg inverts in lockstep, so one declaration is correct in both
+   themes and needs no per-selector dark override. In light mode --bg is
+   #fdfdfa against #fff's #ffffff, a difference too small to see.
+
+   This replaced an enumerated [data-theme="dark"] override list. That list
+   only covered the selectors someone had noticed; .login-btn, .modal-submit
+   and .note-save-btn were never added to it and stayed invisible in dark
+   mode. Fixing the base rules removes the chance to forget one.
+
+   The exception is a background that does NOT invert — .org-flight-icon
+   draws on hardcoded flight colours, so it keeps #fff.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* A <button> does not inherit color; the UA gives it `buttontext`, which is
+   pure black. That is invisible on the dark surface (1.19:1) and was why the
+   Attendance tab's shop headers could not be read. Setting it here fixes the
+   whole class, so a newly added control picks up --text unless it opts out. */
+button, input, select, textarea { color: inherit; }
 
 /* ── Toast ────────────────────────────────────────────────────────────────
    One implementation for all three pages. index.html had a stacking container
@@ -138,7 +152,7 @@
 }
 .ui-confirm-ok:hover { opacity: .88; }
 .ui-confirm-backdrop[data-danger="true"] .ui-confirm-ok {
-  background: var(--urgent); border-color: var(--urgent); color: #fff;
+  background: var(--urgent); border-color: var(--urgent); color: var(--bg);
 }
 
 /* ── Shared motion policy ─────────────────────────────────────────────────
@@ -224,7 +238,7 @@
 }
 .member-row:last-child { border-bottom:none; }
 .member-row:hover { background:var(--cream); }
-.member-row.sel { background:var(--text); color:#fff; }
+.member-row.sel { background:var(--text); color:var(--bg); }
 .member-row.inactive { opacity:.55; }
 .member-row .rk {
   font-size:10.5px; font-weight:600; color:var(--t2); background:var(--cream);
