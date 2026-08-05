@@ -908,6 +908,32 @@ app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requir
     const r = await addTaskBatch(pool, id, {
       title, category_code, details, assignments, created_by_id: req.session.memberId,
     });
+
+    // A task added to the LIVE cycle is visible to its members the moment it
+    // lands, so tell them. Without this the row appears silently and is only
+    // discovered if someone happens to reopen the app — which is the whole
+    // failure mode the tracker exists to fix. Draft adds stay silent on
+    // purpose: the cycle's go-live blast is what announces those, and nobody
+    // should be pinged about work that isn't visible yet.
+    //
+    // Only the members who actually received a row are notified: addTaskBatch
+    // dedupes via ON CONFLICT, so someone who already had this exact task is
+    // not told about it a second time.
+    if (r.added > 0) {
+      const { rows: [cyc] } = await pool.query(
+        `SELECT status FROM uta_cycles WHERE id = $1`, [id]);
+      if (cyc && cyc.status === 'live') {
+        const { rows: recipients } = await pool.query(
+          `SELECT member_id FROM tasks WHERE batch_id = $1`, [r.batch_id]);
+        await notify(recipients.map(x => x.member_id), {
+          type: 'task_assigned',
+          title: 'New task assigned',
+          body: title,
+          link: '/',
+        });
+      }
+    }
+
     res.json(r);
   } catch (e) {
     if (e.code === 'BAD_CATEGORY') return res.status(400).json({ error: 'Invalid category' });
