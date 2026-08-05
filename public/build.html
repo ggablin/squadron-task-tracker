@@ -397,6 +397,32 @@ button { font-family:inherit; cursor:pointer; }
            border: 2px solid var(--bm); background: transparent; color: var(--t2); }
 .lc-pick.sel { background: var(--text); color: var(--bg); border-color: var(--text); }
 .lc-pick-name { display: block; font-size: 11px; font-weight: 600; opacity: .75; }
+/* ── Add-task panel (Live cycle section) ────────────────────────────────── */
+.lc-addbar { display: flex; margin: 0 0 14px; }
+.lc-add-panel { border: 2px solid var(--bm); border-radius: var(--r); padding: 16px; margin: 0 0 16px; }
+.lc-add-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.lc-add-row > div { flex: 1; min-width: 160px; }
+.lc-pastebox { width: 100%; min-height: 74px; font-family: inherit; font-size: 12.5px;
+               padding: 9px 11px; border-radius: var(--rs); border: 2px solid var(--bm);
+               background: var(--bg); color: var(--text); resize: vertical; }
+.lc-pick-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 8px; }
+.lc-selcount { font-size: 12.5px; font-weight: 700; }
+.lc-mini { font-family: inherit; font-size: 11.5px; font-weight: 600; min-height: 34px;
+           padding: 0 10px; border-radius: 8px; border: 2px solid var(--bm);
+           background: transparent; color: var(--t2); cursor: pointer; }
+.lc-search { flex: 1; min-width: 140px; font-family: inherit; font-size: 12.5px;
+             min-height: 40px; padding: 0 11px; border-radius: var(--rs);
+             border: 2px solid var(--bm); background: var(--bg); color: var(--text); }
+.lc-roster { max-height: 320px; overflow-y: auto; border: 2px solid var(--border);
+             border-radius: var(--rs); padding: 8px; }
+.lc-shopgrp { margin-bottom: 10px; }
+.lc-shopgrp:last-child { margin-bottom: 0; }
+.lc-shophd { display: flex; align-items: center; gap: 8px; padding: 2px 2px 6px; }
+.lc-shopname { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--t2); }
+.lc-report { font-size: 12px; line-height: 1.6; margin-top: 8px; }
+.lc-report .bad { color: var(--urgent); font-weight: 600; }
+.lc-report .warn { color: var(--warn); font-weight: 600; }
+
 .lc-editor { padding: 14px; border-top: 1px solid var(--border); }
 .lc-lbl { display: block; font-size: 11.5px; font-weight: 700; color: var(--t2);
           text-transform: uppercase; letter-spacing: .05em; margin: 0 0 5px; }
@@ -499,6 +525,14 @@ button { font-family:inherit; cursor:pointer; }
       <p class="lc-sub" id="lc-sub"></p>
       <!-- Only rendered when BOTH a live and a draft cycle exist. -->
       <div id="lc-picker" role="group" aria-label="Which cycle to edit" hidden></div>
+      <!-- Add targets the SAME cycle this section is showing (lcTarget), not
+           WORKING_CYCLE. The builder's main add flow targets the draft, which
+           is right when building next month and wrong when a task lands
+           mid-drill for the cycle members can already see. -->
+      <div class="lc-addbar">
+        <button class="lc-btn lc-btn-primary" id="lc-add-open">Add task</button>
+      </div>
+      <div id="lc-add" hidden></div>
       <div id="lc-list"></div>
     </section>
 
@@ -1153,6 +1187,260 @@ function lcRenderPicker(current) {
     </button>`).join('');
 }
 
+/* ── Add a task to the cycle this section is showing ──────────────────────
+   Its own selection set, deliberately not the builder's `selected`: that one
+   belongs to the multi-step new-task wizard further up the page, and sharing
+   it would mean opening this panel silently mutated a batch someone was
+   part-way through assembling.
+   ───────────────────────────────────────────────────────────────────────── */
+let LC_ADD_SEL = new Set();
+let LC_ADD_FILTER = '';
+
+function lcAddOpen() {
+  return !document.getElementById('lc-add').hidden;
+}
+
+async function lcAddToggle() {
+  const host = document.getElementById('lc-add');
+  if (lcAddOpen()) { host.hidden = true; host.innerHTML = ''; return; }
+  // The roster is loaded lazily by the builder step; this panel can be the
+  // first thing that needs it.
+  if (!builderLoaded) {
+    try { await loadBuilderRefData(); }
+    catch (e) { return uiToast('Could not load the roster', 'error'); }
+  }
+  LC_ADD_SEL = new Set();
+  LC_ADD_FILTER = '';
+  host.hidden = false;
+  lcAddRender();
+}
+
+function lcAddRender() {
+  const host = document.getElementById('lc-add');
+  const cyc = lcTarget();
+  if (!cyc) return;
+  const live = cyc.status === 'live';
+  host.innerHTML = `
+    <div class="lc-add-panel">
+      <div class="lc-add-row">
+        <div>
+          <label class="lc-lbl" for="lc-a-cat">Category</label>
+          <select id="lc-a-cat" class="lc-input">
+            ${CATEGORIES.map(c => `<option value="${c.code}">${lcEsc(c.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="lc-lbl" for="lc-a-urg">Urgency</label>
+          <select id="lc-a-urg" class="lc-input">
+            ${Object.entries(LC_URG).map(([v, l]) =>
+              `<option value="${v}"${v === 'this_uta' ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <label class="lc-lbl" for="lc-a-title">Title</label>
+      <input id="lc-a-title" class="lc-input" type="text" placeholder="e.g. Cyber Awareness CBT">
+      <label class="lc-lbl" for="lc-a-det">Details</label>
+      <input id="lc-a-det" class="lc-input" type="text" placeholder="Optional">
+
+      <label class="lc-lbl" for="lc-a-paste" style="margin-top:14px">Paste names (optional)</label>
+      <textarea id="lc-a-paste" class="lc-pastebox"
+        placeholder="One last name per line, or comma-separated.&#10;Tasks usually arrive as a list of names — paste it here instead of hunting for 50 chips."></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="lc-mini" id="lc-a-match">Match names</button>
+        <button class="lc-mini" id="lc-a-none">Clear selection</button>
+      </div>
+      <div class="lc-report" id="lc-a-report"></div>
+
+      <div class="lc-pick-hd">
+        <span class="lc-selcount" id="lc-a-count">0 selected</span>
+        <input id="lc-a-search" class="lc-search" type="search" placeholder="Filter by name or shop">
+      </div>
+      <div class="lc-roster" id="lc-a-roster"></div>
+
+      <div class="lc-actions" style="margin-top:14px">
+        <button class="lc-btn" id="lc-a-cancel">Cancel</button>
+        <button class="lc-btn lc-btn-primary" id="lc-a-submit">Add to ${live ? 'live' : 'draft'} cycle</button>
+      </div>
+      ${live ? `<p class="lc-warn" role="note">This cycle is live. Members you
+        select will see the task immediately and get a notification.</p>` : ''}
+    </div>`;
+  lcAddRenderRoster();
+  document.getElementById('lc-a-search').value = LC_ADD_FILTER;
+}
+
+function lcAddRenderRoster() {
+  const host = document.getElementById('lc-a-roster');
+  if (!host) return;
+  const q = LC_ADD_FILTER.trim().toLowerCase();
+  const groups = ROSTER.map(g => ({
+    shop: g.shop,
+    members: g.members.filter(m =>
+      !q || m.last_name.toLowerCase().includes(q) || g.shop.toLowerCase().includes(q)),
+  })).filter(g => g.members.length);
+
+  if (!groups.length) { host.innerHTML = '<div class="empty-state">No members match that filter.</div>'; return; }
+
+  host.innerHTML = groups.map(g => `
+    <div class="lc-shopgrp">
+      <div class="lc-shophd">
+        <span class="lc-shopname">${lcEsc(g.shop)}</span>
+        <button class="lc-mini" data-lc-a-shop="${lcEsc(g.shop)}">Whole shop</button>
+      </div>
+      <div class="member-chips">
+        ${g.members.map(m => `
+          <button class="mchip${LC_ADD_SEL.has(m.id) ? ' sel' : ''}" data-lc-a-id="${m.id}">
+            <span class="rk">${lcEsc(m.rank)}</span>${lcEsc(m.last_name)}
+          </button>`).join('')}
+      </div>
+    </div>`).join('');
+  lcAddUpdateCount();
+}
+
+function lcAddUpdateCount() {
+  const el = document.getElementById('lc-a-count');
+  if (el) el.textContent = `${LC_ADD_SEL.size} selected`;
+}
+
+// Resolve pasted surnames to members. Deliberately does NOT auto-pick when a
+// surname is ambiguous — the squadron has two Fernandezes and two Fowlers, and
+// silently guessing would assign someone else's task to the wrong Airman. A
+// surname listed twice DOES take both, which is how a list naming both Fowlers
+// is meant to read.
+function lcAddMatchNames() {
+  const raw = document.getElementById('lc-a-paste').value || '';
+  const names = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+  if (!names.length) return uiToast('Paste some names first', 'error');
+
+  const norm = s => s.toLowerCase().replace(/[^a-z]/g, '');
+  const byName = new Map();
+  for (const g of ROSTER) {
+    for (const m of g.members) {
+      const k = norm(m.last_name);
+      if (!byName.has(k)) byName.set(k, []);
+      byName.get(k).push({ ...m, shop: g.shop });
+    }
+  }
+
+  const used = new Map();      // surname -> how many of that surname consumed so far
+  const ambiguous = [], missing = [], duplicates = [];
+  // Count DISTINCT people, not successful lookups. A surname listed twice that
+  // resolves to one person must not read as two matches — that gap between the
+  // reported number and the selected count is exactly the kind of thing that
+  // gets noticed at drill, after the task went out to the wrong-sized group.
+  const matchedIds = new Set();
+  const take = (person, name) => {
+    if (matchedIds.has(person.id)) { duplicates.push(name); return; }
+    matchedIds.add(person.id);
+    LC_ADD_SEL.add(person.id);
+  };
+
+  for (const n of names) {
+    const k = norm(n);
+    const hits = byName.get(k) || [];
+    if (!hits.length) { missing.push(n); continue; }
+    if (hits.length === 1) { take(hits[0], n); continue; }
+    // Ambiguous surname. Take the nth distinct person only if the list names
+    // it at least as many times as there are people with that surname —
+    // "FOWLER" twice, with two Fowlers on the roster, means both.
+    const seen = used.get(k) || 0;
+    if (seen < hits.length && names.filter(x => norm(x) === k).length >= hits.length) {
+      take(hits[seen], n); used.set(k, seen + 1);
+    } else if (!ambiguous.some(a => a.name === n)) {
+      ambiguous.push({ name: n, people: hits });
+    }
+  }
+
+  const rep = document.getElementById('lc-a-report');
+  const parts = [`Selected <strong>${matchedIds.size}</strong> member${
+    matchedIds.size === 1 ? '' : 's'} from ${names.length} name${names.length === 1 ? '' : 's'}.`];
+  if (duplicates.length) {
+    parts.push(`<span class="warn">Listed more than once,
+      counted once:</span> ${[...new Set(duplicates)].map(lcEsc).join(', ')}`);
+  }
+  if (ambiguous.length) {
+    parts.push(`<span class="warn">Ambiguous — pick manually below:</span> ` +
+      ambiguous.map(a => `${lcEsc(a.name)} (${a.people.map(p =>
+        `${lcEsc(p.rank)} ${lcEsc(p.first_name || '')} · ${lcEsc(p.shop)}`).join(' / ')})`).join('; '));
+  }
+  if (missing.length) {
+    parts.push(`<span class="bad">Not on the roster:</span> ${missing.map(lcEsc).join(', ')}`);
+  }
+  rep.innerHTML = parts.join('<br>');
+  lcAddRenderRoster();
+}
+
+async function lcAddSubmit() {
+  const cyc = lcTarget();
+  if (!cyc) return;
+  const title = document.getElementById('lc-a-title').value.trim();
+  const category_code = document.getElementById('lc-a-cat').value;
+  const urgency = document.getElementById('lc-a-urg').value;
+  const details = document.getElementById('lc-a-det').value.trim();
+  if (!title) return uiToast('Give the task a title', 'error');
+  if (!LC_ADD_SEL.size) return uiToast('Select at least one member', 'error');
+
+  const btn = document.getElementById('lc-a-submit');
+  btn.disabled = true;
+  let res;
+  try {
+    res = await fetch(`/api/cycles/${cyc.id}/tasks`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title, category_code, details: details || null,
+        assignments: [{ member_ids: [...LC_ADD_SEL], urgency }],
+      }),
+    });
+  } catch (e) { btn.disabled = false; return uiToast('Could not reach the server', 'error'); }
+  btn.disabled = false;
+  if (!res.ok) return uiToast('Could not add that task', 'error');
+
+  const r = await res.json();
+  // `skipped` is the ON CONFLICT count — members who already had this exact
+  // task. Saying so is the difference between "it worked" and "it worked, and
+  // here is why the number is smaller than you expected".
+  uiToast(r.skipped
+    ? `Added for ${r.added} — ${r.skipped} already had it`
+    : `Added for ${r.added} member${r.added === 1 ? '' : 's'}`);
+  document.getElementById('lc-add').hidden = true;
+  document.getElementById('lc-add').innerHTML = '';
+  LC_ADD_SEL = new Set();
+  await lcRender();
+  // The add creates an undoable batch. This list is keyed off WORKING_CYCLE,
+  // so it shows the new batch when that IS the cycle we just added to (the
+  // no-draft case) and correctly ignores it when we added to live while a
+  // draft is being built.
+  await refreshCycleBatches();
+}
+
+document.getElementById('lc-add-open').addEventListener('click', lcAddToggle);
+
+document.getElementById('lc-add').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const d = btn.dataset;
+  if (d.lcAId !== undefined) {
+    const id = Number(d.lcAId);
+    if (LC_ADD_SEL.has(id)) { LC_ADD_SEL.delete(id); btn.classList.remove('sel'); }
+    else { LC_ADD_SEL.add(id); btn.classList.add('sel'); }
+    return lcAddUpdateCount();
+  }
+  if (d.lcAShop !== undefined) {
+    const grp = ROSTER.find(g => g.shop === d.lcAShop);
+    if (!grp) return;
+    const all = grp.members.every(m => LC_ADD_SEL.has(m.id));
+    grp.members.forEach(m => all ? LC_ADD_SEL.delete(m.id) : LC_ADD_SEL.add(m.id));
+    return lcAddRenderRoster();
+  }
+  if (btn.id === 'lc-a-match')  return lcAddMatchNames();
+  if (btn.id === 'lc-a-none')   { LC_ADD_SEL = new Set(); return lcAddRenderRoster(); }
+  if (btn.id === 'lc-a-cancel') return lcAddToggle();
+  if (btn.id === 'lc-a-submit') return lcAddSubmit();
+});
+
+document.getElementById('lc-add').addEventListener('input', e => {
+  if (e.target.id === 'lc-a-search') { LC_ADD_FILTER = e.target.value; lcAddRenderRoster(); }
+});
+
 async function lcRender() {
   const cyc = lcTarget();
   const host = document.getElementById('livecycle');
@@ -1406,6 +1694,13 @@ document.getElementById('lc-picker').addEventListener('click', e => {
   LC_TARGET_ID = id;
   LC_EDIT = null;
   LC_MEDIT = null;
+  // Same reasoning for the add panel: a half-filled task and a set of selected
+  // members belong to the cycle you were looking at. Carrying them across
+  // would be one tap away from adding next month's task to the live cycle.
+  const addHost = document.getElementById('lc-add');
+  addHost.hidden = true;
+  addHost.innerHTML = '';
+  LC_ADD_SEL = new Set();
   lcRender();
 });
 
