@@ -59,6 +59,31 @@ button { font-family:inherit; cursor:pointer; }
 .back-link svg { width:14px; height:14px; }
 
 /* step rail */
+/* ── Mode switch: the page's primary control ──────────────────────────────
+   Sticky, because the old layout lost every navigational anchor once you
+   scrolled: the step nav, cycle bar and section tabs were all position:static,
+   so four screens down there was nothing to steer by. */
+.modes {
+  display: flex; gap: 8px; margin: 0 0 16px;
+  position: sticky; top: 0; z-index: 30;
+  background: var(--bg); padding: 10px 0 10px;
+}
+.mode {
+  flex: 1; text-align: left; font-family: inherit; cursor: pointer;
+  border: 2px solid var(--bm); border-radius: var(--r);
+  background: transparent; color: var(--t2);
+  padding: 11px 16px; min-height: 56px;
+  font-size: 14.5px; font-weight: 700; letter-spacing: -.01em;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.mode:hover { color: var(--text); }
+.mode.sel { background: var(--text); color: var(--bg); border-color: var(--text); }
+.mode-sub {
+  display: block; font-size: 11.5px; font-weight: 600;
+  opacity: .7; margin-top: 2px; letter-spacing: 0;
+}
+.mode[disabled] { opacity: .45; cursor: not-allowed; }
+
 .steps { display:flex; gap:6px; margin-bottom:24px; flex-wrap:wrap; }
 .step {
   display:flex; align-items:center; gap:8px;
@@ -224,7 +249,27 @@ button { font-family:inherit; cursor:pointer; }
 
 /* ── SECTION NAV (Tasks | Schedule) ────────── */
 .sect-tabs { display:flex; gap:4px; background:var(--cream); border:1px solid var(--border);
-  border-radius:12px; padding:4px; margin:18px 0 4px; }
+  border-radius:12px; padding:4px; margin:18px 0 4px;
+  position:sticky; top:78px; z-index:29; }
+
+/* The recurring catalog is reference material that behaved like main content:
+   42 rows at ~62px each is 2,600px of uninterrupted list. Collapsed by
+   default, with its own scroll so expanding it can't push the page to ten
+   screens again. */
+.cat-collapsed { max-height: 232px; overflow: hidden; position: relative; }
+.cat-collapsed::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 56px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+.cat-expanded { max-height: 460px; overflow-y: auto; }
+.cat-toggle {
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  min-height: 38px; padding: 0 12px; border-radius: var(--rs);
+  border: 2px solid var(--bm); background: transparent; color: var(--t2);
+  align-self: center; white-space: nowrap;
+}
+.cat-toggle:hover { color: var(--text); }
 .sect-tab { flex:1; background:transparent; border:0; border-radius:9px; padding:10px 12px;
   font-family:inherit; font-size:13.5px; font-weight:600; color:var(--t2); cursor:pointer;
   transition:background .15s, color .15s; }
@@ -391,13 +436,10 @@ button { font-family:inherit; cursor:pointer; }
 .lc-appt { font-size: 11.5px; color: var(--t2); }
 .lc-btn { font-family: inherit; font-size: 12px; font-weight: 600; min-height: 44px; padding: 0 12px; border-radius: var(--rs); border: 2px solid var(--bm); background: transparent; color: var(--text); cursor: pointer; }
 .lc-btn-danger { color: var(--urgent); border-color: var(--urgent); }
-#lc-picker { display: flex; gap: 8px; margin: 0 0 14px; }
-.lc-pick { font-family: inherit; font-size: 12.5px; font-weight: 700; min-height: 44px;
-           padding: 0 14px; border-radius: var(--rs); cursor: pointer;
-           border: 2px solid var(--bm); background: transparent; color: var(--t2); }
-.lc-pick.sel { background: var(--text); color: var(--bg); border-color: var(--text); }
-.lc-pick-name { display: block; font-size: 11px; font-weight: 600; opacity: .75; }
-/* ── Add-task panel (Live cycle section) ────────────────────────────────── */
+/* The Live/Draft picker's styles are gone with it; the mode switch at the top
+   of the page does that job now. (.lc-pick-hd below is unrelated — it heads the
+   add panel's member picker.) */
+/* ── Add-task panel ─────────────────────────────────────────────────────── */
 .lc-addbar { display: flex; margin: 0 0 14px; }
 .lc-add-panel { border: 2px solid var(--bm); border-radius: var(--r); padding: 16px; margin: 0 0 16px; }
 .lc-add-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -456,7 +498,23 @@ button { font-family:inherit; cursor:pointer; }
 
   <h1 class="vh">UTA Task Builder</h1>
 
-  <nav class="steps" id="steps" aria-label="Build steps">
+  <!-- Top-level split by JOB, not by wizard step. These two have opposite
+       urgency profiles: correcting what 70 people can see happens mid-drill on
+       a phone, building next month happens once at a desk. The old layout put
+       the urgent one underneath the unhurried one. -->
+  <nav class="modes" id="modes" role="tablist" aria-label="What are you doing">
+    <button class="mode" data-mode="live" role="tab">
+      Live now<span class="mode-sub" id="mode-sub-live"></span>
+    </button>
+    <button class="mode" data-mode="next" role="tab">
+      Next cycle<span class="mode-sub" id="mode-sub-next"></span>
+    </button>
+  </nav>
+
+  <!-- The wizard's own step indicator. Only meaningful inside the Next cycle
+       authoring flow, so it is hidden in Live mode rather than promising a
+       three-step sequence the page does not have. -->
+  <nav class="steps" id="steps" aria-label="Build steps" hidden>
     <button class="step active" data-go="home" onclick="go('home')"><span class="n">1</span> This UTA</button>
     <button class="step" data-go="builder" onclick="go('builder')"><span class="n">2</span> Build task</button>
     <button class="step" data-go="review" onclick="go('review')"><span class="n">3</span> Review &amp; add</button>
@@ -485,56 +543,67 @@ button { font-family:inherit; cursor:pointer; }
 
     <div class="sect active" id="sect-tasks">
 
-    <div class="home-grid">
-      <button class="big-action ba-copy" id="ba-startfrom" onclick="startCopyForward()">
-        <div class="ba-icon">⟳</div>
-        <div class="ba-title" id="ba-startfrom-title">Start from…</div>
-        <div class="ba-sub" id="ba-startfrom-sub">Loading recurring tasks…</div>
-      </button>
-      <button class="big-action ba-new" onclick="prefillBlank(); go('builder')">
-        <div class="ba-icon">+</div>
-        <div class="ba-title">New task</div>
-        <div class="ba-sub">Type it once, then tap the people it applies to — a name, a whole shop, or the whole squadron. No spreadsheet, no slugs.</div>
-      </button>
-    </div>
-
-    <div class="sec-hd">
-      <div>
-        <h2 class="sec-title">Recurring tasks</h2>
-        <div class="sec-sub">Pulled automatically from past UTAs — “Use again” pre-fills everything, including last time’s people</div>
-      </div>
-    </div>
-    <div class="cat-search" id="cat-search">
-      <svg class="cat-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-      <input type="text" id="cat-search-input" placeholder="Search by task or category…" autocomplete="off" oninput="filterCatalog()" aria-label="Search recurring tasks">
-      <button type="button" class="cat-search-clear" id="cat-search-clear" onclick="clearCatalogSearch()" aria-label="Clear search" hidden>×</button>
-    </div>
-    <div class="card" id="catalog"></div>
-    <div class="cat-search-empty" id="cat-search-empty" hidden></div>
-
-    <div class="sec-hd">
-      <div>
-        <h2 class="sec-title">Added this cycle</h2>
-        <div class="sec-sub">Every add is a batch you can undo</div>
-      </div>
-    </div>
-    <div class="card" id="cycle-batches"></div>
-
+    <!-- The cycle's own tasks come first in BOTH modes. This is the thing you
+         open the page to change; it used to sit below a 42-row catalog, ~4.7
+         screens down, with nothing sticky to navigate back by. -->
     <section id="livecycle" hidden>
-      <h2 class="sec-title" id="lc-head">Live cycle</h2>
+      <h2 class="sec-title" id="lc-head">Tasks</h2>
       <p class="lc-sub" id="lc-sub"></p>
-      <!-- Only rendered when BOTH a live and a draft cycle exist. -->
-      <div id="lc-picker" role="group" aria-label="Which cycle to edit" hidden></div>
-      <!-- Add targets the SAME cycle this section is showing (lcTarget), not
-           WORKING_CYCLE. The builder's main add flow targets the draft, which
-           is right when building next month and wrong when a task lands
-           mid-drill for the cycle members can already see. -->
+      <!-- Add targets whichever cycle the mode selects; there is only ever one
+           target on screen, so the old Live/Draft picker is gone. -->
       <div class="lc-addbar">
         <button class="lc-btn lc-btn-primary" id="lc-add-open">Add task</button>
       </div>
       <div id="lc-add" hidden></div>
       <div id="lc-list"></div>
     </section>
+
+    <!-- Authoring tools belong to Next cycle only. In Live mode they are not
+         merely hidden, they are inapplicable: copying forward and the recurring
+         catalog exist to build the cycle members cannot see yet. -->
+    <div id="authoring" hidden>
+      <div class="home-grid">
+        <button class="big-action ba-copy" id="ba-startfrom" onclick="startCopyForward()">
+          <div class="ba-icon">⟳</div>
+          <div class="ba-title" id="ba-startfrom-title">Start from…</div>
+          <div class="ba-sub" id="ba-startfrom-sub">Loading recurring tasks…</div>
+        </button>
+        <button class="big-action ba-new" onclick="prefillBlank(); go('builder')">
+          <div class="ba-icon">+</div>
+          <div class="ba-title">New task</div>
+          <div class="ba-sub">Type it once, then tap the people it applies to — a name, a whole shop, or the whole squadron. No spreadsheet, no slugs.</div>
+        </button>
+      </div>
+
+      <div class="sec-hd">
+        <div>
+          <h2 class="sec-title">Recurring tasks</h2>
+          <div class="sec-sub">Pulled automatically from past UTAs — “Use again” pre-fills everything, including last time’s people</div>
+        </div>
+        <button class="cat-toggle" id="cat-toggle" aria-expanded="false" aria-controls="catalog"></button>
+      </div>
+      <div class="cat-search" id="cat-search">
+        <svg class="cat-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="cat-search-input" placeholder="Search by task or category…" autocomplete="off" oninput="filterCatalog()" aria-label="Search recurring tasks">
+        <button type="button" class="cat-search-clear" id="cat-search-clear" onclick="clearCatalogSearch()" aria-label="Clear search" hidden>×</button>
+      </div>
+      <div class="card cat-collapsed" id="catalog"></div>
+      <div class="cat-search-empty" id="cat-search-empty" hidden></div>
+
+      <div class="sec-hd">
+        <div>
+          <h2 class="sec-title">Added this cycle</h2>
+          <div class="sec-sub">Every add is a batch you can undo</div>
+        </div>
+      </div>
+      <div class="card" id="cycle-batches"></div>
+    </div><!-- /#authoring -->
+
+    <!-- Next cycle mode with nothing to build yet. -->
+    <div id="no-draft" class="empty-state" hidden>
+      <p>No next cycle started yet.</p>
+      <button class="btn-primary" onclick="createCycle()">Start next cycle</button>
+    </div>
 
     </div><!-- /#sect-tasks -->
 
@@ -843,7 +912,76 @@ function escapeHtml(s) {
 let ROSTER = [];       // [{ shop, members:[{id, rank, last_name}] }]
 let MEMBER_BY_ID = {}; // id -> member (for shop lookups etc.)
 let CATEGORIES = [];   // [{code, label}]
-let WORKING_CYCLE = null; // the draft if one exists, else the live cycle (set by loadHome)
+/* ── Mode is the single source of targeting truth ─────────────────────────
+   WORKING_CYCLE used to be `draft || live`, which silently retargeted the
+   whole page the moment a draft existed: a task added mid-drill landed in next
+   month's invisible cycle. The Live cycle section then needed its own separate
+   target to escape that, which left two similar-looking add buttons writing to
+   different cycles.
+
+   Now the mode picks the cycle and everything downstream follows it — tasks,
+   batches, schedule, work orders. One target on screen at a time, named at the
+   top of the page. Live is the default when both exist: editing what 70 people
+   can already see is the case with consequences.
+   ───────────────────────────────────────────────────────────────────────── */
+let BUILD_MODE = 'live';  // 'live' | 'next'
+let WORKING_CYCLE = null; // = activeCycle(); kept as the name the rest of the file already uses
+
+function activeCycle() {
+  return BUILD_MODE === 'live' ? LC_CYCLES.live : LC_CYCLES.draft;
+}
+
+// Points WORKING_CYCLE at the mode's cycle and shows only what that mode can
+// act on. Everything reading WORKING_CYCLE (add task, batches, schedule, work
+// orders) follows from this one assignment.
+function applyMode() {
+  WORKING_CYCLE = activeCycle() || null;
+  const next = BUILD_MODE === 'next';
+
+  document.querySelectorAll('#modes .mode').forEach(b => {
+    const sel = b.dataset.mode === BUILD_MODE;
+    b.classList.toggle('sel', sel);
+    b.setAttribute('aria-selected', sel);
+  });
+  document.getElementById('mode-sub-live').textContent =
+    LC_CYCLES.live ? LC_CYCLES.live.name : 'nothing published';
+  document.getElementById('mode-sub-next').textContent =
+    LC_CYCLES.draft ? `${LC_CYCLES.draft.name} · draft` : 'not started';
+  // Nothing published yet means there is no live cycle to switch to.
+  document.querySelector('#modes .mode[data-mode="live"]').disabled = !LC_CYCLES.live;
+
+  // The wizard step indicator describes the authoring flow, so it only appears
+  // when you are in it.
+  document.getElementById('steps').hidden = !next;
+  document.getElementById('authoring').hidden = !next || !LC_CYCLES.draft;
+  document.getElementById('no-draft').hidden = !next || !!LC_CYCLES.draft;
+  // Go live publishes a draft; it has no meaning while viewing the live cycle.
+  const golive = document.getElementById('btn-golive');
+  if (golive) golive.hidden = !next || !LC_CYCLES.draft;
+}
+
+async function setMode(mode) {
+  if (mode === BUILD_MODE) return;
+  if (mode === 'live' && !LC_CYCLES.live) return;
+  BUILD_MODE = mode;
+  // Any open editor or half-filled add panel belongs to the cycle you were
+  // looking at; carrying it across a mode switch would write it to the other.
+  LC_EDIT = null; LC_MEDIT = null; LC_ADD_SEL = new Set();
+  const addHost = document.getElementById('lc-add');
+  addHost.hidden = true; addHost.innerHTML = '';
+  applyMode();
+  renderCycleBar({ live: LC_CYCLES.live, draft: LC_CYCLES.draft });
+  await lcRender();
+  await refreshCycleBatches();
+  if (typeof renderSchedule === 'function') { try { await loadSchedule(); } catch (e) {} }
+  if (typeof loadWorkOrders === 'function') { try { await loadWorkOrders(); } catch (e) {} }
+  window.scrollTo({ top: 0 });
+}
+
+document.getElementById('modes').addEventListener('click', e => {
+  const btn = e.target.closest('[data-mode]');
+  if (btn && !btn.disabled) setMode(btn.dataset.mode);
+});
 let CATALOG = [];
 let CF_SOURCE = null;  // the source cycle for copy-forward (set by startCopyForward)
 let CF_GROUPS = [];    // groups fetched from /api/cycles/:id/groups, each with a client-side .sel flag
@@ -935,10 +1073,12 @@ async function loadHome() {
   }
   const live = cycles.find(c => c.is_current);
   const draft = cycles.find(c => c.status === 'draft');
-  const working = draft || live;
-  WORKING_CYCLE = working || null;
-  // The Live cycle section picks its own target from these; see lcTarget().
   LC_CYCLES = { live: live || null, draft: draft || null };
+
+  // Live unless there is no live cycle to show. A first-ever setup (draft only,
+  // nothing published) has to open on Next cycle or the page would be empty.
+  if (!live) BUILD_MODE = 'next';
+  applyMode();
 
   renderCycleBar({ live, draft });
 
@@ -978,29 +1118,68 @@ async function refreshCycleBatches() {
   renderBatches(cycleBatches);
 }
 
+// The bar describes the cycle the current MODE is acting on, not "draft || live".
+// The old copy read "Aug 2026 UTA — Draft — members still see Aug 2026 UTA",
+// which is meaningless when both carry the same name; duplicate names are now
+// refused at creation, and this states the status of one cycle rather than
+// trying to contrast two in a single line.
 function renderCycleBar({ live, draft }) {
-  const working = draft || live;
+  const cyc = activeCycle();
   const nameEl = document.getElementById('cyc-name');
   const metaEl = document.getElementById('cyc-meta');
+  const lblEl = document.querySelector('.cyc-lbl');
   const goLiveBtn = document.getElementById('btn-golive');
 
-  if (!working) {
-    nameEl.textContent = 'No cycles yet';
-    metaEl.textContent = 'Create a cycle to get started';
+  if (lblEl) lblEl.textContent = BUILD_MODE === 'live' ? 'Live cycle' : 'Next cycle';
+
+  if (!cyc) {
+    nameEl.textContent = BUILD_MODE === 'live' ? 'Nothing published yet' : 'No next cycle started';
+    metaEl.textContent = BUILD_MODE === 'live'
+      ? 'Members have no tasks until a cycle goes live'
+      : 'Start one to begin building next month';
     goLiveBtn.style.display = 'none';
     return;
   }
 
-  nameEl.textContent = working.name;
-  if (draft) {
-    metaEl.textContent = `Draft — members still see ${live ? live.name : 'the current cycle'} until you press “Go live”`;
+  nameEl.textContent = cyc.name;
+  if (cyc.status === 'draft') {
+    metaEl.textContent = 'Not visible to members until you press “Go live”';
     goLiveBtn.style.display = '';
     goLiveBtn.disabled = false;
   } else {
-    metaEl.textContent = 'Live — members see this now';
+    metaEl.textContent = 'Members see this now — changes apply immediately';
     goLiveBtn.style.display = 'none';
   }
 }
+
+/* ── Recurring catalog: collapsed by default ──────────────────────────────
+   42 groups at ~62px each is 2,600px of uninterrupted list, which is how
+   reference material ended up outranking the tasks people came to change.
+   Collapsed it shows a few rows and a fade; expanded it scrolls inside itself
+   rather than growing the page back to ten screens. Searching auto-expands,
+   because a filtered list you can't see is worse than no filter. */
+let CAT_EXPANDED = false;
+
+function syncCatToggle() {
+  const host = document.getElementById('catalog');
+  const btn = document.getElementById('cat-toggle');
+  if (!host || !btn) return;
+  const n = (CATALOG || []).length;
+  // Nothing to collapse when the list is already short.
+  const collapsible = n > 4;
+  btn.hidden = !collapsible;
+  host.classList.toggle('cat-collapsed', collapsible && !CAT_EXPANDED);
+  host.classList.toggle('cat-expanded', collapsible && CAT_EXPANDED);
+  btn.textContent = CAT_EXPANDED ? 'Show fewer' : `Show all ${n}`;
+  btn.setAttribute('aria-expanded', String(CAT_EXPANDED));
+}
+
+function toggleCatalog(force) {
+  CAT_EXPANDED = force === undefined ? !CAT_EXPANDED : !!force;
+  syncCatToggle();
+}
+
+document.getElementById('cat-toggle').addEventListener('click', () => toggleCatalog());
 
 function renderCatalog(groups, source) {
   CATALOG = groups;
@@ -1024,6 +1203,7 @@ function renderCatalog(groups, source) {
   </div>`;
     }).join('');
   }
+  syncCatToggle();
   document.getElementById('ba-startfrom-title').textContent = source ? `Start from ${source.name}` : 'Start from…';
   document.getElementById('ba-startfrom-sub').textContent = source
     ? `Copy ${source.name}’s recurring tasks, then edit. ${groups.length} group${groups.length === 1 ? '' : 's'} found — you pick which groups carry over. Nothing is deleted, ever.`
@@ -1047,6 +1227,9 @@ function filterCatalog() {
   const emptyEl = document.getElementById('cat-search-empty');
   const q = input.value.trim().toLowerCase();
   if (clearBtn) clearBtn.hidden = q.length === 0;
+  // Typing a query expands the list: matches hidden behind a collapse read as
+  // "no results". Clearing the query collapses it again.
+  toggleCatalog(q.length > 0);
 
   const items = host.querySelectorAll('.cat-item[data-search]');
   let visible = 0;
@@ -1150,42 +1333,14 @@ let LC_MEDIT = null;  // task_id (string) of the member row being edited, or nul
 let LC_GROUPS = [];   // last groups payload from lcRender's fetch, so the delegated
                        // click handler can look a group back up by its key
 
-// This section deliberately does NOT follow WORKING_CYCLE. WORKING_CYCLE is
-// `draft || live` because every other part of the builder — adding tasks, the
-// batch list, schedule, work orders — should target the cycle being built. But
-// this section exists to CORRECT a cycle, and the one that usually needs
-// correcting is the live one members can already see. Binding it to
-// WORKING_CYCLE made the live cycle unreachable the moment a draft existed,
-// which is exactly when you are most likely to spot a mistake in what already
-// shipped.
 let LC_CYCLES = { live: null, draft: null };
-let LC_TARGET_ID = null;   // which cycle this section is editing
 
-// Live wins when both exist: editing the cycle 70 people can see is the case
-// with consequences, and the draft is reachable in one tap.
-function lcDefaultTarget() {
-  return (LC_CYCLES.live || LC_CYCLES.draft || null);
-}
-
-function lcTarget() {
-  const both = [LC_CYCLES.live, LC_CYCLES.draft].filter(Boolean);
-  return both.find(c => c.id === LC_TARGET_ID) || lcDefaultTarget();
-}
-
-// Two buttons, shown only when there is a genuine choice to make. With one
-// cycle the heading already says which it is, so a picker would be noise.
-function lcRenderPicker(current) {
-  const host = document.getElementById('lc-picker');
-  const { live, draft } = LC_CYCLES;
-  if (!live || !draft) { host.hidden = true; host.innerHTML = ''; return; }
-  host.hidden = false;
-  host.innerHTML = [live, draft].map(c => `
-    <button class="lc-pick${c.id === current.id ? ' sel' : ''}"
-            data-lc-cycle="${c.id}" aria-pressed="${c.id === current.id}">
-      ${c.status === 'live' ? 'Live' : 'Draft'}
-      <span class="lc-pick-name">${lcEsc(c.name)}</span>
-    </button>`).join('');
-}
+// This section shows whichever cycle the mode selects, same as everything else
+// on the page. It used to carry its own target and a Live/Draft picker, because
+// WORKING_CYCLE was `draft || live` and would strand the live cycle the moment
+// a draft existed. The mode switch supersedes both: there is one target at a
+// time and it is named at the top of the page.
+function lcTarget() { return activeCycle(); }
 
 /* ── Add a task to the cycle this section is showing ──────────────────────
    Its own selection set, deliberately not the builder's `selected`: that one
@@ -1446,11 +1601,11 @@ async function lcRender() {
   const host = document.getElementById('livecycle');
   if (!cyc) { host.hidden = true; return; }
   host.hidden = false;
-  LC_TARGET_ID = cyc.id;
 
   const live = cyc.status === 'live';
-  document.getElementById('lc-head').textContent = live ? 'Live cycle' : 'Draft cycle';
-  lcRenderPicker(cyc);
+  // The mode switch already says which cycle you're in, so this heading names
+  // the content rather than repeating the mode.
+  document.getElementById('lc-head').textContent = 'Tasks';
   let groups = [];
   try {
     groups = await fetch(`/api/cycles/${cyc.id}/groups`).then(r => r.json());
@@ -1682,28 +1837,12 @@ async function lcSaveMember(taskId) {
   await lcRender();
 }
 
+// Cycle switching now lives in setMode(), which clears open editors and the add
+// panel for the same reason the old picker did: their contents belong to the
+// cycle you were looking at.
+
 // One delegated listener for the whole list — #lc-list itself is never
 // replaced, only its innerHTML, so this survives every lcRender().
-// Switching cycles closes any open editor: its contents belong to the cycle
-// you were looking at, and carrying them across would save the wrong values.
-document.getElementById('lc-picker').addEventListener('click', e => {
-  const btn = e.target.closest('[data-lc-cycle]');
-  if (!btn) return;
-  const id = Number(btn.dataset.lcCycle);
-  if (id === LC_TARGET_ID) return;
-  LC_TARGET_ID = id;
-  LC_EDIT = null;
-  LC_MEDIT = null;
-  // Same reasoning for the add panel: a half-filled task and a set of selected
-  // members belong to the cycle you were looking at. Carrying them across
-  // would be one tap away from adding next month's task to the live cycle.
-  const addHost = document.getElementById('lc-add');
-  addHost.hidden = true;
-  addHost.innerHTML = '';
-  LC_ADD_SEL = new Set();
-  lcRender();
-});
-
 document.getElementById('lc-list').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
