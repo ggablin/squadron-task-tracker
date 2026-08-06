@@ -665,7 +665,15 @@ app.post('/api/cycles', requireAuth, requireRole('leadership'), requireOnboarded
       return res.status(400).json({ error: 'End date must be on or after the start date' });
     }
     res.json(await cycles.createDraft(pool, name, start_date, end_date, req.session.memberId));
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+  } catch (e) {
+    // 409, not 400: the request is well-formed, it conflicts with existing
+    // state. `message` names which cycle already holds it; the builder shows
+    // that string verbatim.
+    if (e.code === 'DUPLICATE_NAME') {
+      return res.status(409).json({ error: 'DUPLICATE_NAME', message: e.message });
+    }
+    console.error(e); res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Set/correct a cycle's drill dates; period_count is recomputed from the span.
