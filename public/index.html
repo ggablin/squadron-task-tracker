@@ -1917,6 +1917,53 @@
     .att-shop-fill.att-part { background: var(--warn); }
     .att-shop-fill.att-zero { background: var(--urgent); }
 
+    /* ── Member activity ─────────────────────────── */
+    .act-hero { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+    .act-num { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .act-den { font-size: 14px; color: var(--t2); font-weight: 600; }
+    .act-sub { font-size: 12px; color: var(--t2); margin-bottom: 10px; }
+    .act-track { height: 7px; background: var(--bm); border-radius: 999px; overflow: hidden; margin-bottom: 18px; }
+    .act-fill { height: 100%; border-radius: 999px; background: var(--ok); transition: width .4s ease; }
+    .act-sec-lbl {
+      font-size: 11px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--t2); margin-bottom: 6px;
+    }
+    .act-mem-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 0; border-bottom: 1px solid var(--border);
+    }
+    .act-mem-row:last-child { border-bottom: 0; }
+    .act-mem-meta { flex: 1; min-width: 0; }
+    .act-mem-name { font-size: 13px; font-weight: 600; }
+    .act-mem-sub { font-size: 11.5px; color: var(--t2); margin-top: 1px; }
+    .act-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .act-empty { font-size: 13px; color: var(--t2); padding: 14px 0; }
+    /* Filter chips. The full roster is ~70 rows, so the default lands on
+       "needs attention" and All is one tap away. */
+    .act-chips { display: flex; gap: 7px; flex-wrap: wrap; margin: 16px 0 4px; }
+    .act-chip {
+      font-size: 12px; font-weight: 600; padding: 6px 12px;
+      border-radius: 999px; border: 1.5px solid var(--border);
+      background: var(--bg); color: var(--t2); cursor: pointer;
+      -webkit-tap-highlight-color: transparent; transition: background .15s, color .15s, border-color .15s;
+    }
+    .act-chip:hover { border-color: var(--t2); }
+    .act-chip.active { background: var(--text); border-color: var(--text); color: var(--bg); }
+    .act-when { font-size: 12.5px; font-weight: 600; text-align: right; white-space: nowrap; }
+    .act-when-never   { color: var(--urgent); }
+    .act-when-stale   { color: var(--warn); }
+    .act-when-unknown { color: var(--t2); font-weight: 500; font-style: italic; }
+    .act-list-scroll { max-height: 440px; overflow-y: auto; }
+    .act-note {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; margin-bottom: 10px;
+      border-radius: var(--r); background: var(--wrn-bg);
+      color: var(--warn); font-size: 12.5px; font-weight: 600;
+    }
+    .act-note svg { width: 15px; height: 15px; flex-shrink: 0; }
+    /* Roster marker for a member who has never opened the app, or has gone quiet. */
+    .mem-pending { color: var(--warn); font-weight: 600; }
+
     /* Squadron attendance pane: the roll-up rows become collapsible headers,
        each expanding to that shop's member × period grid. Declared after the
        .sq-collapse-hd rules so this grid layout wins over that flex. */
@@ -2212,6 +2259,9 @@
             <h2 class="sec-title" id="shop-members-title">Structures Shop</h2>
             <div class="sec-sub">Tap a member to expand</div>
           </div>
+          <!-- Supervisor-only: how many of the shop have never opened the app.
+               Hidden entirely once everyone has signed in at least once. -->
+          <div id="shop-activation-note" class="act-note" style="display:none"></div>
           <div class="card" id="member-list"></div>
         </div>
       </div>
@@ -2444,6 +2494,19 @@
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
               Add Task
             </button>
+          </div>
+        </div>
+
+        <!-- Member activity — when each member was last in the app. Answers
+             "is this reaching people?", which has to be true before task
+             completion numbers mean anything. -->
+        <div class="card card-pad mb-md" id="sq-activity">
+          <div class="sec-hd" style="padding:0 0 12px">
+            <h2 class="sec-title">Member Activity</h2>
+            <div class="sec-sub">When each member was last in the app</div>
+          </div>
+          <div id="act-body">
+            <div class="skeleton"></div><div class="skeleton skeleton-sm"></div>
           </div>
         </div>
       </div><!-- /#sq-pane-tools -->
@@ -4139,9 +4202,13 @@ async function refreshShopMembers() {
     const frac    = item.querySelector('.mem-frac');
     const fracSub = item.querySelector('.mem-frac-sub');
     const dot     = item.querySelector('.dot');
+    const rankEl  = item.querySelector('.mem-rank');
     if (frac)    frac.textContent    = `${done}/${total}`;
     if (fracSub) fracSub.textContent = `${pct}%`;
     if (dot)     { dot.className = 'dot ' + dc; dot.title = pct===100?'Complete':pct>=50?'In progress':'Needs attention'; }
+    // Patches rows in place rather than re-running buildMembers, so the activity
+    // marker has to be re-derived here or it would go stale on refresh.
+    if (rankEl) rankEl.innerHTML = escapeHtml(m.rank) + memActivityMark(m);
   }
   barChart('shop-bar-chart', shopMembers.map(m => {
     const done = parseInt(m.done_tasks)||0, tot = parseInt(m.total_tasks)||0;
@@ -4149,6 +4216,7 @@ async function refreshShopMembers() {
     return { label: m.last_name.slice(0,5), pct, hatch: pct<100 && pct>0 };
   }));
   updateShopStats();
+  updateShopActivityNote();
 }
 
 function buildMembers() {
@@ -4176,7 +4244,7 @@ function buildMembers() {
     return `<div class="mem-item" id="memitem-${m.id}">
       <div ${rowAttrs}>
         <div class="avatar">${init}</div>
-        <div class="mem-meta"><div class="mem-name">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.</div><div class="mem-rank">${escapeHtml(m.rank)}</div></div>
+        <div class="mem-meta"><div class="mem-name">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.</div><div class="mem-rank">${escapeHtml(m.rank)}${memActivityMark(m)}</div></div>
         <div><div class="mem-frac">${done}/${total}</div><div class="mem-frac-sub">${pct}%</div></div>
         <div class="dot ${dc}" title="${dt}"></div>
         ${chevron}
@@ -4192,6 +4260,38 @@ function buildMembers() {
     return {label: initials, pct, hatch:pct<100&&pct>0, title: fullName};
   }));
   updateShopStats();
+  updateShopActivityNote();
+}
+
+/* Roster marker for the two states worth interrupting a supervisor over: never
+   opened the app, or gone quiet for a month. A member who is simply using it gets
+   no marker — flagging every row would make the roster unreadable and say nothing.
+   `activated`/`last_login_at` are withheld from plain members by /api/shop/members,
+   so the undefined check keeps this inert on their view. */
+function memActivityMark(m) {
+  if (m.activated === undefined) return '';
+  if (!m.last_login_at) {
+    // No date, but they set their own password — they did sign in, before sign-ins
+    // were recorded. Not a chase.
+    return m.activated ? '' : ' · <span class="mem-pending">Never signed in</span>';
+  }
+  const days = Math.floor((Date.now() - new Date(m.last_login_at).getTime()) / 86400000);
+  return days >= 30 ? ` · <span class="mem-pending">Last seen ${actWhen(m.last_login_at)}</span>` : '';
+}
+
+/* Supervisor-only banner: how much of the shop has never opened the app. Task
+   completion numbers are misleading while people can't get in, so this sits above
+   the roster rather than inside it. Hidden once everyone has signed in. */
+function updateShopActivityNote() {
+  const el = document.getElementById('shop-activation-note');
+  if (!el) return;
+  const never = shopMembers.filter(m => m.activated === false && !m.last_login_at).length;
+  if (!never) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const total = shopMembers.length;
+  el.style.display = '';
+  el.innerHTML =
+    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5l6 3v4c0 3.2-2.4 5.6-6 7-3.6-1.4-6-3.8-6-7v-4z"/><path d="M8 6v2.5M8 10.5v.01"/></svg>
+     <span>${never} of ${total} ${never === 1 ? 'member has' : 'members have'} never signed in</span>`;
 }
 
 function updateShopStats() {
@@ -4613,6 +4713,7 @@ function switchView(btn) {
   if (name === 'leadership') {
     switchSqPane('stats');
     loadSquadron();
+    loadActivity();
   }
   if (name === 'resources') switchResPane('pfra');
 }
@@ -5017,6 +5118,164 @@ function sqAttDownloadCsv() {
   a.download = `squadron-attendance-${(sqAttData.cycle.name || 'uta').replace(/\s+/g, '-').toLowerCase()}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
+}
+
+/* ── Member activity ────────────────────────────────
+   When each member was last in the app. Three states, because they lead to three
+   different conversations (see lib/activity.js): `never` has no evidence of ever
+   signing in, `unknown` signed in before logins were recorded, `seen` has a date.
+   Supervisors get their own shop; leadership gets the squadron. */
+let activityData = null;
+let actFilter = 'attention';
+
+/* Coarse on purpose — supervisors act on "has it been a while", not on a clock
+   time, and a relative date reads better in a chase conversation. */
+function actWhen(ts) {
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return null;
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 30) return days + ' days ago';
+  if (days < 365) return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+/* The right-hand column: what we know about this member, and how loudly to say it. */
+function actWhenCell(m) {
+  if (m.state === 'never')   return { text: 'Never signed in', cls: 'act-when-never' };
+  if (m.state === 'unknown') return { text: 'Before tracking', cls: 'act-when-unknown' };
+  const days = Math.floor((Date.now() - new Date(m.last_login_at).getTime()) / 86400000);
+  return { text: actWhen(m.last_login_at), cls: days >= 30 ? 'act-when-stale' : '' };
+}
+
+/* "Needs attention" is never-signed-in plus anyone quiet for a month. Members
+   with no date but proof of a sign-in are excluded — chasing them would be wrong. */
+function actNeedsAttention(m) {
+  if (m.state === 'never') return true;
+  if (m.state === 'unknown') return false;
+  return (Date.now() - new Date(m.last_login_at).getTime()) / 86400000 >= 30;
+}
+
+async function loadActivity() {
+  const host = document.getElementById('act-body');
+  if (!host) return;
+  try {
+    const res = await fetch('/api/activity');
+    if (!res.ok) throw new Error('request failed');
+    activityData = await res.json();
+    // Nothing to chase means the filter would open on an empty list — start on All.
+    if (!activityData.members.some(actNeedsAttention)) actFilter = 'all';
+    host.innerHTML = renderActivity(activityData);
+    renderActivityRows();
+  } catch (e) {
+    console.error('loadActivity', e);
+    activityData = null;
+    host.innerHTML = '<div class="act-empty">Could not load member activity.</div>';
+  }
+}
+
+function actFiltered() {
+  if (!activityData) return [];
+  const ms = activityData.members;
+  if (actFilter === 'never')     return ms.filter(m => m.state === 'never');
+  if (actFilter === 'attention') return ms.filter(actNeedsAttention);
+  return ms;
+}
+
+function renderActivity(d) {
+  if (!d.total) return '<div class="act-empty">No active members yet.</div>';
+  const pct = Math.round(d.seen / d.total * 100);
+  const attention = d.members.filter(actNeedsAttention).length;
+
+  const shopRows = d.shops.map(s => {
+    const p = s.total ? Math.round(s.seen / s.total * 100) : 0;
+    const cls = p === 100 ? '' : p === 0 ? 'att-zero' : 'att-part';
+    return `<div class="att-shop-row">
+      <div class="att-shop-name">${escapeHtml(s.name)}</div>
+      <div class="att-shop-frac">${s.seen}/${s.total}</div>
+      <div class="att-shop-bar"><div class="att-shop-fill ${cls}" style="width:${p}%"></div></div>
+    </div>`;
+  }).join('');
+
+  const chip = (key, label, n) =>
+    `<button class="act-chip${actFilter === key ? ' active' : ''}" onclick="setActFilter('${key}')">${label}${n != null ? ' (' + n + ')' : ''}</button>`;
+
+  return `
+    <div class="act-hero">
+      <div class="act-num" style="color:${healthColor(pct)}">${d.seen}</div>
+      <div class="act-den">of ${d.total} have signed in</div>
+    </div>
+    <div class="act-sub">${d.active30} active in the last 30 days${d.never ? ` · ${d.never} never signed in` : ''}</div>
+    <div class="act-track"><div class="act-fill" style="width:${pct}%;background:${healthColor(pct)}"></div></div>
+
+    ${d.shops.length > 1 ? `<div class="act-sec-lbl">By shop · least active first</div>${shopRows}` : ''}
+
+    <div class="act-chips">
+      ${chip('attention', 'Needs attention', attention)}
+      ${chip('never', 'Never signed in', d.never)}
+      ${chip('all', 'All', d.total)}
+    </div>
+    <div class="act-list-scroll" id="act-list"></div>
+
+    <div class="act-actions">
+      <button class="add-btn" onclick="copyActivityList()">Copy this list</button>
+    </div>
+  `;
+}
+
+function renderActivityRows() {
+  const host = document.getElementById('act-list');
+  if (!host) return;
+  const rows = actFiltered();
+  if (!rows.length) {
+    host.innerHTML = `<div class="act-empty">${
+      actFilter === 'never' ? 'Everyone has signed in at least once.'
+      : actFilter === 'attention' ? 'Nobody is overdue — everyone has been in within the last 30 days.'
+      : 'No members.'}</div>`;
+    return;
+  }
+  host.innerHTML = rows.map(m => {
+    const w = actWhenCell(m);
+    return `<div class="act-mem-row">
+      <div class="act-mem-meta">
+        <div class="act-mem-name">${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.</div>
+        <div class="act-mem-sub">${escapeHtml(m.shop)}</div>
+      </div>
+      <div class="act-when ${w.cls}">${w.text}</div>
+    </div>`;
+  }).join('');
+}
+
+function setActFilter(key) {
+  actFilter = key;
+  document.querySelectorAll('#act-body .act-chip').forEach(b =>
+    b.classList.toggle('active', b.getAttribute('onclick').includes(`'${key}'`)));
+  renderActivityRows();
+}
+
+/* Plain text, grouped by shop — this gets pasted into TeamApp or an email to
+   supervisors, so it has to survive losing all formatting. Exports whatever the
+   current filter shows, so the copied list matches what's on screen. */
+async function copyActivityList() {
+  const rows = actFiltered();
+  if (!rows.length) { showToast('Nothing to copy', 'error'); return; }
+  const heading = { attention: 'Needs attention', never: 'Never signed in', all: 'Member activity' }[actFilter];
+  const byShop = new Map();
+  for (const m of rows) {
+    if (!byShop.has(m.shop)) byShop.set(m.shop, []);
+    byShop.get(m.shop).push(`  ${m.rank} ${m.last_name}, ${m.first_name[0]}. — ${actWhenCell(m).text}`);
+  }
+  const text = [
+    `${heading} — ${rows.length} of ${activityData.total} members`, '',
+    ...[...byShop.entries()].flatMap(([shop, lines]) => [shop + ':', ...lines, '']),
+  ].join('\n').trim();
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copied', 'success');
+  } catch (e) {
+    showToast('Clipboard blocked by the browser', 'error');
+  }
 }
 
 /* ── Resources sub-tabs (PT Calculator | Promotion | Useful Links | Org Chart) ── */
