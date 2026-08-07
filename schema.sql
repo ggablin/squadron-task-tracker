@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS members (
   flight        VARCHAR(30),
   position      VARCHAR(50),
   must_change_password BOOLEAN DEFAULT true,
+  -- Stamped on every successful login. must_change_password answers *whether* a
+  -- member ever signed in (only their own password change clears it); this answers
+  -- *when*, which the boolean alone can't.
+  last_login_at TIMESTAMP,
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
@@ -138,6 +142,7 @@ DO $$ BEGIN
   ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
   ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+  ALTER TABLE members ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;
   ALTER TABLE members ADD COLUMN IF NOT EXISTS can_manage_roster BOOLEAN NOT NULL DEFAULT false;
   ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
   ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_by_id INTEGER REFERENCES members(id);

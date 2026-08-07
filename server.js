@@ -14,6 +14,7 @@ const events = require('./lib/events');
 const batches = require('./lib/batches');
 const records = require('./lib/records');
 const roster = require('./lib/roster');
+const activity = require('./lib/activity');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.use(session({
       ALTER TABLE members ADD COLUMN IF NOT EXISTS flight VARCHAR(30);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS position VARCHAR(50);
       ALTER TABLE members ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT true;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;
       ALTER TABLE members ADD COLUMN IF NOT EXISTS can_manage_roster BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
       ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_by_id INTEGER REFERENCES members(id);
@@ -135,6 +137,29 @@ app.use(session({
       CREATE INDEX IF NOT EXISTS idx_shop_events_group ON shop_events (event_group_id);
     `);
     console.log('Migration check complete');
+
+    // Recover sign-ins that predate last_login_at. connect-pg-simple keeps a row
+    // per live session with expire = last activity + the 30-day cookie maxAge, so
+    // expire - 30 days reconstructs roughly when that session was last used.
+    // Approximate by design, and only ever fills NULLs — a real stamp always wins
+    // and re-running is a no-op. Separate query with its own guard so a missing
+    // session table (first boot, before the store initialises) can't roll back
+    // the schema migration above.
+    await pool.query(`
+      DO $$ BEGIN
+        IF to_regclass('public.session') IS NOT NULL THEN
+          UPDATE members m SET last_login_at = s.approx
+          FROM (
+            SELECT (sess->>'memberId')::int AS mid,
+                   MAX(expire) - INTERVAL '30 days' AS approx
+            FROM session
+            WHERE sess->>'memberId' ~ '^[0-9]+$'
+            GROUP BY 1
+          ) s
+          WHERE m.id = s.mid AND m.last_login_at IS NULL;
+        END IF;
+      END $$;
+    `);
   } catch (e) {
     console.error('Migration warning:', e.message);
   }
@@ -259,6 +284,13 @@ app.post('/api/auth/login', async (req, res) => {
     const valid = await bcrypt.compare(password, member.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid username or password' });
 
+    // Stamp the sign-in. This is what lets /api/activity distinguish "signed in
+    // but never set a password" from "never opened the app at all" —
+    // must_change_password alone collapses the two. A failure here must not cost
+    // the member their login, so it's logged and swallowed.
+    pool.query('UPDATE members SET last_login_at = NOW() WHERE id = $1', [member.id])
+      .catch(err => console.error('last_login_at stamp failed:', err.message));
+
     req.session.memberId = member.id;
     req.session.role     = member.role;
     req.session.shopId   = member.shop_id;
@@ -352,6 +384,28 @@ app.post('/api/members/:id/reset-password', requireAuth, requireRole('supervisor
       [hash, memberId]
     );
     res.json({ success: true, temp_password: temp });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Member activity ──────────────────────────────────────────────────────────
+// When each member was last in the app. Scope follows the same rule as the rest
+// of the app: leadership sees the whole squadron (optionally one shop via
+// ?shop_id), a supervisor sees only their own. No password material is returned
+// — see lib/activity.js for what each state means.
+app.get('/api/activity', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const isLead = req.session.role === 'leadership';
+    let filterShop = isLead ? null : req.session.shopId;
+    if (isLead && req.query.shop_id) {
+      filterShop = reqId(req.query.shop_id);
+      if (!filterShop) return res.status(400).json({ error: 'Invalid shop id' });
+    }
+    if (!isLead && !filterShop) return res.status(403).json({ error: 'Forbidden' });
+
+    res.json(await activity.memberActivity(pool, filterShop));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -1248,6 +1302,8 @@ app.get('/api/shop/members', requireAuth, async (req, res) => {
       ? parseInt(req.query.shop_id) : req.session.shopId;
     const { rows } = await pool.query(`
       SELECT m.id, m.last_name, m.first_name, m.rank, m.role,
+             NOT m.must_change_password AS activated,
+             m.last_login_at,
              COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                    AS total_tasks,
              COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)   AS done_tasks,
              COUNT(tc.id) FILTER (WHERE tc.state = 'partial' AND NOT t.is_upcoming) AS partial_tasks
@@ -1256,9 +1312,16 @@ app.get('/api/shop/members', requireAuth, async (req, res) => {
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE m.shop_id = $1 AND m.active = true
-      GROUP BY m.id, m.last_name, m.first_name, m.rank, m.role
+      GROUP BY m.id, m.last_name, m.first_name, m.rank, m.role,
+               m.must_change_password, m.last_login_at
       ORDER BY m.last_name
     `, [targetShopId]);
+    // Every member can read their shop roster, but whether a peer has opened the
+    // app is supervisor business — strip it for plain members rather than relying
+    // on the UI not to render it.
+    if (req.session.role === 'member') {
+      for (const r of rows) { delete r.activated; delete r.last_login_at; }
+    }
     res.json(rows);
   } catch (err) {
     console.error(err);
