@@ -233,6 +233,37 @@ CREATE TABLE IF NOT EXISTS attendance (
 );
 CREATE INDEX IF NOT EXISTS idx_attendance_cycle_shop ON attendance (uta_cycle_id, shop_id);
 
+-- Squadron forms shown on the Resources tab (RUTA request, excusal, dental, …).
+--
+-- The bytes live in Postgres rather than on disk on purpose: the app runs on
+-- Railway, whose container filesystem is rebuilt on every deploy, so a file
+-- written to disk would silently disappear at the next push. These are a handful
+-- of small PDFs, well inside what a bytea column should hold.
+CREATE TABLE IF NOT EXISTS documents (
+  id             SERIAL PRIMARY KEY,
+  title          VARCHAR(120) NOT NULL,
+  description    VARCHAR(300),
+  category       VARCHAR(60)  NOT NULL DEFAULT 'Forms',
+  filename       VARCHAR(200) NOT NULL,
+  mime           VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+  byte_size      INTEGER      NOT NULL,
+  content        BYTEA        NOT NULL,
+  uploaded_by_id INTEGER REFERENCES members(id),
+  sort_order     INTEGER      DEFAULT 99,
+  active         BOOLEAN      DEFAULT true,
+  created_at     TIMESTAMP    DEFAULT NOW(),
+  updated_at     TIMESTAMP    DEFAULT NOW()
+);
+-- Listing queries filter on active and order by category; `content` is never in
+-- them, so the bytes stay off that path.
+CREATE INDEX IF NOT EXISTS idx_documents_listing
+  ON documents (active, category, sort_order, title);
+
+-- The CREATE TABLE above is a no-op once the table exists; a column added after
+-- the first deploy needs its own ALTER. Every schema.sql migration has a twin in
+-- server.js's startup block, which is what production actually runs.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime VARCHAR(120) NOT NULL DEFAULT 'application/pdf';
+
 -- Session storage for connect-pg-simple
 CREATE TABLE IF NOT EXISTS session (
   sid    VARCHAR    NOT NULL COLLATE "default",
