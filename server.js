@@ -9,6 +9,7 @@ const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require
 const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 const attendance = require('./lib/attendance');
+const drillRoster = require('./lib/drill-roster');
 const schedule = require('./lib/schedule');
 const events = require('./lib/events');
 const batches = require('./lib/batches');
@@ -40,10 +41,27 @@ app.use(session({
   },
 }));
 
+// Retry a statement that lost a deadlock or a lock-timeout race. Postgres picks a
+// victim and aborts it; the work itself is still valid, so the loser should simply
+// try again rather than surface a warning and leave the schema half-migrated.
+const DEADLOCK_CODES = new Set(['40P01', '55P03', '40001']);
+async function withDeadlockRetry(what, fn, attempts = 4) {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!DEADLOCK_CODES.has(err && err.code) || i >= attempts) throw err;
+      const wait = 150 * i;
+      console.warn(`${what}: ${err.code}, retrying in ${wait}ms (attempt ${i} of ${attempts - 1})`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+}
+
 // ── Auto-migration (runs once on startup) ──────────────────────────────────
 (async () => {
   try {
-    await pool.query(`
+    await withDeadlockRetry('schema migration', () => pool.query(`
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
@@ -124,8 +142,8 @@ app.use(session({
         member_id     INTEGER NOT NULL REFERENCES members(id),
         shop_id       INTEGER REFERENCES shops(id),
         period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 12),
-        status        VARCHAR(12) NOT NULL CHECK (status IN
-                        ('present','excused','unexcused','ruta','at','deployed')),
+        status        VARCHAR(20) NOT NULL CHECK (status IN
+                        ('agr_at_orders','present','ruta_excused','unexcused','awol','maternity','transfer','separated','equiv_training')),
         note          TEXT,
         marked_by_id  INTEGER REFERENCES members(id),
         updated_at    TIMESTAMP DEFAULT NOW(),
@@ -156,8 +174,43 @@ app.use(session({
       -- column added after the first deploy needs its own ALTER or it is simply
       -- absent on every database that already ran the earlier version.
       ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime VARCHAR(120) NOT NULL DEFAULT 'application/pdf';
-    `);
+    `));
     console.log('Migration check complete');
+
+    // Attendance statuses gained pay codes, so the set changed. Rows are remapped
+    // BEFORE the constraint is replaced, or ADD CONSTRAINT fails on the app's own
+    // data: 'at' and 'deployed' were both "away on orders" — one thing to the pay
+    // clerk — and 'ruta' and 'excused' were both a rescheduled drill.
+    //
+    // schema.sql deliberately carries no copy: its CREATE TABLE already declares the
+    // new constraint, so a fresh database needs no upgrade and only this path ever
+    // takes the lock.
+    //
+    // Guarded, so it is a no-op once applied — and retried, because ALTER TABLE takes
+    // an AccessExclusiveLock that can deadlock against anything else touching these
+    // tables at the same moment. That is not hypothetical: the HTTP tests boot this
+    // block while applying schema.sql, and a Railway deploy can have two instances
+    // starting at once. A deadlock is transient by definition — Postgres kills one
+    // side — so the fix is to come back, not to give up and leave the constraint
+    // un-migrated behind a logged warning.
+    await withDeadlockRetry('attendance status migration', () => pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+           WHERE conrelid = 'attendance'::regclass
+             AND conname  = 'attendance_status_check'
+             AND pg_get_constraintdef(oid) LIKE '%agr_at_orders%'
+        ) THEN
+          ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_status_check;
+          ALTER TABLE attendance ALTER COLUMN status TYPE VARCHAR(20);
+          UPDATE attendance SET status = 'agr_at_orders' WHERE status IN ('at', 'deployed');
+          UPDATE attendance SET status = 'ruta_excused'  WHERE status IN ('ruta', 'excused');
+          ALTER TABLE attendance ADD CONSTRAINT attendance_status_check
+            CHECK (status IN ('agr_at_orders','present','ruta_excused','unexcused',
+                              'awol','maternity','transfer','separated','equiv_training'));
+        END IF;
+      END $$;
+    `));
 
     // Recover sign-ins that predate last_login_at. connect-pg-simple keeps a row
     // per live session with expire = last activity + the 30-day cookie maxAge, so
@@ -1733,6 +1786,37 @@ app.get('/api/squadron/attendance', requireAuth, requireRole('leadership'), asyn
 
 // The full squadron-wide grid: every active member's per-period marks, grouped
 // by shop. Read-only — marking still happens through the shop routes above.
+// The drill roster workbook, in the exact shape the pay admin already works
+// from — one sheet per shop, his attendance key, his dropdown, his wording.
+// See lib/drill-roster.js for why the sheet names and typos are preserved.
+app.get('/api/squadron/attendance/xlsx', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const cycle = await loadCurrentCycle();
+    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+
+    const { rows: members } = await pool.query(
+      `SELECT m.id, m.rank, m.first_name, m.last_name, m.position, s.name AS shop
+       FROM members m LEFT JOIN shops s ON s.id = m.shop_id
+       WHERE m.active = true
+       ORDER BY s.name, m.last_name, m.first_name`);
+    const { rows } = await pool.query(
+      'SELECT member_id, period, status FROM attendance WHERE uta_cycle_id = $1', [cycle.id]);
+
+    const buf = await drillRoster.buildDrillRoster(cycle, members, rows);
+    const stamp = String(cycle.name || 'UTA').replace(/[^\w -]+/g, '').trim() || 'UTA';
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="CES Drill Roster ${stamp}.xlsx"`,
+      'Content-Length': buf.length,
+      'Cache-Control': 'no-store',
+    });
+    res.end(buf);
+  } catch (err) {
+    console.error('drill roster export failed:', err);
+    res.status(500).json({ error: 'Could not build the drill roster' });
+  }
+});
+
 app.get('/api/squadron/attendance/grid', requireAuth, requireRole('leadership'), async (req, res) => {
   try {
     const cycle = await loadCurrentCycle();
