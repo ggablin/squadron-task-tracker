@@ -1978,7 +1978,6 @@
     .sq-att-hd .att-shop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     .sq-att-hd .att-shop-bar { grid-column: 1 / -1; }
 
-    /* ── Resources: useful links ─────────────────── */
     /* ── Resources: forms ────────────────────────── */
     .doc-cat { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
       color: var(--t2); margin: 20px 0 8px; }
@@ -2010,6 +2009,45 @@
       border: 2px solid var(--border); background: var(--bg); color: var(--text); min-width: 170px; }
     .doc-hint { font-size: 11.5px; color: var(--t2); margin-top: 9px; }
     .doc-empty { font-size: 13px; color: var(--t2); padding: 18px 0; }
+
+    /* ── Leadership tools ────────────────────────────
+       Same tile shape as .pf-link on the Resources tab, so the two lists of
+       "things you can go and do" read alike. Auto-fit rather than auto-fill:
+       with five or six tiles the last row stretches to fill the width instead
+       of leaving a phantom empty column. */
+    .tool-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+      gap: 10px;
+    }
+    .tool-card {
+      display: flex; align-items: flex-start; gap: 12px; text-align: left;
+      padding: 14px 16px; border-radius: var(--r);
+      border: 2px solid var(--border); background: var(--bg);
+      color: inherit; font-family: inherit; cursor: pointer; width: 100%;
+      transition: background .15s, border-color .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tool-card:hover { background: var(--cream); border-color: var(--bm); }
+    .tool-card:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+    .tool-ic {
+      width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
+      background: var(--cream); color: var(--t2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .tool-card:hover .tool-ic { background: var(--bg); }
+    .tool-ic svg { width: 18px; height: 18px; }
+    .tool-body { min-width: 0; flex: 1; }
+    .tool-name {
+      font-size: 14.5px; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; gap: 7px;
+    }
+    .tool-desc { display: block; font-size: 12px; color: var(--t2); margin-top: 3px; line-height: 1.42; }
+    .tool-tag {
+      font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      padding: 2px 7px; border-radius: 999px; background: var(--urg-bg); color: var(--urgent);
+    }
+
+    /* ── Resources: useful links ─────────────────── */
 
     .pf-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; max-width: 1080px; }
     .pf-link {
@@ -2505,30 +2543,71 @@
             <h2 class="sec-title">Leadership Tools</h2>
             <div class="sec-sub">Authoring &amp; records</div>
           </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="add-btn" onclick="window.location.href='/build'">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10v10H3z"/><path d="M6 6h4M6 8.5h4M6 11h2.5"/></svg>
-              Task Builder
+          <!-- Tiles rather than a wrap of same-shaped pills: six near-identical
+               buttons forced you to read every label to find the one you wanted,
+               and on a phone they reflowed into an unscannable block. Each tile
+               now carries its own icon and a line saying what the tool does. -->
+          <div class="tool-grid">
+            <button class="tool-card" onclick="window.location.href='/build'">
+              <span class="tool-ic">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5h13v13h-13z"/><path d="M7 7.5h6M7 10.5h6M7 13.5h3.5"/></svg>
+              </span>
+              <span class="tool-body">
+                <span class="tool-name">Task Builder</span>
+                <span class="tool-desc">Build the next UTA &mdash; tasks, schedule and work orders &mdash; then publish it.</span>
+              </span>
             </button>
-            <button class="add-btn" onclick="window.location.href='/records'">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h6l2.5 2.5V13a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M6 8h4M6 10.5h4"/></svg>
-              Records
+
+            <button class="tool-card" onclick="openSquadronAddTask()">
+              <span class="tool-ic">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4v12M4 10h12"/></svg>
+              </span>
+              <span class="tool-body">
+                <span class="tool-name">Add Task</span>
+                <span class="tool-desc">Add one task to the cycle that is already live, for whichever members it lands on.</span>
+              </span>
             </button>
-            <button class="add-btn" onclick="window.open('/export', '_blank')">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6V2.5h7V6"/><path d="M4.5 11H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1.5"/><path d="M4.5 9.5h7v4h-7z"/></svg>
-              Export Shop Lists
+
+            <button class="tool-card" onclick="window.open('/newsletter', '_blank')">
+              <span class="tool-ic">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5h7L16 7v10.5H4.5z"/><path d="M11.5 2.5V7H16"/><path d="M7.5 10.5h5M7.5 13.5h5"/></svg>
+              </span>
+              <span class="tool-body">
+                <span class="tool-name">Generate Newsletter</span>
+                <span class="tool-desc">The full newsletter for the live cycle, ready to print or save as a PDF.</span>
+              </span>
             </button>
-            <button class="add-btn" onclick="window.open('/newsletter', '_blank')">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2h6L13 5.5V14H3.5z"/><path d="M9.5 2v3.5H13"/><path d="M6 8.5h4M6 11h4"/></svg>
-              Generate Newsletter
+
+            <button class="tool-card" onclick="window.open('/export', '_blank')">
+              <span class="tool-ic">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 7.5V3h9v4.5"/><path d="M5.5 13.5H4a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1.5"/><path d="M5.5 11.5h9v5.5h-9z"/></svg>
+              </span>
+              <span class="tool-body">
+                <span class="tool-name">Export Shop Lists</span>
+                <span class="tool-desc">One printable PDF for the whole squadron, split by shop, for the drill floor.</span>
+              </span>
             </button>
-            <button class="add-btn" id="tool-roster" style="display:none" onclick="window.location.href='/roster'">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M12 6h3M13.5 4.5v3"/></svg>
-              Roster
+
+            <button class="tool-card" onclick="window.location.href='/records'">
+              <span class="tool-ic">
+                <!-- A clock, not a page: Records is history over time, and a second
+                     document glyph made it indistinguishable from Generate Newsletter. -->
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a7 7 0 1 0 2.1-5"/><path d="M3 3v3.5h3.5"/><path d="M10 6.5V10l2.5 1.75"/></svg>
+              </span>
+              <span class="tool-body">
+                <span class="tool-name">Records</span>
+                <span class="tool-desc">One member's task history across every cycle &mdash; for EPBs and feedback.</span>
+              </span>
             </button>
-            <button class="add-btn" onclick="openSquadronAddTask()">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
-              Add Task
+
+            <button class="tool-card" id="tool-roster" style="display:none" onclick="window.location.href='/roster'">
+              <span class="tool-ic">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="6.5" r="3"/><path d="M2 16.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M15 7h3.5M16.75 5.25v3.5"/></svg>
+              </span>
+              <span class="tool-body">
+                <span class="tool-name">Roster<span class="tool-tag">Admin</span></span>
+                <span class="tool-desc">Add, edit or deactivate members, and set who signs in as what.</span>
+              </span>
             </button>
           </div>
         </div>
