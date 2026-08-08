@@ -2054,6 +2054,43 @@ app.get('/export', requireLeadershipPage, (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'export.html'))
 );
 
+// The full UTA newsletter, built from the live cycle. Renders every shop — what
+// lands on the page is whatever has been entered for the cycle, so a thin section
+// means thin data rather than a broken generator.
+//
+// ?uta=<id> renders a specific cycle (a draft being prepared, or a past one for
+// the record); with no parameter it uses whichever cycle is currently live.
+//
+// NOT gated by requireLeadershipPage alone. That helper only proves *someone* is
+// signed in — /build and /export get their real protection from the leadership-only
+// APIs their shells call afterwards. This route renders the data itself, server
+// side, and the page carries every member's medical requirements, EPB status and
+// overdue CBTs. Without the role check below, any signed-in member could read the
+// whole squadron's record by typing the URL.
+app.get('/newsletter', async (req, res) => {
+  // Page semantics: send a signed-out visitor to the login screen, but answer a
+  // signed-in non-leader in plain words rather than a JSON blob in a blank tab.
+  if (!req.session.memberId) return res.redirect('/');
+  if (req.session.role !== 'leadership') {
+    return res.status(403).type('html').send(
+      '<p style="font:15px system-ui;padding:40px;max-width:34em">The newsletter covers the whole '
+      + 'squadron, so it is limited to squadron leadership. Your own tasks are on the tracker '
+      + '&mdash; <a href="/">go back</a>.</p>');
+  }
+  try {
+    const utaId = req.query.uta ? reqId(req.query.uta) : null;
+    if (req.query.uta && !utaId) return res.status(400).send('Invalid uta id');
+
+    const { buildFromDb } = require('./newsletter/from-db');
+    const { renderNewsletter } = require('./newsletter/render');
+    const data = await buildFromDb(pool, utaId);
+    res.type('html').send(renderNewsletter(data));
+  } catch (err) {
+    console.error('newsletter render failed:', err);
+    res.status(500).send('Could not build the newsletter. Check the server log.');
+  }
+});
+
 // Unknown /api/* paths must fail as JSON. Without this they fall through to the
 // SPA catch-all below and return index.html with a 200, so the caller's .json()
 // throws an opaque SyntaxError instead of surfacing a real status. Sits after
