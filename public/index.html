@@ -1979,6 +1979,38 @@
     .sq-att-hd .att-shop-bar { grid-column: 1 / -1; }
 
     /* ── Resources: useful links ─────────────────── */
+    /* ── Resources: forms ────────────────────────── */
+    .doc-cat { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--t2); margin: 20px 0 8px; }
+    .doc-cat:first-child { margin-top: 0; }
+    .doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; max-width: 1080px; }
+    .doc-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px 16px;
+      border-radius: var(--r); border: 2px solid var(--border); background: var(--bg); }
+    .doc-ic { width: 34px; height: 34px; flex-shrink: 0; border-radius: var(--rs);
+      background: var(--urg-bg); color: var(--urgent);
+      display: flex; align-items: center; justify-content: center; }
+    .doc-ic svg { width: 17px; height: 17px; }
+    .doc-body { flex: 1; min-width: 0; }
+    .doc-name { font-size: 14px; font-weight: 600; }
+    .doc-desc { font-size: 12px; color: var(--t2); margin-top: 2px; line-height: 1.45; }
+    .doc-meta { font-size: 11px; color: var(--t3-nav); margin-top: 6px; }
+    .doc-acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .doc-btn { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+      border: 1.5px solid var(--border); background: var(--bg); color: var(--text);
+      cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; }
+    .doc-btn:hover { border-color: var(--t3); }
+    .doc-btn.danger { color: var(--urgent); }
+    .doc-upload { border: 2px dashed var(--bm); border-radius: var(--r); padding: 16px 18px;
+      margin-bottom: 18px; background: var(--s2); max-width: 1080px; }
+    .doc-upload-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .doc-field { display: flex; flex-direction: column; gap: 4px; }
+    .doc-field label { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--t2); }
+    .doc-field input { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: var(--rs);
+      border: 2px solid var(--border); background: var(--bg); color: var(--text); min-width: 170px; }
+    .doc-hint { font-size: 11.5px; color: var(--t2); margin-top: 9px; }
+    .doc-empty { font-size: 13px; color: var(--t2); padding: 18px 0; }
+
     .pf-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; max-width: 1080px; }
     .pf-link {
       display: flex; align-items: flex-start; gap: 12px;
@@ -2524,8 +2556,20 @@
       <div class="res-tabs" role="tablist">
         <button class="res-tab active" data-rt="pfra" onclick="switchResPane('pfra')">PT Calculator</button>
         <button class="res-tab" data-rt="promo" onclick="switchResPane('promo')">Promotion</button>
+        <button class="res-tab" data-rt="forms" onclick="switchResPane('forms')">Forms</button>
         <button class="res-tab" data-rt="links" onclick="switchResPane('links')">Useful Links</button>
         <button class="res-tab" data-rt="orgchart" onclick="switchResPane('orgchart')">Org Chart</button>
+      </div>
+
+      <!-- ── Forms: squadron PDFs, uploaded by leadership ── -->
+      <div id="res-pane-forms" class="res-pane">
+        <div class="sec-hd" style="padding:0 0 12px">
+          <h2 class="sec-title">Forms</h2>
+          <div class="sec-sub">Blank squadron forms — opens the PDF</div>
+        </div>
+        <!-- Upload control is injected here for leadership only, by loadDocuments(). -->
+        <div id="doc-admin"></div>
+        <div id="doc-list"><div class="skeleton"></div><div class="skeleton"></div></div>
       </div>
 
       <!-- ── PFRA calculator ──────────────────────── -->
@@ -5292,6 +5336,134 @@ function switchResPane(name) {
   if (name === 'pfra' && window.pfInit) window.pfInit();
   if (name === 'promo' && window.pmInit) window.pmInit();
   if (name === 'orgchart') loadOrgChart();
+  if (name === 'forms') loadDocuments();
+}
+
+/* ── Resources → Forms ──────────────────────────────
+   Blank squadron forms. Everyone reads; leadership uploads. The upload control
+   is only rendered for leadership — the API enforces the same rule, this just
+   keeps the button out of everyone else's way. */
+const DOC_MAX_BYTES = 10 * 1024 * 1024;
+
+function docSize(bytes) {
+  const n = Number(bytes) || 0;
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+}
+
+async function loadDocuments() {
+  const host = document.getElementById('doc-list');
+  if (!host) return;
+  // Same capability the API enforces (requireRosterAdmin) — held by the two
+  // squadron admins, not by leadership at large.
+  const isAdmin = !!currentMember?.can_manage_roster;
+  document.getElementById('doc-admin').innerHTML = isAdmin ? docUploadForm() : '';
+  try {
+    const res = await fetch('/api/documents');
+    if (!res.ok) throw new Error('request failed');
+    renderDocuments(await res.json(), isAdmin);
+  } catch (e) {
+    console.error('loadDocuments', e);
+    host.innerHTML = '<div class="doc-empty">Could not load the forms.</div>';
+  }
+}
+
+function docUploadForm() {
+  return `<div class="doc-upload">
+    <div class="doc-upload-row">
+      <div class="doc-field"><label for="doc-title">Title</label>
+        <input id="doc-title" type="text" placeholder="RUTA Request" maxlength="120"></div>
+      <div class="doc-field"><label for="doc-cat">Category</label>
+        <input id="doc-cat" type="text" placeholder="Forms" maxlength="60"></div>
+      <div class="doc-field" style="flex:1"><label for="doc-desc">Description (optional)</label>
+        <input id="doc-desc" type="text" placeholder="Submit to your supervisor 30 days out" maxlength="300"></div>
+      <div class="doc-field"><label for="doc-file">PDF</label>
+        <input id="doc-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg"></div>
+      <button class="add-btn" id="doc-upload-btn" onclick="uploadDocument()">Upload</button>
+    </div>
+    <div class="doc-hint">PDF, Word, Excel, PowerPoint or an image &mdash; up to 10 MB.
+      PDFs and images open in the browser; the rest download. Members see a form as soon as it is uploaded.</div>
+  </div>`;
+}
+
+function renderDocuments(docs, isAdmin) {
+  const host = document.getElementById('doc-list');
+  if (!docs.length) {
+    host.innerHTML = `<div class="doc-empty">${isAdmin
+      ? 'No forms yet — upload the first one above.'
+      : 'No forms have been posted yet.'}</div>`;
+    return;
+  }
+  const byCat = new Map();
+  for (const d of docs) {
+    if (!byCat.has(d.category)) byCat.set(d.category, []);
+    byCat.get(d.category).push(d);
+  }
+  host.innerHTML = [...byCat.entries()].map(([cat, list]) => `
+    <div class="doc-cat">${escapeHtml(cat)}</div>
+    <div class="doc-grid">${list.map(d => `
+      <div class="doc-card">
+        <span class="doc-ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2h6L13 5.5V14H3.5z"/><path d="M9.5 2v3.5H13"/></svg></span>
+        <div class="doc-body">
+          <div class="doc-name">${escapeHtml(d.title)}</div>
+          ${d.description ? `<div class="doc-desc">${escapeHtml(d.description)}</div>` : ''}
+          <div class="doc-meta">${escapeHtml(docSize(d.byte_size))}${
+            d.uploaded_by_last ? ` · ${escapeHtml(d.uploaded_by_rank || '')} ${escapeHtml(d.uploaded_by_last)}` : ''}</div>
+          <div class="doc-acts">
+            <button class="doc-btn" onclick="window.open('/api/documents/${d.id}/file','_blank')">Open</button>
+            <button class="doc-btn" onclick="window.location.href='/api/documents/${d.id}/file?download=1'">Download</button>
+            ${isAdmin ? `<button class="doc-btn danger" onclick="deleteDocument(${d.id})">Remove</button>` : ''}
+          </div>
+        </div>
+      </div>`).join('')}</div>`).join('');
+}
+
+async function uploadDocument() {
+  const btn = document.getElementById('doc-upload-btn');
+  const fileEl = document.getElementById('doc-file');
+  const title = document.getElementById('doc-title').value.trim();
+  const file = fileEl.files && fileEl.files[0];
+  if (!title) return showToast('Give the form a title', 'error');
+  if (!file) return showToast('Choose a PDF', 'error');
+  if (file.size > DOC_MAX_BYTES) return showToast('That file is larger than 10 MB', 'error');
+
+  btn.disabled = true; btn.textContent = 'Uploading…';
+  try {
+    const qs = new URLSearchParams({
+      title,
+      filename: file.name,
+      category: document.getElementById('doc-cat').value.trim() || 'Forms',
+      description: document.getElementById('doc-desc').value.trim(),
+    });
+    // Raw body rather than multipart: the server reads it with express.raw, so
+    // the feature needs no upload dependency.
+    const res = await fetch('/api/documents?' + qs, {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    showToast('Form uploaded', 'success');
+    ['doc-title', 'doc-desc'].forEach(id => { document.getElementById(id).value = ''; });
+    fileEl.value = '';
+    loadDocuments();
+  } catch (e) {
+    showToast(e.message || 'Upload failed', 'error');
+  }
+  btn.disabled = false; btn.textContent = 'Upload';
+}
+
+async function deleteDocument(id) {
+  if (!await uiConfirm({
+    title: 'Remove this form?',
+    message: 'Members will no longer see it on the Resources tab.',
+    confirmLabel: 'Remove',
+  })) return;
+  try {
+    const res = await fetch('/api/documents/' + id, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not remove it');
+    showToast('Form removed', 'success');
+    loadDocuments();
+  } catch (e) { showToast(e.message || 'Could not remove it', 'error'); }
 }
 
 /* ── Squadron sub-tabs (Stats | Attendance | Tools) ── */

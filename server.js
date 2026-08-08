@@ -135,6 +135,27 @@ app.use(session({
       ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS event_group_id INTEGER;
       ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS kind VARCHAR(20);
       CREATE INDEX IF NOT EXISTS idx_shop_events_group ON shop_events (event_group_id);
+      CREATE TABLE IF NOT EXISTS documents (
+        id             SERIAL PRIMARY KEY,
+        title          VARCHAR(120) NOT NULL,
+        description    VARCHAR(300),
+        category       VARCHAR(60)  NOT NULL DEFAULT 'Forms',
+        filename       VARCHAR(200) NOT NULL,
+        mime           VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+        byte_size      INTEGER      NOT NULL,
+        content        BYTEA        NOT NULL,
+        uploaded_by_id INTEGER REFERENCES members(id),
+        sort_order     INTEGER      DEFAULT 99,
+        active         BOOLEAN      DEFAULT true,
+        created_at     TIMESTAMP    DEFAULT NOW(),
+        updated_at     TIMESTAMP    DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_documents_listing
+        ON documents (active, category, sort_order, title);
+      -- CREATE TABLE IF NOT EXISTS above is a no-op once the table exists, so a
+      -- column added after the first deploy needs its own ALTER or it is simply
+      -- absent on every database that already ran the earlier version.
+      ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime VARCHAR(120) NOT NULL DEFAULT 'application/pdf';
     `);
     console.log('Migration check complete');
 
@@ -406,6 +427,217 @@ app.get('/api/activity', requireAuth, requireRole('supervisor'), async (req, res
     if (!isLead && !filterShop) return res.status(403).json({ error: 'Forbidden' });
 
     res.json(await activity.memberActivity(pool, filterShop));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Squadron documents (Resources → Forms) ───────────────────────────────────
+// Blank forms every member needs: RUTA request, excusal, dental, and so on.
+// Squadron admins upload; everyone reads.
+//
+// Bytes live in Postgres, not on disk — see the documents table in schema.sql for
+// why. `content` is never selected by the listing query, so the roster of forms
+// stays cheap no matter how large the files are.
+
+const MAX_DOC_BYTES = 10 * 1024 * 1024;
+
+// Serving a file someone uploaded, from the same origin as the app, is the risky
+// part of this feature: if a browser can be talked into treating it as HTML, any
+// script inside runs with the app's cookies.
+//
+// So a file clears three checks, not one. Its extension must be on this list; its
+// leading bytes must match the signature that extension implies; and it is served
+// back with the mime named here and nothing else. A .docx that is really an HTML
+// page fails the second check, and anything that somehow passed would still be
+// handed to Word rather than rendered.
+//
+// `inline` is a deliberately short list: only the formats a browser renders in a
+// way that cannot execute script. Everything else is forced to download, so it
+// opens in Word or Excel — outside the browser's origin entirely.
+//
+// SVG is absent on purpose. It is an image everywhere else, but here it is a
+// script container, and there is no safe way to show a user-supplied one inline.
+const DOC_TYPES = {
+  pdf:  { mime: 'application/pdf', inline: true, sig: [[0x25, 0x50, 0x44, 0x46, 0x2d]] },   // %PDF-
+  png:  { mime: 'image/png',  inline: true, sig: [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]] },
+  jpg:  { mime: 'image/jpeg', inline: true, sig: [[0xff, 0xd8, 0xff]] },
+  jpeg: { mime: 'image/jpeg', inline: true, sig: [[0xff, 0xd8, 0xff]] },
+  // Office Open XML is a zip; the legacy formats are OLE compound files. Neither
+  // signature tells Word from Excel, so the extension picks the mime and the
+  // signature only proves the container belongs to that family.
+  docx: { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',   sig: [[0x50, 0x4b, 0x03, 0x04]] },
+  xlsx: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',         sig: [[0x50, 0x4b, 0x03, 0x04]] },
+  pptx: { mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', sig: [[0x50, 0x4b, 0x03, 0x04]] },
+  doc:  { mime: 'application/msword',            sig: [[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]] },
+  xls:  { mime: 'application/vnd.ms-excel',      sig: [[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]] },
+  ppt:  { mime: 'application/vnd.ms-powerpoint', sig: [[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]] },
+};
+const DOC_EXTS = Object.keys(DOC_TYPES);
+
+const extOf = (name) => (String(name || '').toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || '';
+
+// The matching DOC_TYPES entry, or null when the bytes and the extension disagree
+// — which is exactly the case worth refusing.
+function classifyDoc(buf, filename) {
+  if (!Buffer.isBuffer(buf) || !buf.length) return null;
+  const type = DOC_TYPES[extOf(filename)];
+  if (!type) return null;
+  const head = buf.subarray(0, 8);
+  return type.sig.some(sig => sig.every((b, i) => head[i] === b)) ? type : null;
+}
+
+// Header-safe filename: no quotes, no CR/LF (header injection), no path parts.
+// The extension is preserved when it is one we accept, so the browser and the
+// operating system agree with the Content-Type we send.
+function safeFilename(name) {
+  const base = String(name || 'document').split(/[\\/]/).pop();
+  const ext = extOf(base);
+  const clean = base.replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (DOC_TYPES[ext]) return clean;
+  return `${clean.replace(/\.[a-z0-9]+$/i, '') || 'document'}.pdf`;
+}
+
+const trimOrNull = (v, max) => {
+  const s = String(v == null ? '' : v).trim();
+  return s ? s.slice(0, max) : null;
+};
+
+// List — metadata only, for any signed-in member.
+app.get('/api/documents', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT d.id, d.title, d.description, d.category, d.filename, d.byte_size, d.mime,
+             d.sort_order, d.created_at,
+             m.rank AS uploaded_by_rank, m.last_name AS uploaded_by_last
+      FROM documents d
+      LEFT JOIN members m ON m.id = d.uploaded_by_id
+      WHERE d.active = true
+      ORDER BY d.category, d.sort_order, d.title
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Download / view. Any signed-in member; these are blank forms, not records.
+app.get('/api/documents/:id/file', requireAuth, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid document id' });
+    const { rows } = await pool.query(
+      'SELECT filename, content, byte_size, mime FROM documents WHERE id = $1 AND active = true', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+
+    const { filename, content, mime } = rows[0];
+    // Only the handful of formats a browser renders without being able to run
+    // script may open in a tab. A Word or Excel file is always a download, so it
+    // is opened by the desktop application rather than anywhere near this origin.
+    const type = DOC_TYPES[extOf(filename)];
+    const inline = !!(type && type.inline) && !req.query.download;
+    res.set({
+      'Content-Type': mime || 'application/octet-stream',
+      // Without nosniff a browser may sniff the body and render it as HTML, which
+      // would put attacker-controlled script on this origin.
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; object-src 'none'; sandbox",
+      'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${safeFilename(filename)}"`,
+      'Content-Length': content.length,
+      'Cache-Control': 'private, max-age=300',
+    });
+    res.end(content);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Upload. Raw body rather than multipart so the feature needs no new dependency;
+// the metadata rides on the query string.
+app.post('/api/documents',
+  requireAuth, requireRosterAdmin, requireOnboarded,
+  express.raw({ type: () => true, limit: MAX_DOC_BYTES }),
+  async (req, res) => {
+    try {
+      const title = trimOrNull(req.query.title, 120);
+      if (!title) return res.status(400).json({ error: 'A title is required' });
+      const filename = safeFilename(req.query.filename);
+      const type = classifyDoc(req.body, filename);
+      if (!type) {
+        return res.status(400).json({
+          error: `That file's contents do not match its type. Accepted: ${DOC_EXTS.join(', ')}.`,
+        });
+      }
+      const { rows } = await pool.query(`
+        INSERT INTO documents (title, description, category, filename, mime, byte_size, content,
+                               uploaded_by_id, sort_order)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        RETURNING id, title, description, category, filename, mime, byte_size, sort_order, created_at
+      `, [
+        title,
+        trimOrNull(req.query.description, 300),
+        trimOrNull(req.query.category, 60) || 'Forms',
+        filename,
+        type.mime,
+        req.body.length,
+        req.body,
+        req.session.memberId,
+        Number.isInteger(Number(req.query.sort_order)) ? Number(req.query.sort_order) : 99,
+      ]);
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+// Rename / recategorise / reorder. Metadata only — replacing the file means a new
+// upload, so a link someone saved can never quietly start returning a different form.
+app.patch('/api/documents/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid document id' });
+    const { title, description, category, sort_order } = req.body || {};
+    if (title !== undefined && !trimOrNull(title, 120)) {
+      return res.status(400).json({ error: 'A title is required' });
+    }
+    const { rows } = await pool.query(`
+      UPDATE documents SET
+        title       = COALESCE($2, title),
+        description = CASE WHEN $3::text IS NULL THEN description ELSE NULLIF($3, '') END,
+        category    = COALESCE($4, category),
+        sort_order  = COALESCE($5, sort_order),
+        updated_at  = NOW()
+      WHERE id = $1 AND active = true
+      RETURNING id, title, description, category, filename, mime, byte_size, sort_order
+    `, [
+      id,
+      title !== undefined ? trimOrNull(title, 120) : null,
+      description !== undefined ? String(description).trim().slice(0, 300) : null,
+      category !== undefined ? trimOrNull(category, 60) : null,
+      sort_order !== undefined && Number.isInteger(Number(sort_order)) ? Number(sort_order) : null,
+    ]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Soft delete — the row keeps its bytes so a form removed by mistake can be put
+// back from the database without hunting for the original file.
+app.delete('/api/documents/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  try {
+    const id = reqId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid document id' });
+    const { rowCount } = await pool.query(
+      'UPDATE documents SET active = false, updated_at = NOW() WHERE id = $1 AND active = true', [id]);
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -2102,6 +2334,22 @@ app.all('/api/*', (req, res) =>
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
+
+// Body-parser rejections (an over-size document upload, malformed JSON) are
+// thrown, not returned, so without this they reach Express's default handler and
+// come back as an HTML error page — which a fetch().json() caller reports as a
+// SyntaxError instead of "that file is too large".
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({ error: 'That file is too large. The limit is 10 MB.' });
+  }
+  if (err && err.status === 400 && err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Malformed request body' });
+  }
+  console.error(err);
+  res.status(500).json({ error: 'Server error' });
+});
 
 // Exported so tests can drive the app in-process with fetch() against an
 // ephemeral port (app.listen(0, ...)), rather than re-deriving every route's
