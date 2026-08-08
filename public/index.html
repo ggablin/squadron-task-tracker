@@ -1871,11 +1871,21 @@
     }
     .att-chip:disabled { cursor: default; opacity: .75; }
     .att-c-present    { background: var(--ok-bg);  color: var(--ok); }
-    .att-c-excused,
-    .att-c-ruta,
-    .att-c-at,
-    .att-c-deployed   { background: var(--wrn-bg); color: var(--warn); }
-    .att-c-unexcused  { background: var(--urg-bg); color: var(--urgent); }
+    /* Amber = counted but not in formation; red = a problem to chase. */
+    .att-c-ruta_excused,
+    .att-c-agr_at_orders,
+    .att-c-equiv_training,
+    .att-c-maternity,
+    .att-c-transfer,
+    .att-c-separated  { background: var(--wrn-bg); color: var(--warn); }
+    .att-c-unexcused,
+    .att-c-awol       { background: var(--urg-bg); color: var(--urgent); }
+    /* The pay code, shown against the status it maps to. */
+    .att-pay {
+      font-size: 10px; font-weight: 700; margin-left: 6px; padding: 1px 6px;
+      border-radius: 999px; background: var(--s2); color: var(--t3-nav);
+      font-variant-numeric: tabular-nums;
+    }
     .att-c-none       { background: transparent; color: var(--t3); border-color: var(--bm); border-style: dashed; }
     .att-note-flag { font-size: 11px; color: var(--t2); margin-top: 3px; font-style: italic; }
 
@@ -2397,6 +2407,10 @@
         <div class="att-grid-wrap"><table class="att-grid" id="att-grid"></table></div>
 
         <div class="att-actions">
+          <!-- Leadership-only: the workbook covers every shop, and the route
+               enforces the same. Hidden rather than shown-and-403ing. -->
+          <button class="add-btn" id="att-roster-btn" style="display:none"
+                  onclick="attDownloadRoster()">Download Drill Roster (Excel)</button>
           <button class="add-btn" onclick="attCopy()">Copy for Excel</button>
           <button class="add-btn" onclick="attDownloadCsv()">Download CSV</button>
         </div>
@@ -3270,11 +3284,14 @@
       <label>Status</label>
       <select id="att-modal-status">
         <option value="present">Present</option>
-        <option value="excused">Excused</option>
+        <option value="agr_at_orders">AGR / AT / Orders</option>
+        <option value="ruta_excused">RUTA / Excused</option>
         <option value="unexcused">Unexcused</option>
-        <option value="ruta">RUTA</option>
-        <option value="at">AT</option>
-        <option value="deployed">Deployed</option>
+        <option value="awol">AWOL</option>
+        <option value="equiv_training">Equivalent Training</option>
+        <option value="maternity">Maternity Leave</option>
+        <option value="transfer">Transfer</option>
+        <option value="separated">Separated / Retired</option>
       </select>
     </div>
     <div class="modal-field">
@@ -4850,11 +4867,21 @@ function switchView(btn) {
    A row's absence means UNMARKED — never "present" — so a shop that was
    never opened is visibly incomplete rather than silently perfect. */
 const ATT_LABEL = {
-  present: 'Present', excused: 'Excused', unexcused: 'Unexcused',
-  ruta: 'RUTA', at: 'AT', deployed: 'Deployed',
+  present: 'Present', agr_at_orders: 'AGR / AT / Orders', ruta_excused: 'RUTA / Excused',
+  unexcused: 'Unexcused', awol: 'AWOL', equiv_training: 'Equivalent Training',
+  maternity: 'Maternity Leave', transfer: 'Transfer', separated: 'Separated / Retired',
 };
-// Single letters for the summary grid. RUTA is R, Deployed D, AT keeps 2 chars.
-const ATT_SHORT = { present: 'P', excused: 'E', unexcused: 'U', ruta: 'R', at: 'AT', deployed: 'D' };
+// The code the pay admin enters for each status. Shown next to the status
+// everywhere, so the person marking attendance can see what it becomes on his
+// spreadsheet without keeping the mapping in their head. Mirrors STATUS_DEFS in
+// lib/attendance.js — the export and the screen must never disagree.
+const ATT_PAY = {
+  present: '/', agr_at_orders: 'X', ruta_excused: 'R', unexcused: 'R', awol: 'A',
+  maternity: 'P', transfer: 'T', separated: 'S', equiv_training: 'Q',
+};
+// Compact form for the summary grid: the pay code itself, since that is the
+// thing a reader is checking at a glance.
+const ATT_SHORT = ATT_PAY;
 
 let attData = null;      // last payload from GET /api/shop/attendance
 let attPeriod = 1;       // period currently being marked
@@ -4870,6 +4897,7 @@ function attStatusOf(memberId, period) {
 
 async function openAttendance() {
   document.getElementById('view-supervisor').classList.add('att-open');
+  attSyncRosterBtn();
   await loadAttendance();
 }
 function closeAttendance() {
@@ -4940,7 +4968,9 @@ function renderAttendance() {
         ${row && row.note ? `<div class="att-note-flag">${escapeHtml(row.note)}</div>` : ''}
       </div>
       <button class="att-chip ${cls}" ${editable ? '' : 'disabled'}
-              onclick="attOpenStatus(${m.id})">${st ? ATT_LABEL[st] : 'Mark'}</button>
+              onclick="attOpenStatus(${m.id})">${st
+                ? ATT_LABEL[st] + `<span class="att-pay">${ATT_PAY[st] || ''}</span>`
+                : 'Mark'}</button>
     </div>`;
   }).join('');
 
@@ -5080,6 +5110,17 @@ async function attCopy() {
   } catch (e) {
     showToast('Clipboard blocked — use Download CSV instead', 'error');
   }
+}
+
+/* The workbook the pay admin works from. Leadership-only, so the button is a
+   no-op for a supervisor — the route enforces the same. */
+function attSyncRosterBtn() {
+  const btn = document.getElementById('att-roster-btn');
+  if (btn) btn.style.display = currentMember?.role === 'leadership' ? '' : 'none';
+}
+
+function attDownloadRoster() {
+  window.location.href = '/api/squadron/attendance/xlsx';
 }
 
 function attDownloadCsv() {

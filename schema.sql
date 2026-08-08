@@ -224,14 +224,16 @@ CREATE TABLE IF NOT EXISTS attendance (
   member_id     INTEGER NOT NULL REFERENCES members(id),
   shop_id       INTEGER REFERENCES shops(id),
   period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 12),
-  status        VARCHAR(12) NOT NULL CHECK (status IN
-                  ('present','excused','unexcused','ruta','at','deployed')),
+  status        VARCHAR(20) NOT NULL CHECK (status IN
+                  ('agr_at_orders','present','ruta_excused','unexcused','awol','maternity','transfer','separated','equiv_training')),
   note          TEXT,
   marked_by_id  INTEGER REFERENCES members(id),
   updated_at    TIMESTAMP DEFAULT NOW(),
   UNIQUE (uta_cycle_id, member_id, period)
 );
 CREATE INDEX IF NOT EXISTS idx_attendance_cycle_shop ON attendance (uta_cycle_id, shop_id);
+
+
 
 -- Squadron forms shown on the Resources tab (RUTA request, excusal, dental, …).
 --

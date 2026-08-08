@@ -52,30 +52,45 @@ test('periodCountFor prefers the dates, then the stored value, then 4', () => {
 
 test('labels run AM then PM across consecutive days', () => {
   const l = a.periodLabels('2026-06-05', 6);       // Friday
+  // Numbered and dated rather than "UTA n · Friday AM": the pay spreadsheet is
+  // keyed by period and date, and a supervisor marking Sunday afternoon should
+  // not have to work out which UTA number that is.
   assert.deepStrictEqual(l.map(x => x.label), [
-    'UTA 1 · Friday AM', 'UTA 2 · Friday PM',
-    'UTA 3 · Saturday AM', 'UTA 4 · Saturday PM',
-    'UTA 5 · Sunday AM', 'UTA 6 · Sunday PM',
+    'Period 1 (06/05/2026)', 'Period 2 (06/05/2026)',
+    'Period 3 (06/06/2026)', 'Period 4 (06/06/2026)',
+    'Period 5 (06/07/2026)', 'Period 6 (06/07/2026)',
   ]);
+  // The day name is still carried for anything that wants to show it.
+  assert.deepStrictEqual(l.map(x => x.day),
+    ['Friday', 'Friday', 'Saturday', 'Saturday', 'Sunday', 'Sunday']);
 });
 
 test('an eight-period drill labels four distinct days', () => {
   const l = a.periodLabels('2026-06-04', 8);       // Thursday
   assert.deepStrictEqual([...new Set(l.map(x => x.day))],
     ['Thursday', 'Friday', 'Saturday', 'Sunday']);
-  assert.strictEqual(l[7].label, 'UTA 8 · Sunday PM');
+  assert.strictEqual(l[7].label, 'Period 8 (06/07/2026)');
 });
 
 test('labels do not assume a Friday start', () => {
   const l = a.periodLabels('2026-06-06', 4);       // Saturday
-  assert.strictEqual(l[0].label, 'UTA 1 · Saturday AM');
-  assert.strictEqual(l[3].label, 'UTA 4 · Sunday PM');
+  assert.strictEqual(l[0].label, 'Period 1 (06/06/2026)');
+  assert.strictEqual(l[3].label, 'Period 4 (06/07/2026)');
+  assert.strictEqual(l[0].day, 'Saturday');
 });
 
-test('labels degrade to bare UTA n without a start date', () => {
+test('drill hours are attached, and the last period of the drill ends early', () => {
+  const l = a.periodLabels('2026-08-08', 4);
+  assert.deepStrictEqual(l.map(x => x.time),
+    ['07:00-11:00', '12:00-16:30', '07:00-11:00', '12:00-16:00']);
+});
+
+test('labels degrade to a bare period number without a start date', () => {
   const l = a.periodLabels(null, 4);
-  assert.deepStrictEqual(l.map(x => x.label), ['UTA 1', 'UTA 2', 'UTA 3', 'UTA 4']);
+  assert.deepStrictEqual(l.map(x => x.label),
+    ['Period 1', 'Period 2', 'Period 3', 'Period 4']);
   assert.strictEqual(l[0].day, null);
+  assert.strictEqual(l[0].date, null);
   assert.strictEqual(l[0].half, 'AM');             // half is still known
 });
 
@@ -86,11 +101,15 @@ test('label count is clamped to the ceiling', () => {
 
 // ── validation ─────────────────────────────────────────────────────────────
 
-test('the six statuses are accepted and nothing else is', () => {
-  for (const s of ['present', 'excused', 'unexcused', 'ruta', 'at', 'deployed']) {
+test('the nine statuses are accepted and nothing else is', () => {
+  for (const s of ['present', 'agr_at_orders', 'ruta_excused', 'unexcused', 'awol',
+                   'maternity', 'transfer', 'separated', 'equiv_training']) {
     assert.ok(a.isValidStatus(s), s);
   }
-  for (const s of ['Present', 'unmarked', '', null, undefined, 'absent']) {
+  // Including the four that were retired when pay codes arrived — a stale client
+  // must be refused rather than writing a value the constraint no longer allows.
+  for (const s of ['Present', 'unmarked', '', null, undefined, 'absent',
+                   'at', 'deployed', 'ruta', 'excused']) {
     assert.ok(!a.isValidStatus(s), String(s));
   }
 });
