@@ -2407,10 +2407,6 @@
         <div class="att-grid-wrap"><table class="att-grid" id="att-grid"></table></div>
 
         <div class="att-actions">
-          <!-- Leadership-only: the workbook covers every shop, and the route
-               enforces the same. Hidden rather than shown-and-403ing. -->
-          <button class="add-btn" id="att-roster-btn" style="display:none"
-                  onclick="attDownloadRoster()">Download Drill Roster (Excel)</button>
           <button class="add-btn" onclick="attCopy()">Copy for Excel</button>
           <button class="add-btn" onclick="attDownloadCsv()">Download CSV</button>
         </div>
@@ -2543,6 +2539,7 @@
           <div class="sec-sub" id="sq-att-sub">&mdash;</div>
         </div>
         <div class="att-actions" style="margin:2px 0 14px">
+          <button class="add-btn" id="sq-att-roster" onclick="attDownloadRoster()" disabled>Download Drill Roster (Excel)</button>
           <button class="add-btn" id="sq-att-copy" onclick="sqAttCopy()" disabled>Copy for Excel</button>
           <button class="add-btn" id="sq-att-csv" onclick="sqAttDownloadCsv()" disabled>Download CSV</button>
         </div>
@@ -4897,7 +4894,6 @@ function attStatusOf(memberId, period) {
 
 async function openAttendance() {
   document.getElementById('view-supervisor').classList.add('att-open');
-  attSyncRosterBtn();
   await loadAttendance();
 }
 function closeAttendance() {
@@ -5096,7 +5092,7 @@ function attTable() {
     `${m.last_name}, ${m.first_name || ''}`.trim(),
     ...periods.map(p => {
       const st = attStatusOf(m.id, p.period);
-      return st ? ATT_LABEL[st] : '';
+      return st ? `${ATT_PAY[st] || ''} - ${ATT_LABEL[st]}` : '';
     }),
   ]);
   return [head, ...body];
@@ -5112,13 +5108,9 @@ async function attCopy() {
   }
 }
 
-/* The workbook the pay admin works from. Leadership-only, so the button is a
-   no-op for a supervisor — the route enforces the same. */
-function attSyncRosterBtn() {
-  const btn = document.getElementById('att-roster-btn');
-  if (btn) btn.style.display = currentMember?.role === 'leadership' ? '' : 'none';
-}
-
+/* The workbook the pay admin works from — every shop, so it lives on the squadron
+   Attendance pane rather than inside one shop's marking view. Leadership-only;
+   the route enforces the same. */
 function attDownloadRoster() {
   window.location.href = '/api/squadron/attendance/xlsx';
 }
@@ -5153,6 +5145,7 @@ async function loadSqAttGrid() {
       host.innerHTML = '';
       host.style.display = 'none';   // an empty .card would render as a bordered sliver
       document.getElementById('sq-att-sub').textContent = '—';
+      document.getElementById('sq-att-roster').disabled = true;
       document.getElementById('sq-att-copy').disabled = true;
       document.getElementById('sq-att-csv').disabled = true;
       return;
@@ -5236,6 +5229,7 @@ function renderSqAttGrid() {
     </div>`;
   }).join('');
 
+  document.getElementById('sq-att-roster').disabled = false;
   document.getElementById('sq-att-copy').disabled = false;
   document.getElementById('sq-att-csv').disabled = false;
 }
@@ -5259,7 +5253,9 @@ function sqAttTable() {
     `${m.last_name}, ${m.first_name || ''}`.trim(),
     ...periods.map(p => {
       const st = sqAttStatusOf(m.id, p.period);
-      return st ? ATT_LABEL[st] : '';
+      // "X - AGR / AT / Orders": the pay code first, since that is the column the
+      // admin reads. A blank stays blank — unmarked is not a status.
+      return st ? `${ATT_PAY[st] || ''} - ${ATT_LABEL[st]}` : '';
     }),
   ]));
   return [head, ...body];

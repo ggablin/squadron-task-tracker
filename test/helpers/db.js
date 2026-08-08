@@ -7,9 +7,27 @@ if (!url) throw new Error('Set TEST_DATABASE_URL to a throwaway Railway/local Po
 
 const pool = makePool(url);
 
-async function applySchema() {
+// Every HTTP test file requires server.js, which starts its own migration without
+// waiting for anyone, while this runs schema.sql on a second connection. Both take
+// DDL locks on the same tables and can deadlock; Postgres kills one side.
+//
+// server.js already retries (see withDeadlockRetry there). This is the other half:
+// whichever side loses has to come back, or the suite is red on the roll of a dice.
+// It was — the same commit passed three runs, then failed with five deadlocks, all
+// of them thrown here rather than in the app.
+const DEADLOCK_CODES = new Set(['40P01', '55P03', '40001']);
+
+async function applySchema(attempts = 4) {
   const sql = fs.readFileSync(path.join(__dirname, '..', '..', 'schema.sql'), 'utf8');
-  await pool.query(sql);
+  for (let i = 1; ; i++) {
+    try {
+      await pool.query(sql);
+      return;
+    } catch (err) {
+      if (!DEADLOCK_CODES.has(err && err.code) || i >= attempts) throw err;
+      await new Promise(r => setTimeout(r, 150 * i));
+    }
+  }
 }
 
 async function resetDb() {
