@@ -1989,16 +1989,22 @@ const SHOP_TO_FLIGHT = {
 
 const FLIGHT_ORDER = ['Infrastructure', 'Construction', 'R&O', 'EM'];
 
-// Leaders granted all-shop access regardless of flight (same reach as squadron staff).
+// Legacy allowlist. Roster admins now get all-shop access from can_manage_roster
+// below, which covers everyone here; kept so a leader who somehow loses the admin
+// flag doesn't silently lose the switcher too.
 const SQUADRON_WIDE_SLUGS = new Set(['gablin']);
 
 // ── My Shop switcher: which shops a leader may view/manage ───────────────────
 // Returns the leader's flight shops (+ their own shop). Squadron staff and
-// allowlisted leaders get every shop. Drives the shop-switcher dropdown.
+// roster admins get every shop. Drives the shop-switcher dropdown.
+//
+// Roster admins are included because they already see every member in the
+// squadron on the Roster page — withholding the switcher hid a view they were
+// entitled to rather than protecting anything.
 app.get('/api/shop/overseen', requireAuth, requireRole('leadership'), async (req, res) => {
   try {
     const { rows: meRows } = await pool.query(
-      `SELECT m.flight, m.slug, m.shop_id, s.name AS shop_name
+      `SELECT m.flight, m.slug, m.shop_id, m.can_manage_roster, s.name AS shop_name
        FROM members m JOIN shops s ON s.id = m.shop_id
        WHERE m.id = $1`,
       [req.session.memberId]
@@ -2006,7 +2012,8 @@ app.get('/api/shop/overseen', requireAuth, requireRole('leadership'), async (req
     if (!meRows.length) return res.status(401).json({ error: 'Session invalid' });
     const me = meRows[0];
 
-    const allShops = !me.flight || me.flight === 'Squadron Staff' || SQUADRON_WIDE_SLUGS.has(me.slug);
+    const allShops = !me.flight || me.flight === 'Squadron Staff'
+      || me.can_manage_roster === true || SQUADRON_WIDE_SLUGS.has(me.slug);
 
     let shops;
     if (allShops) {
