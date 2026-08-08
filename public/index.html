@@ -3362,11 +3362,17 @@
     </div>
     <div class="modal-field">
       <label>Type</label>
-      <select id="ae-type">
+      <select id="ae-type" onchange="syncAeShopField()">
         <option value="schedule">Schedule</option>
         <option value="work_order">Work Order</option>
         <option value="emphasis">Emphasis</option>
       </select>
+    </div>
+    <!-- Work control only: which shop the work order is raised against. Hidden
+         for everyone else, whose items always belong to their own shop. -->
+    <div class="modal-field" id="ae-shop-field" style="display:none">
+      <label>Shop</label>
+      <select id="ae-shop"></select>
     </div>
     <div class="modal-field">
       <label>Title</label>
@@ -3512,6 +3518,21 @@ let timelineCache   = null;    // last squadron timeline {uta, events}; null = n
 let _tasksLoaded    = false;   // currentTasks holds a real (possibly empty) result
 let _eventsLoaded   = false;   // shopEventsCache holds a real result
 let _shopEventsKey   = '';     // shopQ() the shopEventsCache was fetched for (switcher safety)
+let woBoard          = null;   // every shop's work orders — work control only (null = not loaded)
+let woShops          = [];     // shops offered by the board's create form
+
+// True for members of the shop that runs work control (Operations). Rank has
+// nothing to do with it, so this must never be folded into the isSup checks.
+function isWoManager() { return !!currentMember?.manages_work_orders; }
+
+// The add/edit and status modals prefill from a cached row. Work control's rows
+// come from the cross-shop board rather than shopEventsCache, so both are
+// searched — otherwise every board row reports "Item not found".
+function findShopEvent(id) {
+  return shopEventsCache.find(x => x.id === id)
+      || (woBoard || []).find(x => x.id === id)
+      || null;
+}
 let _tasksInFlight    = false;
 let _eventsInFlight   = false;
 let _timelineInFlight = false;
@@ -4170,8 +4191,12 @@ async function saveNote(event, taskId, elId) {
 
 /* ── Shop events ────────────────────────────────── */
 function renderShopEvents(events) {
-  // Count once here (buildWorkOrders renders into two hosts).
-  woCount = events.filter(e => e.event_type === 'work_order').length;
+  // Count once here (buildWorkOrders renders into two hosts). The badge counts
+  // whatever the tab actually lists, which for work control is the whole
+  // squadron rather than the Operations shop's own handful.
+  woCount = (isWoManager() && woBoard)
+    ? woBoard.length
+    : events.filter(e => e.event_type === 'work_order').length;
   updateNavBadges();
   buildShopEvents(events);
   buildWorkOrders(events, 'wo-host');       // My Tasks → Work Orders tab
@@ -4179,6 +4204,11 @@ function renderShopEvents(events) {
 }
 
 async function loadShopEvents(forceRefresh = false) {
+  // Work control's board is squadron-wide, so it doesn't vary with shopQ() and is
+  // refreshed alongside the shop's own events. A no-op for everyone else — it
+  // returns without a request — so the cached fast path below is unaffected for
+  // the ~67 members who are not in Operations.
+  await loadWoBoard();
   const key = shopQ();   // '' = own shop; '?shop_id=N' = leadership viewing another shop
   // Cache-first, but only when the cache belongs to the shop currently in view.
   if (!forceRefresh && _eventsLoaded && _shopEventsKey === key) {
@@ -4293,13 +4323,30 @@ function buildShopEvents(events) {
   el.innerHTML = html;
 }
 
+// Work control's copy of the board. Kept separate from loadShopEvents so a
+// failure here leaves the shop's own schedule and work orders on screen.
+async function loadWoBoard() {
+  if (!isWoManager()) { woBoard = null; return; }
+  try {
+    const res = await fetch('/api/work-orders');
+    if (!res.ok) return;                 // keep whatever is already rendered
+    const data = await res.json();
+    woBoard = data.work_orders || [];
+    woShops = data.shops || [];
+  } catch (e) { /* transient — leave the last good board up */ }
+}
+
 function buildWorkOrders(events, hostId) {
   const el = document.getElementById(hostId || 'wo-host');
   if (!el) return;
+  // Work control edits and deletes work orders regardless of rank, so the row
+  // buttons follow the work-order permission rather than the supervisor check.
   const isSup = ['supervisor','leadership'].includes(currentMember?.role);
-  const workOrders = events.filter(e => e.event_type === 'work_order');
+  const board = isWoManager() && woBoard;
+  const canWrite = isSup || isWoManager();
+
   let html = '';
-  if (isSup) {
+  if (canWrite) {
     html += `<div class="mb-sm">
       <button class="add-btn" onclick="openAddEvent('work_order')">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
@@ -4307,11 +4354,39 @@ function buildWorkOrders(events, hostId) {
       </button>
     </div>`;
   }
+
+  if (board) {
+    // Squadron-wide view: one group per shop, shops with none omitted so the
+    // board stays short on a phone. Open work first — that is the working list.
+    const rank = { open: 0, in_progress: 1, complete: 2 };
+    const byShop = new Map();
+    for (const e of woBoard) {
+      if (!byShop.has(e.shop)) byShop.set(e.shop, []);
+      byShop.get(e.shop).push(e);
+    }
+    if (byShop.size) {
+      const openCount = woBoard.filter(e => e.status !== 'complete').length;
+      html += `<div class="sec-sub" style="padding:0 4px 8px">${woBoard.length} work order${woBoard.length===1?'':'s'} across ${byShop.size} shop${byShop.size===1?'':'s'} · ${openCount} still open</div>`;
+      for (const shop of [...byShop.keys()].sort()) {
+        const rows = byShop.get(shop).sort(
+          (a, b) => (rank[a.status] ?? 0) - (rank[b.status] ?? 0));
+        html += `<div class="task-group"><div class="grp-lbl">${tlEsc(shop)}</div>`;
+        for (const e of rows) html += shopEventRow(e, true);
+        html += '</div>';
+      }
+    } else {
+      html += '<p style="color:var(--t2);padding:12px 4px">No work orders anywhere in the squadron for this UTA. Use the button above to raise one.</p>';
+    }
+    el.innerHTML = html;
+    return;
+  }
+
+  const workOrders = events.filter(e => e.event_type === 'work_order');
   if (workOrders.length) {
     html += `<div class="task-group"><div class="grp-lbl">Work Orders</div>`;
     for (const e of workOrders) html += shopEventRow(e, isSup);
     html += '</div>';
-  } else if (isSup) {
+  } else if (canWrite) {
     html += '<p style="color:var(--t2);padding:12px 4px">No work orders yet. Use the button above to add one.</p>';
   } else {
     html += '<p style="color:var(--t2);padding:12px 4px">No work orders for this UTA.</p>';
@@ -5819,6 +5894,22 @@ async function flagTask(taskId, memberId, currentlyFlagged) {
 }
 
 /* ── Add Shop Event ────────────────────────────── */
+// Shows the shop picker only when the caller is work control AND the item is a
+// work order — the flag grants nothing else, so offering another shop for a
+// schedule would just build a form the server is right to refuse.
+function syncAeShopField(selectedShopId) {
+  const field = document.getElementById('ae-shop-field');
+  const sel   = document.getElementById('ae-shop');
+  if (!field || !sel) return;
+  const show = isWoManager() && document.getElementById('ae-type').value === 'work_order';
+  field.style.display = show ? '' : 'none';
+  if (!show) return;
+  const target = selectedShopId ?? currentMember?.shop_id ?? null;
+  sel.innerHTML = woShops.map(s =>
+    `<option value="${s.id}"${s.id === target ? ' selected' : ''}>${tlEsc(s.name)}</option>`
+  ).join('');
+}
+
 function openAddEvent(presetType) {
   editingEventId = null;
   document.getElementById('ae-title').value = '';
@@ -5831,12 +5922,13 @@ function openAddEvent(presetType) {
   document.getElementById('ae-error').style.display = 'none';
   document.getElementById('ae-modal-title').textContent = 'Add Shop Item';
   document.getElementById('ae-submit').textContent = 'Add Item';
+  syncAeShopField();
   openModal('add-event-modal');
   setTimeout(() => document.getElementById('ae-title').focus(), 100);
 }
 
 function openEditEvent(eventId) {
-  const e = shopEventsCache.find(x => x.id === eventId);
+  const e = findShopEvent(eventId);
   if (!e) { showToast('Item not found — refresh and try again', 'error'); return; }
   editingEventId = eventId;
   document.getElementById('ae-type').value = e.event_type || 'schedule';
@@ -5849,6 +5941,7 @@ function openEditEvent(eventId) {
   document.getElementById('ae-error').style.display = 'none';
   document.getElementById('ae-modal-title').textContent = 'Edit Shop Item';
   document.getElementById('ae-submit').textContent = 'Save Changes';
+  syncAeShopField(e.shop_id);
   openModal('add-event-modal');
   setTimeout(() => document.getElementById('ae-title').focus(), 100);
 }
@@ -5868,9 +5961,15 @@ async function submitAddEvent() {
     details: document.getElementById('ae-details').value.trim() || null,
     wo_number: document.getElementById('ae-wo').value.trim() || null,
   };
-  // shop_id only applies to creation (leadership targets the switched shop);
-  // edits are scoped by the event id on the server.
-  if (!editing) body.shop_id = viewingShopId;
+  // shop_id only applies to creation; edits are scoped by the event id on the
+  // server. Work control picks the target shop explicitly, so its choice wins
+  // over viewingShopId — the switcher means nothing on a squadron-wide board.
+  if (!editing) {
+    const field = document.getElementById('ae-shop-field');
+    const picked = field && field.style.display !== 'none'
+      ? parseInt(document.getElementById('ae-shop').value) : null;
+    body.shop_id = picked || viewingShopId;
+  }
   try {
     const res = await fetch('/api/shop/events' + (editing ? '/' + editingEventId : ''), {
       method: editing ? 'PUT' : 'POST',
@@ -5889,7 +5988,7 @@ async function submitAddEvent() {
 
 /* ── Work Order Status ─────────────────────────── */
 async function openStatusModal(eventId) {
-  const e = shopEventsCache.find(x => x.id === eventId);
+  const e = findShopEvent(eventId);
   document.getElementById('ws-event-id').value = eventId;
   document.getElementById('ws-status').value = (e && e.status) || 'open';
   document.getElementById('ws-note').value = '';
@@ -5951,9 +6050,13 @@ async function submitStatus() {
 
 /* ── Delete Shop Event ─────────────────────────── */
 async function deleteEvent(eventId) {
+  // Work control deletes other shops' work orders, so the prompt names the shop
+  // rather than claiming it is yours.
+  const ev = findShopEvent(eventId);
+  const where = ev && ev.shop ? `from ${ev.shop}` : 'from your shop';
   if (!await uiConfirm({
     title: 'Delete this shop item?',
-    message: 'It is removed from your shop for this UTA, along with any status history recorded against it.',
+    message: `It is removed ${where} for this UTA, along with any status history recorded against it.`,
     confirmLabel: 'Delete',
     danger: true,
   })) return;

@@ -1,8 +1,13 @@
 -- 108th CES Squadron Task Tracker — Database Schema
 
+-- manages_work_orders marks the shop that runs work control for the squadron
+-- (Operations). Everyone assigned to it may create, edit, delete and close work
+-- orders in every shop — and nothing else in another shop. It sits on the shop
+-- rather than on each member so arrivals and departures need no bookkeeping.
 CREATE TABLE IF NOT EXISTS shops (
-  id   SERIAL PRIMARY KEY,
-  name VARCHAR(100) UNIQUE NOT NULL
+  id                  SERIAL PRIMARY KEY,
+  name                VARCHAR(100) UNIQUE NOT NULL,
+  manages_work_orders BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS uta_cycles (
@@ -134,6 +139,7 @@ CREATE TABLE IF NOT EXISTS task_batches (
 
 -- Migration: add columns to existing tables (safe to run multiple times)
 DO $$ BEGIN
+  ALTER TABLE shops ADD COLUMN IF NOT EXISTS manages_work_orders BOOLEAN NOT NULL DEFAULT false;
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
