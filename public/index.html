@@ -3965,18 +3965,15 @@ function buildTasks() {
     groups[t.category_code].tasks.push(t);
   }
   let html = '';
+  // Informational rows stay under their own heading — an Upgrade Training notice
+  // belongs under Upgrade Training, not swept into a generic bucket — but render
+  // through upcomingHTML, which has no checkbox. Every category is emitted now,
+  // including 'upcoming', which already sorts last by sort_order.
   for (const code of order) {
-    if (code === 'upcoming') continue;
-    const checkable = groups[code].tasks.filter(t => !t.is_upcoming);
-    if (!checkable.length) continue;
+    const rows = groups[code].tasks;
+    if (!rows.length) continue;
     html += `<div class="task-group"><div class="grp-lbl">${groups[code].label}</div>`;
-    for (const t of checkable) html += taskHTML(t);
-    html += '</div>';
-  }
-  const upcoming = currentTasks.filter(t => t.is_upcoming);
-  if (upcoming.length) {
-    html += '<div class="task-group"><div class="grp-lbl">Upcoming</div>';
-    for (const t of upcoming) html += upcomingHTML(t);
+    for (const t of rows) html += t.informational ? upcomingHTML(t) : taskHTML(t);
     html += '</div>';
   }
   document.getElementById('member-tasks').innerHTML = html;
@@ -4069,7 +4066,7 @@ function syncAllClear(done, total) {
 }
 
 function updateMemberStats() {
-  const checkable = currentTasks.filter(t => !t.is_upcoming);
+  const checkable = currentTasks.filter(t => !t.informational);
   const done    = checkable.filter(t => t.state==='done').length;
   const total   = checkable.length;
   const flagged = checkable.filter(t => t.is_flagged).length;
@@ -4095,7 +4092,7 @@ function toggleHeroBars() {
 }
 
 function updateNavBadges() {
-  const tasksLeft = currentTasks.filter(t => !t.is_upcoming && t.state !== 'done').length;
+  const tasksLeft = currentTasks.filter(t => !t.informational && t.state !== 'done').length;
   const set = (id, n) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -4491,7 +4488,7 @@ async function renderMemberTasks(memberId) {
 
     const cats = {};
     for (const t of tasks) {
-      if (t.is_upcoming) continue;
+      if (t.informational) continue;
       if (!cats[t.category_code]) cats[t.category_code] = { label: t.category_label, tasks: [] };
       cats[t.category_code].tasks.push(t);
     }
