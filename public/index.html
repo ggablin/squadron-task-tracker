@@ -356,25 +356,8 @@
     }
     .cat-empty { font-size: 12.5px; color: var(--t2); }
 
-    /* Medical services rollup. A group headline with the raw service names
-       beneath it as chips, so the Chief can read "Health Assessments 12" and
-       still see it is PHAQ 8 / DHA3 5 / MHA 4 without a second screen. */
-    .med-group { padding: 10px 0; border-bottom: 1px solid var(--border); }
-    .med-group:last-child { border-bottom: 0; padding-bottom: 0; }
-    .med-group:first-child { padding-top: 0; }
-    .med-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-    .med-name { font-weight: 600; font-size: 13.5px; }
-    .med-count { font-size: 12.5px; color: var(--t2); white-space: nowrap; }
-    .med-count b { font-size: 15px; color: var(--text); font-weight: 600; }
-    .med-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .med-chip {
-      display: inline-flex; align-items: baseline; gap: 5px;
-      padding: 3px 9px; border-radius: 999px;
-      background: var(--cream); border: 1px solid var(--border);
-      font-size: 12px; color: var(--t2);
-    }
-    .med-chip b { color: var(--text); font-weight: 600; font-size: 12.5px; }
-    .med-chip.is-done { opacity: .55; }
+    /* Medical services rollup: reuses .cat-row so a service bar reads as the
+       same kind of chart as the category bars directly above it. */
     .med-note { margin-top: 12px; font-size: 11.5px; color: var(--t2); line-height: 1.45; }
 
     /* My Tasks gauge — larger than supervisor/leadership variants.
@@ -2533,15 +2516,11 @@
            immunizations" — this does, counting distinct members per service. -->
       <div class="card card-pad mb-md sq-breakdown">
         <div class="chart-label-row mb-md">
-          <div class="chart-label">Medical Services Needed</div>
+          <div class="chart-label">Medical Services</div>
           <div class="chart-meta" id="sq-med-meta">&mdash;</div>
         </div>
-        <div id="sq-med-list"></div>
-        <div class="med-note" id="sq-med-note" hidden>
-          Group totals count people, not appointments &mdash; someone owing two
-          services in the same group is counted once, so the service figures
-          beneath a group can add up to more than its total.
-        </div>
+        <div class="cat-list" id="sq-med-list"></div>
+        <div class="med-note" id="sq-med-note" hidden></div>
       </div>
 
       <!-- Collapsed by default: it's a drill-down, not a headline. #sq-alerts is
@@ -4817,37 +4796,46 @@ async function loadOrgChart() {
 }
 
 /* ── Squadron (leadership) ──────────────────────── */
-// Medical services rollup. The group carries the headline number the Chief asks
-// for; the chips beneath name the services verbatim as the newsletter writes them,
-// so nothing is invented and a service McNaughton adds later appears on its own
-// without a code change. A service everyone has completed dims rather than
-// disappearing — "0 left" is still worth seeing on a readiness board.
+// Medical services. One bar per service, using the same .cat-row markup as the
+// category card above it, so "x of y done, %" reads identically in both places.
+//
+// The service is the task title as the squadron writes it — BCA Assessment, HIV
+// Blood Draw, MHA, Dental Form Due. No grouping layer: an earlier version invented
+// buckets (Labs, Immunizations, Assessments) and had to guess which one DHA3
+// belonged in. The titles are already the breakout.
 function renderMedical(med) {
   const host = document.getElementById('sq-med-list');
   const meta = document.getElementById('sq-med-meta');
+  const note = document.getElementById('sq-med-note');
   if (!host) return;
-  if (!med || !Array.isArray(med.groups) || !med.groups.length) {
-    host.innerHTML = '<div class="cat-empty">No medical requirements in this cycle.</div>';
+
+  if (!med || !Array.isArray(med.services) || !med.services.length) {
+    host.innerHTML = '<div class="cat-empty">Nothing due from medical this UTA.</div>';
     if (meta) meta.textContent = '—';
-    const empty = document.getElementById('sq-med-note');
-    if (empty) empty.hidden = true;
+    if (note) note.hidden = true;
     return;
   }
-  const n = med.totalMembers;
-  if (meta) meta.textContent = n + ' member' + (n === 1 ? '' : 's');
-  // Only worth saying when a group actually has more than one service in it.
-  const note = document.getElementById('sq-med-note');
-  if (note) note.hidden = !med.groups.some(g => g.services.length > 1);
-  host.innerHTML = med.groups.map(g => `
-    <div class="med-group">
-      <div class="med-head">
-        <div class="med-name">${escapeHtml(g.group)}</div>
-        <div class="med-count"><b>${g.people}</b> ${g.people === 1 ? 'person' : 'people'}</div>
+
+  if (meta) meta.textContent = med.done + '/' + med.total + ' · ' + med.pct + '%';
+  host.innerHTML = med.services.map(s => `
+    <div class="cat-row">
+      <div class="cat-head">
+        <div class="cat-name" title="${escapeHtml(s.service)}">${escapeHtml(s.service)}</div>
+        <div class="cat-nums">
+          <span class="cat-frac">${s.done}/${s.total}</span>
+          <span class="cat-pct" style="color:${healthColor(s.pct)}">${s.pct}%</span>
+        </div>
       </div>
-      <div class="med-chips">${g.services.map(sv =>
-        `<span class="med-chip${sv.done >= sv.people ? ' is-done' : ''}">${escapeHtml(sv.service)}<b>${sv.people}</b></span>`
-      ).join('')}</div>
+      <div class="cat-track"><div class="cat-fill" style="width:${s.pct}%"></div></div>
     </div>`).join('');
+
+  // Say what was left out rather than letting it vanish: most of these are members
+  // told to book a PT test at next drill, which is not this UTA's workload.
+  if (note) {
+    note.hidden = !med.deferred;
+    note.textContent = med.deferred + (med.deferred === 1 ? ' item is' : ' items are')
+      + ' scheduled for a later UTA and not counted here.';
+  }
 }
 
 async function loadSquadron() {

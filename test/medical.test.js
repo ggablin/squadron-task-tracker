@@ -1,125 +1,122 @@
-// Unit coverage for the medical service rollup.
+// Unit coverage for the medical services rollup.
 //
-// This code parses prose — the service names come out of the free-text details
-// field McNaughton types, not a column — so these tests are the specification for
-// what the parser is allowed to assume. Every literal string below is copied from
-// the real August 2026 newsletter rather than invented.
+// Every title below is a real production title from the Aug 2026 UTA. That matters:
+// the version this replaces was validated against a preview database seeded from
+// the newsletter by the same session that wrote the parser, so it only ever proved
+// the code agreed with its own fixture. It shipped, and showed leadership
+// "Need to get Height 68" — because on production the service is the task TITLE and
+// `details` holds instructions and appointment times.
+//
+// So these fixtures are copied from production, and nothing here reads `details`.
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { splitServices, groupFor, rollup } = require('../lib/medical');
+const { rollup } = require('../lib/medical');
 
-/* ── Splitting the details field ────────────────────────────────────────── */
+// A row per member, as the endpoint selects them.
+const rows = (title, urgency, total, done) =>
+  Array.from({ length: total }, (_, i) => ({ title, urgency, done: i < done }));
 
-test('a single service is taken as-is', () => {
-  assert.deepStrictEqual(splitServices('Medical / Dental', 'MHA'), ['MHA']);
-  assert.deepStrictEqual(splitServices('Medical / Dental', 'Audiogram'), ['Audiogram']);
-});
-
-test('slash-separated services are split, since one member owes several', () => {
-  assert.deepStrictEqual(splitServices('Medical / Dental', 'PHAQ / DHA3'), ['PHAQ', 'DHA3']);
-  assert.deepStrictEqual(splitServices('Medical / Dental', 'MMR / HIV Blood Draw'),
-    ['MMR', 'HIV Blood Draw']);
-  assert.deepStrictEqual(splitServices('Medical / Dental', 'Audiogram / DHA3 / PHAQ'),
-    ['Audiogram', 'DHA3', 'PHAQ']);
-});
-
-test('an appointment riding along with the service name is stripped', () => {
-  // Otherwise the same exam at two times becomes two services, and the count of
-  // people needing a dental exam is silently split in half.
-  assert.deepStrictEqual(
-    splitServices('Medical / Dental', 'PHAQ / Mil Dental Exam 11 Sep @ 1020hrs'),
-    ['PHAQ', 'Mil Dental Exam']);
-  assert.deepStrictEqual(
-    splitServices('Medical / Dental', 'Mil Dental Exam 9 Aug @ 1040hrs'),
-    ['Mil Dental Exam']);
-  assert.deepStrictEqual(
-    splitServices('Medical / Dental', 'Mil Dental Exam'),
-    ['Mil Dental Exam']);
-});
-
-test("a PT test's details hold a due month, not a service", () => {
-  // "Due Sep 2026" must not become a service called "Due Sep 2026".
-  assert.deepStrictEqual(splitServices('PT Test', 'Due Sep 2026'), ['PT Test']);
-  assert.deepStrictEqual(splitServices('PT Test', 'Due Aug 2026 — Sat @ 1030hrs'), ['PT Test']);
-  assert.deepStrictEqual(splitServices('PT Test', null), ['PT Test']);
-});
-
-test('a missing detail surfaces rather than vanishing', () => {
-  // Dropping it would quietly shrink the squadron's medical count.
-  assert.deepStrictEqual(splitServices('Medical / Dental', ''), ['Unspecified']);
-  assert.deepStrictEqual(splitServices('Medical / Dental', null), ['Unspecified']);
-  assert.deepStrictEqual(splitServices('Medical / Dental', '  /  '), ['Unspecified']);
-});
-
-/* ── Grouping ───────────────────────────────────────────────────────────── */
-
-test('services map to the buckets the Chief asked in', () => {
-  assert.strictEqual(groupFor('MMR'), 'Immunizations');
-  assert.strictEqual(groupFor('HIV Blood Draw'), 'Labs & Bloodwork');
-  assert.strictEqual(groupFor('PHAQ'), 'Health Assessments');
-  assert.strictEqual(groupFor('MHA'), 'Health Assessments');
-  assert.strictEqual(groupFor('Mil Dental Exam'), 'Dental');
-  assert.strictEqual(groupFor('PT Test'), 'Fitness');
-  assert.strictEqual(groupFor('Fitness Counseling'), 'Fitness');
-  assert.strictEqual(groupFor('Audiogram'), 'Screenings');
-});
-
-test('DHA3 is an assessment, not dental work', () => {
-  // The source newsletter never says whether DHA is Dental or Deployment Health
-  // Assessment. "Assessment" is true either way; "Dental" would be a guess with
-  // a clinical meaning attached. If the squadron confirms it is dental, the fix
-  // is one line in lib/medical.js — and this test is the reminder.
-  assert.strictEqual(groupFor('DHA3'), 'Health Assessments');
-  assert.strictEqual(groupFor('DHA'), 'Health Assessments');
-});
-
-test('an unrecognised service keeps its name instead of being dropped', () => {
-  assert.strictEqual(groupFor('Sleep Study'), 'Other');
-  assert.strictEqual(groupFor('Unspecified'), 'Other');
-});
-
-/* ── The rollup ─────────────────────────────────────────────────────────── */
-
-const AUGUST = [
-  { member_id: 1, title: 'Medical / Dental', details: 'PHAQ / DHA3', done: false },
-  { member_id: 2, title: 'Medical / Dental', details: 'PHAQ / DHA3', done: false },
-  { member_id: 3, title: 'Medical / Dental', details: 'MMR / HIV Blood Draw', done: false },
-  { member_id: 4, title: 'Medical / Dental', details: 'Mil Dental Exam 9 Aug @ 1020hrs', done: false },
-  { member_id: 5, title: 'Medical / Dental', details: 'Mil Dental Exam', done: true },
-  { member_id: 1, title: 'PT Test', details: 'Due Sep 2026', done: false },
+// Production, Aug 2026 UTA.
+const PROD = [
+  ...rows('BCA Assessment',     'this_uta', 68, 34),
+  ...rows('HIV Blood Draw',     'this_uta', 11, 4),
+  ...rows('MHA',                'this_uta', 7, 3),
+  ...rows('Audiogram',          'this_uta', 6, 2),
+  ...rows('PHAQ',               'this_uta', 6, 1),
+  ...rows('Dental Form Due',    'this_uta', 6, 1),
+  ...rows('Mil Dental Exam',    'this_uta', 3, 0),
+  ...rows('MMR',                'this_uta', 2, 2),
+  ...rows('Medical Appointment','this_uta', 1, 1),
+  ...rows('Fitness Counseling', 'this_uta', 1, 0),
+  ...rows('PT Test',            'this_uta', 4, 1),
+  ...rows('PT Test',            'next_uta', 7, 0),   // "schedule for next Drill"
+  ...rows('PTL Training',       'this_uta', 1, 1),   // duty qualification
 ];
 
-test('counts people, not task rows', () => {
-  const r = rollup(AUGUST);
-  const g = Object.fromEntries(r.groups.map(x => [x.group, x.people]));
-  // Member 1 owes PHAQ and DHA3 — that is one person needing assessments.
-  assert.strictEqual(g['Health Assessments'], 2);
-  assert.strictEqual(g['Dental'], 2);
-  assert.strictEqual(g['Immunizations'], 1);
-  assert.strictEqual(g['Labs & Bloodwork'], 1);
-  assert.strictEqual(g['Fitness'], 1);
-  // Five distinct members hold a medical task; member 1 holds two of them.
-  assert.strictEqual(r.totalMembers, 5);
+test('each service reports x of y done with a percentage', () => {
+  const r = rollup(PROD);
+  const by = Object.fromEntries(r.services.map(s => [s.service, s]));
+  assert.deepStrictEqual(
+    { done: by['BCA Assessment'].done, total: by['BCA Assessment'].total, pct: by['BCA Assessment'].pct },
+    { done: 34, total: 68, pct: 50 });
+  assert.deepStrictEqual(
+    { done: by['HIV Blood Draw'].done, total: by['HIV Blood Draw'].total, pct: by['HIV Blood Draw'].pct },
+    { done: 4, total: 11, pct: 36 });
+  assert.strictEqual(by['MMR'].pct, 100);
+  assert.strictEqual(by['Mil Dental Exam'].pct, 0);
 });
 
-test('the same exam at two appointment times is one service', () => {
-  const dental = rollup(AUGUST).groups.find(g => g.group === 'Dental');
-  assert.deepStrictEqual(dental.services.map(s => s.service), ['Mil Dental Exam']);
-  assert.strictEqual(dental.services[0].people, 2);
-  assert.strictEqual(dental.services[0].done, 1);
+test('PT tests count only when due or overdue this UTA', () => {
+  const r = rollup(PROD);
+  const pt = r.services.find(s => s.service === 'PT Test');
+  // 4 due this UTA; the 7 told to book at next drill are not this drill's work.
+  assert.strictEqual(pt.total, 4);
+  assert.strictEqual(pt.done, 1);
+  assert.strictEqual(r.deferred, 7);
 });
 
-test('groups and services are ordered biggest first', () => {
-  const r = rollup(AUGUST);
-  const people = r.groups.map(g => g.people);
-  assert.deepStrictEqual(people, [...people].sort((a, b) => b - a),
-    'the number being read for should be at the top');
-  const ha = r.groups.find(g => g.group === 'Health Assessments');
-  assert.deepStrictEqual(ha.services.map(s => s.service).sort(), ['DHA3', 'PHAQ']);
+test('deferred work is reported, never silently dropped', () => {
+  // The count exists so the card can say so. Losing 7 rows without a word is how
+  // a readiness board quietly stops matching the newsletter.
+  const r = rollup([...rows('Audiogram', 'next_uta', 3, 0)]);
+  assert.deepStrictEqual(r.services, []);
+  assert.strictEqual(r.deferred, 3);
 });
 
-test('no medical tasks yields an empty rollup rather than throwing', () => {
-  assert.deepStrictEqual(rollup([]), { groups: [], totalMembers: 0 });
-  assert.deepStrictEqual(rollup(null), { groups: [], totalMembers: 0 });
+test('overdue counts as due now', () => {
+  const r = rollup(rows('PHAQ', 'overdue', 5, 2));
+  assert.strictEqual(r.services[0].total, 5);
+  assert.strictEqual(r.deferred, 0);
+});
+
+test('PTL Training is excluded as a duty qualification', () => {
+  const r = rollup(PROD);
+  assert.ok(!r.services.some(s => s.service === 'PTL Training'));
+  // and it is not counted as deferred either — it is simply not medical work
+  assert.strictEqual(r.deferred, 7);
+});
+
+test('fitness items the squadron kept are still counted', () => {
+  const r = rollup(PROD);
+  const names = r.services.map(s => s.service);
+  assert.ok(names.includes('BCA Assessment'), 'height/weight/waist stays');
+  assert.ok(names.includes('Fitness Counseling'));
+  assert.ok(names.includes('PT Test'));
+});
+
+test('the squadron total excludes what the services exclude', () => {
+  const r = rollup(PROD);
+  // 68+11+7+6+6+6+3+2+1+1+4 = 115 counted; PTL Training and the 7 deferred are out.
+  assert.strictEqual(r.total, 115);
+  assert.strictEqual(r.done, 49);
+  assert.strictEqual(r.pct, 43);
+  assert.strictEqual(r.total, r.services.reduce((s, x) => s + x.total, 0),
+    'the headline must be the sum of the bars beneath it');
+});
+
+test('most outstanding work sorts first', () => {
+  const r = rollup(PROD);
+  const remaining = r.services.map(s => s.remaining);
+  assert.deepStrictEqual(remaining, [...remaining].sort((a, b) => b - a));
+  assert.strictEqual(r.services[0].service, 'BCA Assessment', '34 outstanding');
+});
+
+test('ties sort stably rather than shuffling between refreshes', () => {
+  const a = rollup([...rows('Zebra', 'this_uta', 4, 2), ...rows('Alpha', 'this_uta', 4, 2)]);
+  const b = rollup([...rows('Alpha', 'this_uta', 4, 2), ...rows('Zebra', 'this_uta', 4, 2)]);
+  assert.deepStrictEqual(a.services.map(s => s.service), b.services.map(s => s.service));
+  assert.deepStrictEqual(a.services.map(s => s.service), ['Alpha', 'Zebra']);
+});
+
+test('an empty cycle yields zeroes rather than NaN or a throw', () => {
+  assert.deepStrictEqual(rollup([]), { services: [], total: 0, done: 0, pct: 0, deferred: 0 });
+  assert.deepStrictEqual(rollup(null), { services: [], total: 0, done: 0, pct: 0, deferred: 0 });
+});
+
+test('a blank title is skipped rather than becoming an empty bar', () => {
+  const r = rollup([{ title: '  ', urgency: 'this_uta', done: false },
+                    ...rows('MHA', 'this_uta', 2, 1)]);
+  assert.deepStrictEqual(r.services.map(s => s.service), ['MHA']);
+  assert.strictEqual(r.total, 2);
 });

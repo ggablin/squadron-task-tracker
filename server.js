@@ -2073,18 +2073,21 @@ app.get('/api/squadron/categories', requireAuth, requireRole('leadership'), asyn
 });
 
 // ── Medical services rollup (leadership only) ────────────────────────────────
-// "How many of each service do we need?" — the Chief's question, which the
-// category breakdown cannot answer because it reports Medical / Fitness as a
-// single percentage. Counts distinct MEMBERS per service, since a member owing
-// PHAQ and DHA3 is one person needing assessments, not two.
+// "How many of each service do we need, and how many are done?" — the Chief's
+// question, which the category card cannot answer because it reports Medical /
+// Fitness as one percentage across PT tests, blood draws, dental and assessments
+// alike.
 //
-// Informational rows are excluded on the same rule as every other rollup: a
-// notice about an upcoming requirement is not someone who needs an appointment
-// booked this UTA.
+// The service is the task TITLE. `details` is deliberately not read: on production
+// it holds instructions and appointment times, never a service name.
+//
+// Informational rows are excluded on the same rule as every other rollup, and
+// lib/medical.js additionally drops duty qualifications and anything flagged for a
+// later UTA — reporting the latter as `deferred` rather than swallowing it.
 app.get('/api/squadron/medical', requireAuth, requireRole('leadership'), async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT t.member_id, t.title, t.details, (tc.state = 'done') AS done
+      SELECT t.title, t.urgency, (tc.state = 'done') AS done
         FROM tasks t
         JOIN task_categories cat ON cat.id = t.category_id
         LEFT JOIN task_completions tc ON tc.task_id = t.id
