@@ -62,6 +62,7 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
 (async () => {
   try {
     await withDeadlockRetry('schema migration', () => pool.query(`
+      ALTER TABLE shops ADD COLUMN IF NOT EXISTS manages_work_orders BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by_id INTEGER REFERENCES members(id);
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES members(id);
@@ -212,6 +213,18 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
       END $$;
     `));
 
+    // Work control belongs to Operations, so turn the flag on there once. The NOT
+    // EXISTS guard is what makes this safe to run on every boot: it fires only
+    // while no shop holds the flag, so moving work control to another shop — or
+    // deliberately switching it off — survives the next deploy instead of being
+    // silently undone. Named 'Operations' to match the roster; if that shop is
+    // absent or renamed this simply does nothing and the flag can be set by hand.
+    await pool.query(`
+      UPDATE shops SET manages_work_orders = true
+       WHERE name = 'Operations'
+         AND NOT EXISTS (SELECT 1 FROM shops WHERE manages_work_orders)
+    `);
+
     // Recover sign-ins that predate last_login_at. connect-pg-simple keeps a row
     // per live session with expire = last activity + the 30-day cookie maxAge, so
     // expire - 30 days reconstructs roughly when that session was last used.
@@ -281,6 +294,52 @@ async function requireRosterAdmin(req, res, next) {
   }
 }
 
+// ── Work control ─────────────────────────────────────────────────────────────
+// Operations creates, distributes and closes work orders for the whole squadron,
+// so its members reach every shop's work orders regardless of rank — Work Control
+// includes an Airman, and rank is the wrong axis for a job description.
+//
+// Read from the shop on each request rather than from req.session, for the same
+// reason requireRosterAdmin does: moving someone out of Operations then takes
+// their reach away immediately instead of whenever their session happens to end.
+async function managesWorkOrders(memberId) {
+  const { rows } = await pool.query(
+    `SELECT s.manages_work_orders
+       FROM members m JOIN shops s ON s.id = m.shop_id
+      WHERE m.id = $1 AND m.active`, [memberId]);
+  return rows.length ? rows[0].manages_work_orders === true : false;
+}
+
+// Gate for the shop_events write endpoints, which carry schedules and emphasis
+// items as well as work orders.
+//
+// A supervisor or leader passes on rank and keeps exactly the reach they had.
+// Work control passes on the shop flag alone, so req.woOnly marks a caller whose
+// only claim is work control — every handler below must then refuse anything
+// that is not a work order, in their own shop as much as anyone else's. Without
+// that check the flag would hand an Operations Airman the squadron's schedules.
+async function requireWorkOrderWriter(req, res, next) {
+  try {
+    const rank = { member: 0, supervisor: 1, leadership: 2 }[req.session.role] ?? -1;
+    req.woManager = await managesWorkOrders(req.session.memberId);
+    if (rank >= 1) return next();
+    if (req.woManager) { req.woOnly = true; return next(); }
+    return res.status(403).json({ error: 'Forbidden' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+// True when this caller may act on a work order belonging to `shopId`. Leadership
+// keeps its existing reach over every event in every shop; work control gets the
+// same reach but only for work orders; everyone else is held to their own shop.
+function mayTouchEvent(req, shopId, eventType) {
+  if (shopId === req.session.shopId) return !req.woOnly || eventType === 'work_order';
+  if (req.session.role === 'leadership') return true;
+  return !!req.woManager && eventType === 'work_order';
+}
+
 // Blocks every state-changing endpoint until a defaulted account sets its own
 // password. Session flag is set from members.must_change_password at login and
 // cleared by POST /api/auth/password. Read-only endpoints are intentionally
@@ -346,7 +405,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!slug || !password) return res.status(400).json({ error: 'Missing credentials' });
 
     const { rows } = await pool.query(
-      `SELECT m.*, s.name AS shop_name,
+      `SELECT m.*, s.name AS shop_name, s.manages_work_orders,
               (SELECT name FROM uta_cycles WHERE is_current = true LIMIT 1) AS uta_name
        FROM members m JOIN shops s ON s.id = m.shop_id
        WHERE m.slug = $1 AND m.active = true`,
@@ -373,6 +432,10 @@ app.post('/api/auth/login', async (req, res) => {
     // Capability, not derived from role — see requireRosterAdmin. member.* comes
     // from `SELECT m.*` above, so can_manage_roster is already present here.
     req.session.canManageRoster = !!member.can_manage_roster;
+    // Drives the UI only. Every work-order endpoint re-reads the shop flag from
+    // the database (see managesWorkOrders), so moving someone out of Operations
+    // takes their powers away without waiting for their session to expire.
+    req.session.managesWorkOrders = !!member.manages_work_orders;
 
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Session save failed' });
@@ -724,7 +787,8 @@ app.get('/api/members/:id/history', requireAuth, requireOnboarded, async (req, r
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT m.id, m.first_name, m.last_name, m.rank, m.role, m.slug, m.must_change_password, s.name AS shop,
+      `SELECT m.id, m.first_name, m.last_name, m.rank, m.role, m.slug, m.must_change_password, s.name AS shop, m.shop_id,
+              s.manages_work_orders,
               (SELECT name FROM uta_cycles WHERE is_current = true LIMIT 1) AS uta_name
        FROM members m JOIN shops s ON s.id = m.shop_id
        WHERE m.id = $1`,
@@ -1427,9 +1491,44 @@ app.get('/api/shop/events', requireAuth, async (req, res) => {
   }
 });
 
-// ── Create Shop Event (supervisor: own shop, leadership: any) ────────────────
+// ── Work-order board (work control only) ─────────────────────────────────────
+// Every shop's work orders for the live cycle in one list, with the shop named on
+// each row. Operations works from this rather than the My Shop switcher, which is
+// scoped to a leader's flight and would show them three shops out of ten — and is
+// closed to a plain member entirely.
+//
+// Deliberately separate from /api/shop/events: that endpoint answers "what is
+// happening in one shop" and feeds the schedule pane too, so widening it to every
+// shop would drag other shops' schedules into views that are meant to be local.
+app.get('/api/work-orders', requireAuth, async (req, res) => {
+  try {
+    if (!(await managesWorkOrders(req.session.memberId))) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { rows } = await pool.query(`
+      SELECT se.id, se.shop_id, s.name AS shop, se.event_type, se.day,
+             se.start_time, se.end_time, se.title, se.details, se.wo_number,
+             se.status, se.sort_order
+        FROM shop_events se
+        JOIN shops s ON s.id = se.shop_id
+       WHERE se.event_type = 'work_order'
+         AND se.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+       ORDER BY s.name, se.sort_order, se.id
+    `);
+    const { rows: shops } = await pool.query(
+      'SELECT id, name FROM shops ORDER BY name');
+    res.json({ work_orders: rows, shops });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
-app.post('/api/shop/events', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
+// ── Create Shop Event ────────────────────────────────────────────────────────
+// Supervisor: own shop. Leadership: any shop. Work control: work orders in any
+// shop, and nothing else anywhere — see requireWorkOrderWriter.
+
+app.post('/api/shop/events', requireAuth, requireWorkOrderWriter, requireOnboarded, async (req, res) => {
   try {
     const { event_type, day, start_time, end_time, title, details, wo_number, shop_id } = req.body;
     if (!title) return res.status(400).json({ error: 'title is required' });
@@ -1437,9 +1536,13 @@ app.post('/api/shop/events', requireAuth, requireRole('supervisor'), requireOnbo
       return res.status(400).json({ error: 'event_type must be schedule, work_order, or emphasis' });
     }
 
-    const targetShopId = req.session.role === 'leadership' && shop_id ? shop_id : req.session.shopId;
-    if (req.session.role === 'supervisor' && shop_id && shop_id !== req.session.shopId) {
-      return res.status(403).json({ error: 'Cannot add events to other shops' });
+    // An explicit shop_id is honoured or refused — never quietly rewritten to the
+    // caller's own shop, which would file a work order against the wrong shop and
+    // look like it worked.
+    const targetShopId = shop_id ? reqId(shop_id) : req.session.shopId;
+    if (!targetShopId) return res.status(400).json({ error: 'Invalid shop_id' });
+    if (!mayTouchEvent(req, targetShopId, event_type)) {
+      return res.status(403).json({ error: 'Cannot add that event to that shop' });
     }
 
     const { rows: [event] } = await pool.query(`
@@ -1458,15 +1561,18 @@ app.post('/api/shop/events', requireAuth, requireRole('supervisor'), requireOnbo
   }
 });
 
-// ── Delete Shop Event (supervisor: own shop, leadership: any) ────────────────
+// ── Delete Shop Event ─────────────────────────────────────────────────
+// Same reach as create: work control may delete a work order in any shop, and
+// nothing that is not a work order.────
 
-app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
+app.delete('/api/shop/events/:id', requireAuth, requireWorkOrderWriter, requireOnboarded, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id);
-    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    const { rows: er } = await pool.query(
+      'SELECT shop_id, event_type FROM shop_events WHERE id = $1', [eventId]);
     if (!er.length) return res.status(404).json({ error: 'Event not found' });
-    if (req.session.role === 'supervisor' && er[0].shop_id !== req.session.shopId) {
-      return res.status(403).json({ error: 'Cannot delete events from other shops' });
+    if (!mayTouchEvent(req, er[0].shop_id, er[0].event_type)) {
+      return res.status(403).json({ error: 'Cannot delete that event' });
     }
 
     await pool.query('DELETE FROM shop_events WHERE id = $1', [eventId]);
@@ -1477,11 +1583,11 @@ app.delete('/api/shop/events/:id', requireAuth, requireRole('supervisor'), requi
   }
 });
 
-// ── Edit Shop Event (supervisor: own shop, leadership: any) ──────────────────
+// ── Edit Shop Event ──────────────────────────────────────────────────────
 // Status is intentionally not editable here — it changes only via the status
 // endpoint so the history log stays authoritative.
 
-app.put('/api/shop/events/:id', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
+app.put('/api/shop/events/:id', requireAuth, requireWorkOrderWriter, requireOnboarded, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id);
     const { event_type, day, start_time, end_time, title, details, wo_number } = req.body;
@@ -1490,10 +1596,16 @@ app.put('/api/shop/events/:id', requireAuth, requireRole('supervisor'), requireO
       return res.status(400).json({ error: 'event_type must be schedule, work_order, or emphasis' });
     }
 
-    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    const { rows: er } = await pool.query(
+      'SELECT shop_id, event_type FROM shop_events WHERE id = $1', [eventId]);
     if (!er.length) return res.status(404).json({ error: 'Event not found' });
-    if (req.session.role === 'supervisor' && er[0].shop_id !== req.session.shopId) {
-      return res.status(403).json({ error: 'Cannot edit events from other shops' });
+    // Both the stored type and the submitted one are checked. Testing only the
+    // stored type would let work control rewrite a work order into that shop's
+    // schedule — a row it could never have created — and so walk out of its own
+    // scope one edit at a time.
+    if (!mayTouchEvent(req, er[0].shop_id, er[0].event_type)
+        || !mayTouchEvent(req, er[0].shop_id, event_type)) {
+      return res.status(403).json({ error: 'Cannot edit that event' });
     }
 
     const { rows: [event] } = await pool.query(`
@@ -1528,10 +1640,15 @@ app.put('/api/shop/events/:id/status', requireAuth, requireOnboarded, async (req
       return res.status(400).json({ error: 'A details note is required' });
     }
 
-    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    const { rows: er } = await pool.query(
+      'SELECT shop_id, event_type FROM shop_events WHERE id = $1', [eventId]);
     if (!er.length) return res.status(404).json({ error: 'Event not found' });
-    // Members and supervisors may only touch their own shop; leadership any shop.
-    if (req.session.role !== 'leadership' && er[0].shop_id !== req.session.shopId) {
+    // Members and supervisors may only touch their own shop; leadership any shop;
+    // work control any shop's work orders — closing them is the last third of
+    // "create, distribute and close" and is the whole point of the flag.
+    if (er[0].shop_id !== req.session.shopId && req.session.role !== 'leadership'
+        && !(er[0].event_type === 'work_order'
+             && await managesWorkOrders(req.session.memberId))) {
       return res.status(403).json({ error: 'Cannot update events outside your shop' });
     }
 
@@ -1558,9 +1675,14 @@ app.put('/api/shop/events/:id/status', requireAuth, requireOnboarded, async (req
 app.get('/api/shop/events/:id/log', requireAuth, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id);
-    const { rows: er } = await pool.query('SELECT shop_id FROM shop_events WHERE id = $1', [eventId]);
+    const { rows: er } = await pool.query(
+      'SELECT shop_id, event_type FROM shop_events WHERE id = $1', [eventId]);
     if (!er.length) return res.status(404).json({ error: 'Event not found' });
-    if (req.session.role !== 'leadership' && er[0].shop_id !== req.session.shopId) {
+    // Matches the status endpoint's rule — work control can write this history for
+    // any shop's work order, so it has to be able to read it back.
+    if (er[0].shop_id !== req.session.shopId && req.session.role !== 'leadership'
+        && !(er[0].event_type === 'work_order'
+             && await managesWorkOrders(req.session.memberId))) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
