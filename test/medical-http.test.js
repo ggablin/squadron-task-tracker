@@ -1,7 +1,7 @@
-// HTTP coverage for /api/squadron/medical — the parsing itself is pinned in
-// medical.test.js, so this proves the three things only a real request can:
-// who may read it, that it reads the live cycle, and that it applies the same
-// informational rule as every other rollup.
+// HTTP coverage for /api/squadron/medical. The arithmetic is pinned in
+// medical.test.js; this proves the things only a real request can — who may read
+// it, that it reads the live cycle, that it reads TITLES rather than details, and
+// that it applies the same informational rule as every other rollup.
 //
 // DATABASE_URL must be set to the same throwaway Postgres as TEST_DATABASE_URL
 // before requiring server.js, since the app builds its pool at module-load time.
@@ -74,71 +74,74 @@ async function seedWorld() {
       [slug, shop, role, slug, hash]);
     return id;
   };
-  const a = await member('alpha', 'member');
-  const b = await member('bravo', 'member');
-  // tasks carries UNIQUE (uta_cycle_id, member_id, category_id, title), so one
-  // member gets exactly one "Medical / Dental" row per cycle — which is precisely
-  // why every service they owe is packed into that row's details. The notice below
-  // therefore needs a member of its own.
-  const c = await member('charlie', 'member');
+  const ids = [];
+  for (const n of ['a', 'b', 'c', 'd', 'e']) ids.push(await member('m' + n, 'member'));
   await member('suptest', 'supervisor');
   await member('leadtest', 'leadership');
 
-  const task = (cycle, who, catId, title, details, urgency = 'this_uta') => pool.query(
-    `INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, details, urgency)
-     VALUES ($1,$2,$3,$4,$5,$6)`, [cycle, who, catId, title, details, urgency]);
+  // Real production detail text, so a regression to reading `details` shows up as
+  // a service literally called "Need to get Height/Weight/Waist measured...".
+  const task = (cycle, who, catId, title, details, urgency, done) => pool.query(
+    `WITH t AS (
+       INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, details, urgency)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id)
+     INSERT INTO task_completions (task_id, completed_by_id, state)
+     SELECT t.id, $2, 'done' FROM t WHERE $7`,
+    [cycle, who, catId, title, details, urgency, !!done]);
 
-  await task(live, a, medCat, 'Medical / Dental', 'PHAQ / DHA3');
-  await task(live, b, medCat, 'Medical / Dental', 'MMR / HIV Blood Draw');
-  await task(live, a, medCat, 'PT Test', 'Due Sep 2026');
-  // Must not appear: a notice, a CBT, and a medical row from a dead cycle.
-  // charlie holds ONLY the notice, so if it leaked he would show up in
-  // totalMembers as well as in the service list — two ways to catch it.
-  await task(live, c, medCat, 'Medical / Dental', 'Sleep Study', 'info');
-  await task(live, a, cbtCat, 'Cyber Awareness', null);
-  await task(old,  b, medCat, 'Medical / Dental', 'Audiogram');
+  const [a, b, c, d, e] = ids;
+  await task(live, a, medCat, 'BCA Assessment', 'Need to get Height/Weight/Waist measured Saturday @ 1030hrs', 'this_uta', true);
+  await task(live, b, medCat, 'BCA Assessment', 'Need to get Height/Weight/Waist measured Saturday @ 0930hrs', 'this_uta', false);
+  await task(live, c, medCat, 'HIV Blood Draw', 'Walk-in Saturday 0900-1400', 'this_uta', false);
+  await task(live, d, medCat, 'PT Test', 'Need to go into MyFitness and schedule PT Test for next Drill', 'next_uta', false);
+  await task(live, e, medCat, 'PTL Training', 'FSS Classroom @0930', 'this_uta', true);
+  // Excluded: a notice, a non-medical category, a dead cycle.
+  await task(live, c, medCat, 'Sleep Study', null, 'info', false);
+  await task(live, a, cbtCat, 'Cyber Awareness', null, 'this_uta', false);
+  await task(old,  b, medCat, 'Audiogram', 'Saturday 6 June @ 1300hrs', 'this_uta', false);
 
-  return { shop, live, old };
+  return { live, old };
 }
 
-test('leadership gets the rollup, grouped and counted by member', async () => {
+const names = body => body.services.map(s => s.service).sort();
+
+test('services are task titles, with x of y done and a percentage', async () => {
   await seedWorld();
   const res = await get('/api/squadron/medical', await login('leadtest'));
   assert.strictEqual(res.status, 200);
   const body = await res.json();
 
-  const g = Object.fromEntries(body.groups.map(x => [x.group, x.people]));
-  assert.strictEqual(g['Health Assessments'], 1, 'alpha owes PHAQ and DHA3 — one person');
-  assert.strictEqual(g['Immunizations'], 1);
-  assert.strictEqual(g['Labs & Bloodwork'], 1);
-  assert.strictEqual(g['Fitness'], 1);
-  assert.strictEqual(body.totalMembers, 2);
-
-  const ha = body.groups.find(x => x.group === 'Health Assessments');
-  assert.deepStrictEqual(ha.services.map(s => s.service).sort(), ['DHA3', 'PHAQ']);
+  assert.deepStrictEqual(names(body), ['BCA Assessment', 'HIV Blood Draw']);
+  const bca = body.services.find(s => s.service === 'BCA Assessment');
+  assert.deepStrictEqual({ done: bca.done, total: bca.total, pct: bca.pct },
+    { done: 1, total: 2, pct: 50 });
+  assert.strictEqual(body.total, 3);
+  assert.strictEqual(body.done, 1);
 });
 
-test('informational medical rows are excluded, like every other rollup', async () => {
+test('the appointment text in details never becomes a service', async () => {
   await seedWorld();
   const body = await (await get('/api/squadron/medical', await login('leadtest'))).json();
-  const services = body.groups.flatMap(g => g.services.map(s => s.service));
-  assert.ok(!services.includes('Sleep Study'),
-    "a notice is not somebody who needs an appointment booked");
+  const joined = names(body).join(' | ');
+  assert.ok(!/Height|Waist|Walk-in|Classroom|Saturday/.test(joined),
+    `details leaked into the service list: ${joined}`);
 });
 
-test('only the live cycle counts', async () => {
+test('a PT test set for next UTA is deferred, not counted', async () => {
   await seedWorld();
   const body = await (await get('/api/squadron/medical', await login('leadtest'))).json();
-  const services = body.groups.flatMap(g => g.services.map(s => s.service));
-  assert.ok(!services.includes('Audiogram'), 'May is archived');
+  assert.ok(!names(body).includes('PT Test'));
+  assert.strictEqual(body.deferred, 1);
 });
 
-test('non-medical categories stay out', async () => {
+test('PTL Training, notices, other categories and dead cycles all stay out', async () => {
   await seedWorld();
   const body = await (await get('/api/squadron/medical', await login('leadtest'))).json();
-  const services = body.groups.flatMap(g => g.services.map(s => s.service));
-  assert.ok(!services.includes('Unspecified'),
-    'the CBT has no details but is not a medical row, so it must not appear at all');
+  const list = names(body);
+  assert.ok(!list.includes('PTL Training'), 'duty qualification');
+  assert.ok(!list.includes('Sleep Study'), 'informational');
+  assert.ok(!list.includes('Cyber Awareness'), 'not a medical category');
+  assert.ok(!list.includes('Audiogram'), 'May is archived');
 });
 
 test('a supervisor cannot read it, and nor can an anonymous request', async () => {
@@ -147,10 +150,15 @@ test('a supervisor cannot read it, and nor can an anonymous request', async () =
   assert.strictEqual((await fetch(`${baseUrl}/api/squadron/medical`)).status, 401);
 });
 
-test('a cycle with no medical tasks returns an empty rollup, not an error', async () => {
+test('a cycle with nothing due returns zeroes, not an error', async () => {
   const w = await seedWorld();
+  // completions reference tasks, so they go first
+  await pool.query(
+    `DELETE FROM task_completions WHERE task_id IN
+       (SELECT id FROM tasks WHERE uta_cycle_id = $1)`, [w.live]);
   await pool.query(`DELETE FROM tasks WHERE uta_cycle_id = $1`, [w.live]);
   const res = await get('/api/squadron/medical', await login('leadtest'));
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { groups: [], totalMembers: 0 });
+  assert.deepStrictEqual(await res.json(),
+    { services: [], total: 0, done: 0, pct: 0, deferred: 0 });
 });
