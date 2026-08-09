@@ -11,6 +11,7 @@ const cycles = require('./lib/cycles');
 // Shared with the newsletter so the app and the printed cover stat never disagree
 // about what counts as work — see lib/informational.js.
 const { informationalSql } = require('./lib/informational');
+const medical = require('./lib/medical');
 const attendance = require('./lib/attendance');
 const drillRoster = require('./lib/drill-roster');
 const schedule = require('./lib/schedule');
@@ -2065,6 +2066,33 @@ app.get('/api/squadron/categories', requireAuth, requireRole('leadership'), asyn
       ORDER BY cat.sort_order
     `);
     res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Medical services rollup (leadership only) ────────────────────────────────
+// "How many of each service do we need?" — the Chief's question, which the
+// category breakdown cannot answer because it reports Medical / Fitness as a
+// single percentage. Counts distinct MEMBERS per service, since a member owing
+// PHAQ and DHA3 is one person needing assessments, not two.
+//
+// Informational rows are excluded on the same rule as every other rollup: a
+// notice about an upcoming requirement is not someone who needs an appointment
+// booked this UTA.
+app.get('/api/squadron/medical', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT t.member_id, t.title, t.details, (tc.state = 'done') AS done
+        FROM tasks t
+        JOIN task_categories cat ON cat.id = t.category_id
+        LEFT JOIN task_completions tc ON tc.task_id = t.id
+       WHERE cat.code = 'medical'
+         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+         AND NOT ${informationalSql('cat')}
+    `);
+    res.json(medical.rollup(rows));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
