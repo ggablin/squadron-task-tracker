@@ -8,6 +8,9 @@ const crypto = require('crypto');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
+// Shared with the newsletter so the app and the printed cover stat never disagree
+// about what counts as work — see lib/informational.js.
+const { informationalSql } = require('./lib/informational');
 const attendance = require('./lib/attendance');
 const drillRoster = require('./lib/drill-roster');
 const schedule = require('./lib/schedule');
@@ -816,6 +819,7 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
              t.is_flagged,
              cat.code  AS category_code,
              cat.label AS category_label,
+             ${informationalSql('cat')} AS informational,
              COALESCE(tc.state, 'none') AS state,
              tc.note
       FROM tasks t
@@ -838,11 +842,23 @@ app.put('/api/tasks/:id', requireAuth, requireOnboarded, async (req, res) => {
     const { state, note } = req.body;
 
     const { rows: tr } = await pool.query(`
-      SELECT t.member_id, m.shop_id FROM tasks t
+      SELECT t.member_id, m.shop_id, ${informationalSql('cat')} AS informational
+      FROM tasks t
       JOIN members m ON m.id = t.member_id
+      JOIN task_categories cat ON cat.id = t.category_id
       WHERE t.id = $1
     `, [taskId]);
     if (!tr.length) return res.status(404).json({ error: 'Task not found' });
+
+    // Informational rows carry no completion. The member's list renders them
+    // without a checkbox, but that is presentation — refusing here is what makes
+    // "does not get checked off" true rather than merely hidden. A note is still
+    // allowed through, so this blocks only a state change.
+    if (tr[0].informational && state && state !== 'none') {
+      return res.status(400).json({
+        error: 'This item is informational and does not get checked off',
+      });
+    }
 
     // Members only own task; supervisors only own-shop; leadership any
     if (tr[0].member_id !== req.session.memberId && req.session.role === 'supervisor' && tr[0].shop_id !== req.session.shopId) {
@@ -1711,12 +1727,13 @@ app.get('/api/shop/members', requireAuth, async (req, res) => {
       SELECT m.id, m.last_name, m.first_name, m.rank, m.role,
              NOT m.must_change_password AS activated,
              m.last_login_at,
-             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                    AS total_tasks,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)   AS done_tasks,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'partial' AND NOT t.is_upcoming) AS partial_tasks
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                    AS total_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})   AS done_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'partial' AND NOT ${informationalSql()}) AS partial_tasks
       FROM members m
       LEFT JOIN tasks t ON t.member_id = m.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      LEFT JOIN task_categories icat ON icat.id = t.category_id
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE m.shop_id = $1 AND m.active = true
       GROUP BY m.id, m.last_name, m.first_name, m.rank, m.role,
@@ -1753,6 +1770,7 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
       SELECT t.id, t.title, t.details, t.urgency, t.is_upcoming, t.is_flagged,
              cat.code  AS category_code,
              cat.label AS category_label,
+             ${informationalSql('cat')} AS informational,
              COALESCE(tc.state, 'none') AS state,
              tc.note
       FROM tasks t
@@ -2012,12 +2030,13 @@ app.get('/api/squadron', requireAuth, requireRole('leadership'), async (req, res
     const { rows } = await pool.query(`
       SELECT s.id, s.name AS shop,
              COUNT(DISTINCT m.id)                                                           AS member_count,
-             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                                  AS total_tasks,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)            AS done_tasks
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                                  AS total_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})            AS done_tasks
       FROM shops s
       LEFT JOIN members m ON m.shop_id = s.id AND m.active = true
       LEFT JOIN tasks t ON t.member_id = m.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      LEFT JOIN task_categories icat ON icat.id = t.category_id
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       GROUP BY s.id, s.name
       ORDER BY s.name
@@ -2033,14 +2052,16 @@ app.get('/api/squadron/categories', requireAuth, requireRole('leadership'), asyn
   try {
     const { rows } = await pool.query(`
       SELECT cat.code, cat.label,
-             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                         AS total,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)  AS done
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql('cat')})                         AS total,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql('cat')})  AS done
       FROM task_categories cat
       JOIN tasks t ON t.category_id = cat.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       GROUP BY cat.code, cat.label, cat.sort_order
-      HAVING COUNT(t.id) FILTER (WHERE NOT t.is_upcoming) > 0
+      -- Upgrade Training and Upcoming now total zero, so HAVING drops them from the
+      -- breakdown entirely rather than showing a category stuck at 0%.
+      HAVING COUNT(t.id) FILTER (WHERE NOT ${informationalSql('cat')}) > 0
       ORDER BY cat.sort_order
     `);
     res.json(rows);
@@ -2054,21 +2075,22 @@ app.get('/api/squadron/members', requireAuth, requireRole('leadership'), async (
   try {
     const { rows } = await pool.query(`
       SELECT m.id, m.last_name, m.first_name, m.rank, s.name AS shop,
-             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                         AS total_tasks,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)  AS done_tasks
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                         AS total_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})  AS done_tasks
       FROM members m
       JOIN shops s ON s.id = m.shop_id
       LEFT JOIN tasks t ON t.member_id = m.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      LEFT JOIN task_categories icat ON icat.id = t.category_id
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE m.active = true
       GROUP BY m.id, m.last_name, m.first_name, m.rank, s.name
-      HAVING COUNT(t.id) FILTER (WHERE NOT t.is_upcoming) > 0
+      HAVING COUNT(t.id) FILTER (WHERE NOT ${informationalSql()}) > 0
       ORDER BY
-        (COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)::float
-          / NULLIF(COUNT(t.id) FILTER (WHERE NOT t.is_upcoming), 0)) ASC NULLS FIRST,
-        (COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)
-          - COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)) DESC
+        (COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})::float
+          / NULLIF(COUNT(t.id) FILTER (WHERE NOT ${informationalSql()}), 0)) ASC NULLS FIRST,
+        (COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})
+          - COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})) DESC
       LIMIT 10
     `);
     res.json(rows);
@@ -2082,11 +2104,12 @@ app.get('/api/squadron/shops/:shopId/members', requireAuth, requireRole('leaders
   try {
     const { rows } = await pool.query(`
       SELECT m.id, m.last_name, m.first_name, m.rank,
-             COUNT(t.id) FILTER (WHERE NOT t.is_upcoming)                         AS total_tasks,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT t.is_upcoming)  AS done_tasks
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                         AS total_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})  AS done_tasks
       FROM members m
       LEFT JOIN tasks t ON t.member_id = m.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      LEFT JOIN task_categories icat ON icat.id = t.category_id
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE m.active = true AND m.shop_id = $1
       GROUP BY m.id, m.last_name, m.first_name, m.rank

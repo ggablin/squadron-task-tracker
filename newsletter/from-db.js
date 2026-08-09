@@ -5,6 +5,7 @@
 
 const { buildOrgChart } = require('./org-chart');
 const shape = require('./shape');
+const { informationalSql } = require('../lib/informational');
 
 const MON_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -77,11 +78,17 @@ async function buildFromDb(pool, utaId) {
     shop: Array.isArray(r.attendees) && r.attendees.length ? r.attendees.map(a => a.shop).filter(Boolean).join(', ') : '',
   }));
 
-  // Cover stat strip — the same three numbers leadership reads off the app.
+  // Cover stat strip — the same three numbers leadership reads off the app, which
+  // means "Tasks this UTA" has to exclude notices exactly as the app's rollups do.
+  // A raw COUNT(*) printed 113 here against the app's 102 on the August cycle.
   const { rows: [counts] } = await pool.query(`
     SELECT (SELECT COUNT(*) FROM members WHERE active) AS members,
            (SELECT COUNT(*) FROM shops)                AS shops,
-           (SELECT COUNT(*) FROM tasks WHERE uta_cycle_id = $1) AS tasks
+           (SELECT COUNT(*)
+              FROM tasks t
+              JOIN task_categories icat ON icat.id = t.category_id
+             WHERE t.uta_cycle_id = $1
+               AND NOT ${informationalSql()}) AS tasks
   `, [utaId]);
 
   return {
