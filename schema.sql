@@ -272,6 +272,24 @@ CREATE INDEX IF NOT EXISTS idx_documents_listing
 -- server.js's startup block, which is what production actually runs.
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime VARCHAR(120) NOT NULL DEFAULT 'application/pdf';
 
+-- Student Flight: trainees awaiting BMT / Tech School, flagged on the member so
+-- they keep their shop, login and tasks. The First Sergeant's tracking dates all
+-- ride along; they mean nothing unless is_student_flight is set.
+ALTER TABLE members ADD COLUMN IF NOT EXISTS is_student_flight BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS bmt_start     DATE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS bmt_grad      DATE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS tech_start    DATE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS tech_grad     DATE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS student_notes VARCHAR(500);
+
+-- Task helpers: an optional link and/or an attached Resources form per task.
+-- These sit BELOW the documents table on purpose — document_id's REFERENCES
+-- would hit "relation does not exist" inside the earlier migration DO block on
+-- a fresh database, and that block's exception guard swallows errors (see the
+-- notifications_type_check comment above for the crater that causes).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS link_url    VARCHAR(500);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS document_id INTEGER REFERENCES documents(id);
+
 -- Session storage for connect-pg-simple
 CREATE TABLE IF NOT EXISTS session (
   sid    VARCHAR    NOT NULL COLLATE "default",

@@ -11,6 +11,8 @@ const cycles = require('./lib/cycles');
 // Shared with the newsletter so the app and the printed cover stat never disagree
 // about what counts as work — see lib/informational.js.
 const { informationalSql } = require('./lib/informational');
+// Who counts as "present at drill" for the two-way rollup percentages.
+const { presenceJoinSql, presentExpr } = require('./lib/presence');
 const medical = require('./lib/medical');
 const attendance = require('./lib/attendance');
 const drillRoster = require('./lib/drill-roster');
@@ -179,6 +181,17 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
       -- column added after the first deploy needs its own ALTER or it is simply
       -- absent on every database that already ran the earlier version.
       ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime VARCHAR(120) NOT NULL DEFAULT 'application/pdf';
+      -- Student Flight tracking (First Sergeant): flagged on the member, dates ride along.
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS is_student_flight BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS bmt_start     DATE;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS bmt_grad      DATE;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS tech_start    DATE;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS tech_grad     DATE;
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS student_notes VARCHAR(500);
+      -- Task helpers: optional link and/or attached Resources form per task.
+      -- document_id's REFERENCES needs the documents table, created just above.
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS link_url    VARCHAR(500);
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS document_id INTEGER REFERENCES documents(id);
     `));
     console.log('Migration check complete');
 
@@ -370,6 +383,48 @@ function pickFields(body, allowed) {
     if (Object.prototype.hasOwnProperty.call(body, k)) out[k] = body[k];
   }
   return out;
+}
+
+// ── Task helpers (link + attached form) ──────────────────────────────────────
+// Shared by every task-authoring route so a link or form behaves identically
+// whether the task came from a supervisor, a leadership bulk add, or /build.
+// Returns { link_url, document_id } normalized, or { error } for a 400.
+//
+// The URL scheme check matters: these strings are rendered as anchors in the
+// member's list, and http(s)-only keeps a stray "javascript:" out of an href.
+async function resolveTaskHelpers(body) {
+  const out = { link_url: null, document_id: null };
+  const link = trimOrNull(body.link_url, 500);
+  if (link) {
+    if (!/^https?:\/\//i.test(link)) return { error: 'Link must start with http:// or https://' };
+    out.link_url = link;
+  }
+  if (body.document_id != null && body.document_id !== '') {
+    const docId = reqId(body.document_id);
+    if (!docId) return { error: 'Invalid document' };
+    const { rows } = await pool.query(
+      'SELECT id FROM documents WHERE id = $1 AND active = true', [docId]);
+    if (!rows.length) return { error: 'That form is no longer in the Resources library' };
+    out.document_id = docId;
+  }
+  return out;
+}
+
+// Edit-flavored twin for the pickFields routes: validates and normalizes only
+// the helper keys the caller actually sent (absent = leave alone, null/'' =
+// clear), mutating `fields` in place. Returns an error string or null.
+async function validateHelperFields(fields) {
+  if ('link_url' in fields) {
+    const link = trimOrNull(fields.link_url, 500);
+    if (link && !/^https?:\/\//i.test(link)) return 'Link must start with http:// or https://';
+    fields.link_url = link;
+  }
+  if ('document_id' in fields) {
+    const h = await resolveTaskHelpers({ document_id: fields.document_id });
+    if (h.error) return h.error;
+    fields.document_id = h.document_id;
+  }
+  return null;
 }
 
 // Single mapping from lib/tasks.js error codes to HTTP responses, so all four
@@ -818,6 +873,7 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
       SELECT t.id, t.title, t.details, t.urgency,
              t.appt_day, t.appt_time, t.appt_location, t.is_upcoming,
              t.is_flagged,
+             t.link_url, t.document_id, d.title AS document_title,
              cat.code  AS category_code,
              cat.label AS category_label,
              ${informationalSql('cat')} AS informational,
@@ -825,6 +881,7 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
              tc.note
       FROM tasks t
       JOIN task_categories cat ON cat.id = t.category_id
+      LEFT JOIN documents d ON d.id = t.document_id AND d.active = true
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE t.member_id = $1
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
@@ -915,15 +972,19 @@ app.post('/api/tasks', requireAuth, requireRole('supervisor'), requireOnboarded,
     );
     if (!catRows.length) return res.status(400).json({ error: 'Invalid category_code' });
 
+    const helpers = await resolveTaskHelpers(req.body);
+    if (helpers.error) return res.status(400).json({ error: helpers.error });
+
     const { rows: [task] } = await pool.query(`
       INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, details, urgency,
-                         appt_day, appt_time, appt_location, is_upcoming, created_by_id, sort_order)
+                         appt_day, appt_time, appt_location, is_upcoming, link_url, document_id,
+                         created_by_id, sort_order)
       VALUES ((SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1),
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 99)
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 99)
       RETURNING *
     `, [member_id, catRows[0].id, title, details || null, urgency || 'this_uta',
         appt_day || null, appt_time || null, appt_location || null,
-        is_upcoming || false, req.session.memberId]);
+        is_upcoming || false, helpers.link_url, helpers.document_id, req.session.memberId]);
 
     // Notify the assignee (but not a supervisor assigning a task to themselves).
     if (member_id !== req.session.memberId) {
@@ -970,19 +1031,23 @@ app.post('/api/squadron/tasks', requireAuth, requireRole('leadership'), requireO
     );
     if (!catRows.length) return res.status(400).json({ error: 'Invalid category_code' });
 
+    const helpers = await resolveTaskHelpers(req.body);
+    if (helpers.error) return res.status(400).json({ error: helpers.error });
+
     // Insert one task per active recipient in a single statement.
     // shopId NULL ⇒ every active member (whole squadron).
     const { rows } = await pool.query(`
       INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, details, urgency,
-                         appt_day, appt_time, appt_location, is_upcoming, created_by_id, sort_order)
+                         appt_day, appt_time, appt_location, is_upcoming, link_url, document_id,
+                         created_by_id, sort_order)
       SELECT (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1),
-             m.id, $1, $2, $3, $4, $5, $6, $7, false, $8, 99
+             m.id, $1, $2, $3, $4, $5, $6, $7, false, $8, $9, $10, 99
       FROM members m
-      WHERE m.active = true AND ($9::int IS NULL OR m.shop_id = $9)
+      WHERE m.active = true AND ($11::int IS NULL OR m.shop_id = $11)
       RETURNING member_id
     `, [catRows[0].id, title, details || null, urgency || 'this_uta',
         appt_day || null, appt_time || null, appt_location || null,
-        req.session.memberId, shopId]);
+        helpers.link_url, helpers.document_id, req.session.memberId, shopId]);
 
     // Notify every recipient except the leader who issued the bulk task.
     await notify(
@@ -1333,8 +1398,11 @@ app.post('/api/cycles/:id/tasks', requireAuth, requireRole('leadership'), requir
     if (!assignments.every(a => Array.isArray(a.member_ids) && a.member_ids.length && a.member_ids.every(Number.isInteger))) {
       return res.status(400).json({ error: 'each assignment needs a non-empty member_ids array of integers' });
     }
+    const helpers = await resolveTaskHelpers(req.body);
+    if (helpers.error) return res.status(400).json({ error: helpers.error });
     const r = await addTaskBatch(pool, id, {
-      title, category_code, details, assignments, created_by_id: req.session.memberId,
+      title, category_code, details, link_url: helpers.link_url, document_id: helpers.document_id,
+      assignments, created_by_id: req.session.memberId,
     });
 
     // A task added to the LIVE cycle is visible to its members the moment it
@@ -1378,11 +1446,13 @@ app.put('/api/cycles/:id/groups', requireAuth, requireRole('leadership'), requir
   const { category_code, title } = req.body || {};
   if (!category_code || !title) return res.status(400).json({ error: 'category_code and title are required' });
 
-  const fields = pickFields(req.body, ['urgency', 'details']);
+  const fields = pickFields(req.body, ['urgency', 'details', 'link_url', 'document_id']);
   if ('urgency' in fields && !VALID_URGENCY.includes(fields.urgency)) {
     return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
   }
   try {
+    const helperErr = await validateHelperFields(fields);
+    if (helperErr) return res.status(400).json({ error: helperErr });
     const out = await tasksLib.updateGroup(pool, cycleId, { category_code, title }, fields);
     if (out.escalated_member_ids?.length) {
       await notify(out.escalated_member_ids, {
@@ -1403,7 +1473,7 @@ app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), req
   const taskId = reqId(req.params.id);
   if (!taskId) return res.status(400).json({ error: 'Invalid id' });
 
-  const fields = pickFields(req.body, ['urgency', 'details', 'appt_day', 'appt_time', 'appt_location']);
+  const fields = pickFields(req.body, ['urgency', 'details', 'appt_day', 'appt_time', 'appt_location', 'link_url', 'document_id']);
   if ('urgency' in fields && !VALID_URGENCY.includes(fields.urgency)) {
     return res.status(400).json({ error: `urgency must be one of: ${VALID_URGENCY.join(', ')}` });
   }
@@ -1419,6 +1489,8 @@ app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), req
       return res.status(403).json({ error: 'Cannot edit tasks outside your shop' });
     }
 
+    const helperErr = await validateHelperFields(fields);
+    if (helperErr) return res.status(400).json({ error: helperErr });
     const out = await tasksLib.updateTask(pool, taskId, fields);
     if (out.escalated_member_ids?.length) {
       const { rows: [t] } = await pool.query(`SELECT title FROM tasks WHERE id=$1`, [taskId]);
@@ -1769,6 +1841,7 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
 
     const { rows } = await pool.query(`
       SELECT t.id, t.title, t.details, t.urgency, t.is_upcoming, t.is_flagged,
+             t.link_url, t.document_id, d.title AS document_title,
              cat.code  AS category_code,
              cat.label AS category_label,
              ${informationalSql('cat')} AS informational,
@@ -1776,11 +1849,45 @@ app.get('/api/shop/members/:id/tasks', requireAuth, requireRole('supervisor'), a
              tc.note
       FROM tasks t
       JOIN task_categories cat ON cat.id = t.category_id
+      LEFT JOIN documents d ON d.id = t.document_id AND d.active = true
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE t.member_id = $1
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       ORDER BY cat.sort_order, t.is_flagged DESC NULLS LAST, t.sort_order, t.id
     `, [memberId]);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Shop tasks by category (supervisor: own shop, leadership: any via switcher) ─
+// The "category view" of My Shop: the same work the member list holds, re-cut
+// as category → task → who's done it. Informational rows are excluded — this
+// view exists to chase completable work. Members marked away by attendance are
+// flagged so "not done" can be read fairly on the drill floor.
+app.get('/api/shop/tasks', requireAuth, requireRole('supervisor'), async (req, res) => {
+  try {
+    const targetShopId = req.session.role === 'leadership' && req.query.shop_id
+      ? parseInt(req.query.shop_id) : req.session.shopId;
+    const { rows } = await pool.query(`
+      SELECT t.id, t.title, t.details, t.urgency, t.is_flagged,
+             cat.code  AS category_code,
+             cat.label AS category_label,
+             m.id AS member_id, m.rank, m.last_name, m.first_name,
+             ${presentExpr()} AS present,
+             COALESCE(tc.state, 'none') AS state,
+             tc.note
+      FROM tasks t
+      JOIN task_categories cat ON cat.id = t.category_id
+      JOIN members m ON m.id = t.member_id AND m.active = true AND m.shop_id = $1
+      ${presenceJoinSql()}
+      LEFT JOIN task_completions tc ON tc.task_id = t.id
+      WHERE t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+        AND NOT ${informationalSql('cat')}
+      ORDER BY cat.sort_order, t.title, m.last_name, m.first_name
+    `, [targetShopId]);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -2026,15 +2133,22 @@ app.get('/api/squadron/timeline', requireAuth, async (req, res) => {
 
 // ── Squadron (leadership only) ────────────────────────────────────────────────
 
+// Each count comes in an all-members and a present-members flavor (same rule
+// everywhere: lib/presence.js). The client renders whichever the Present/All
+// toggle selects; nothing is recomputed server-side on toggle.
 app.get('/api/squadron', requireAuth, requireRole('leadership'), async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT s.id, s.name AS shop,
              COUNT(DISTINCT m.id)                                                           AS member_count,
+             COUNT(DISTINCT m.id) FILTER (WHERE ${presentExpr()})                           AS present_count,
              COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                                  AS total_tasks,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})            AS done_tasks
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})            AS done_tasks,
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql()} AND ${presentExpr()})              AS total_tasks_present,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()} AND ${presentExpr()}) AS done_tasks_present
       FROM shops s
       LEFT JOIN members m ON m.shop_id = s.id AND m.active = true
+      ${presenceJoinSql()}
       LEFT JOIN tasks t ON t.member_id = m.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       LEFT JOIN task_categories icat ON icat.id = t.category_id
@@ -2054,10 +2168,13 @@ app.get('/api/squadron/categories', requireAuth, requireRole('leadership'), asyn
     const { rows } = await pool.query(`
       SELECT cat.code, cat.label,
              COUNT(t.id) FILTER (WHERE NOT ${informationalSql('cat')})                         AS total,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql('cat')})  AS done
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql('cat')})  AS done,
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql('cat')} AND ${presentExpr()})    AS total_present,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql('cat')} AND ${presentExpr()}) AS done_present
       FROM task_categories cat
       JOIN tasks t ON t.category_id = cat.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      ${presenceJoinSql('att', 't.member_id')}
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       GROUP BY cat.code, cat.label, cat.sort_order
       -- Upgrade Training and Upcoming now total zero, so HAVING drops them from the
@@ -2065,6 +2182,42 @@ app.get('/api/squadron/categories', requireAuth, requireRole('leadership'), asyn
       HAVING COUNT(t.id) FILTER (WHERE NOT ${informationalSql('cat')}) > 0
       ORDER BY cat.sort_order
     `);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Category drill-in (leadership only) ──────────────────────────────────────
+// "63% on CBTs" begs the next question — which CBTs, and who exactly hasn't
+// done them. One row per task title in the category, carrying done/total and
+// the members still outstanding. Members marked away by attendance are flagged
+// so a reader can tell "not done, not here" from "not done, no excuse".
+app.get('/api/squadron/categories/:code/tasks', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT t.title,
+             COUNT(t.id)                                    AS total,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done')  AS done,
+             COALESCE(json_agg(
+               json_build_object(
+                 'id', m.id, 'rank', m.rank, 'last_name', m.last_name,
+                 'first_name', m.first_name, 'shop', s.name,
+                 'present', ${presentExpr()}
+               ) ORDER BY m.last_name, m.first_name
+             ) FILTER (WHERE tc.state IS DISTINCT FROM 'done'), '[]') AS not_done
+      FROM tasks t
+      JOIN task_categories cat ON cat.id = t.category_id AND cat.code = $1
+      JOIN members m ON m.id = t.member_id AND m.active = true
+      LEFT JOIN shops s ON s.id = m.shop_id
+      ${presenceJoinSql()}
+      LEFT JOIN task_completions tc ON tc.task_id = t.id
+      WHERE t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+        AND NOT ${informationalSql('cat')}
+      GROUP BY t.title
+      ORDER BY (COUNT(t.id) - COUNT(tc.id) FILTER (WHERE tc.state = 'done')) DESC, t.title
+    `, [req.params.code]);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -2102,20 +2255,101 @@ app.get('/api/squadron/medical', requireAuth, requireRole('leadership'), async (
   }
 });
 
+// ── Student Flight (leadership only) ─────────────────────────────────────────
+// The First Sergeant's centralized list of trainees awaiting BMT / Tech School.
+// The flag lives on the member — they keep their shop, login and tasks — and
+// the pipeline dates ride along on the same row. Managed entirely from the
+// Squadron tab so any leader can maintain it without roster-admin rights;
+// these fields are tracking data, not identity, so the lighter gate fits.
+
+// Dates travel as 'YYYY-MM-DD' strings in both directions: to_char on the way
+// out (a bare DATE would leave here as local-midnight and could shift a day in
+// JSON), a shape check on the way in.
+const STUDENT_DATE_FIELDS = ['bmt_start', 'bmt_grad', 'tech_start', 'tech_grad'];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+app.get('/api/squadron/students', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows: students } = await pool.query(`
+      SELECT m.id, m.last_name, m.first_name, m.rank, s.name AS shop,
+             to_char(m.bmt_start,  'YYYY-MM-DD') AS bmt_start,
+             to_char(m.bmt_grad,   'YYYY-MM-DD') AS bmt_grad,
+             to_char(m.tech_start, 'YYYY-MM-DD') AS tech_start,
+             to_char(m.tech_grad,  'YYYY-MM-DD') AS tech_grad,
+             m.student_notes
+      FROM members m
+      LEFT JOIN shops s ON s.id = m.shop_id
+      WHERE m.active = true AND m.is_student_flight = true
+      ORDER BY m.last_name, m.first_name
+    `);
+    // Everyone who could be added — feeds the "Add member" picker.
+    const { rows: candidates } = await pool.query(`
+      SELECT m.id, m.last_name, m.first_name, m.rank, s.name AS shop
+      FROM members m
+      LEFT JOIN shops s ON s.id = m.shop_id
+      WHERE m.active = true AND m.is_student_flight = false
+      ORDER BY m.last_name, m.first_name
+    `);
+    res.json({ students, candidates });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// One route covers add (is_student_flight: true), edit (dates/notes) and
+// remove (is_student_flight: false). Absent keys leave the column alone, so
+// removing someone keeps their dates for the day they re-enter the pipeline.
+app.patch('/api/squadron/students/:id', requireAuth, requireRole('leadership'), requireOnboarded, async (req, res) => {
+  try {
+    const memberId = reqId(req.params.id);
+    if (!memberId) return res.status(400).json({ error: 'Invalid member id' });
+    const body = req.body || {};
+
+    const sets = [], vals = [];
+    const bind = (v) => { vals.push(v); return `$${vals.length}`; };
+    if ('is_student_flight' in body) sets.push(`is_student_flight = ${bind(body.is_student_flight === true)}`);
+    for (const f of STUDENT_DATE_FIELDS) {
+      if (!(f in body)) continue;
+      const v = body[f];
+      if (v != null && v !== '' && !ISO_DATE_RE.test(String(v))) {
+        return res.status(400).json({ error: `${f} must be a YYYY-MM-DD date` });
+      }
+      sets.push(`${f} = ${bind(v ? String(v) : null)}::date`);
+    }
+    if ('student_notes' in body) sets.push(`student_notes = ${bind(trimOrNull(body.student_notes, 500))}`);
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+
+    const { rowCount } = await pool.query(
+      `UPDATE members SET ${sets.join(', ')} WHERE id = ${bind(memberId)} AND active = true`, vals);
+    if (!rowCount) return res.status(404).json({ error: 'Member not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Fetches 10 of each flavor: the "most behind" ranking changes when members
+// marked away are excluded, so the present-only list is its own top-10 rather
+// than a client-side filter that could leave 3 rows standing.
 app.get('/api/squadron/members', requireAuth, requireRole('leadership'), async (req, res) => {
   try {
+    const presentOnly = req.query.present === 'true';
     const { rows } = await pool.query(`
       SELECT m.id, m.last_name, m.first_name, m.rank, s.name AS shop,
+             ${presentExpr()} AS present,
              COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                         AS total_tasks,
              COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})  AS done_tasks
       FROM members m
       JOIN shops s ON s.id = m.shop_id
+      ${presenceJoinSql()}
       LEFT JOIN tasks t ON t.member_id = m.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       LEFT JOIN task_categories icat ON icat.id = t.category_id
       LEFT JOIN task_completions tc ON tc.task_id = t.id
-      WHERE m.active = true
-      GROUP BY m.id, m.last_name, m.first_name, m.rank, s.name
+      WHERE m.active = true AND ($1::bool = false OR ${presentExpr()})
+      GROUP BY m.id, m.last_name, m.first_name, m.rank, s.name, att.any_present
       HAVING COUNT(t.id) FILTER (WHERE NOT ${informationalSql()}) > 0
       ORDER BY
         (COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})::float
@@ -2123,7 +2357,7 @@ app.get('/api/squadron/members', requireAuth, requireRole('leadership'), async (
         (COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})
           - COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})) DESC
       LIMIT 10
-    `);
+    `, [presentOnly]);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -2135,15 +2369,17 @@ app.get('/api/squadron/shops/:shopId/members', requireAuth, requireRole('leaders
   try {
     const { rows } = await pool.query(`
       SELECT m.id, m.last_name, m.first_name, m.rank,
+             ${presentExpr()} AS present,
              COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                         AS total_tasks,
              COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})  AS done_tasks
       FROM members m
+      ${presenceJoinSql()}
       LEFT JOIN tasks t ON t.member_id = m.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       LEFT JOIN task_categories icat ON icat.id = t.category_id
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       WHERE m.active = true AND m.shop_id = $1
-      GROUP BY m.id, m.last_name, m.first_name, m.rank
+      GROUP BY m.id, m.last_name, m.first_name, m.rank, att.any_present
       ORDER BY m.last_name, m.first_name
     `, [req.params.shopId]);
     res.json(rows);

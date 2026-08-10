@@ -806,6 +806,14 @@ button { font-family:inherit; cursor:pointer; }
           <textarea id="f-det" placeholder="What members see under the title"></textarea>
         </div>
         <div class="field">
+          <label class="lbl">Link (optional)</label>
+          <input type="url" id="f-link" placeholder="https://… — members get an “Open link” button">
+        </div>
+        <div class="field">
+          <label class="lbl">Attached form (optional)</label>
+          <select id="f-doc"><option value="">None</option></select>
+        </div>
+        <div class="field">
           <label class="lbl">Urgency — applies to the people you tap next</label>
           <div class="seg" id="f-urg">
             <button class="u-overdue" onclick="setUrg(this,'Overdue')">Overdue</button>
@@ -1001,13 +1009,15 @@ let assignments = []; // [{ member_ids:[int], urgency: code }]  — what actuall
 const selected = new Set(); // set of member ids (numbers) currently tapped, not yet saved into a batch
 
 let builderLoaded = false;
+let DOCUMENTS = [];   // Resources forms, for the task-helper "attached form" pickers
 async function loadBuilderRefData() {
   // /api/squadron/members is a "most behind" top-10 list, not a full roster —
   // build the full grouped roster from /api/squadron (shop list) +
   // /api/squadron/shops/:id/members (full per-shop roster, unfiltered).
-  const [shops, cats] = await Promise.all([
+  const [shops, cats, docs] = await Promise.all([
     fetch('/api/squadron').then(r => r.json()),
     fetch('/api/categories').then(r => r.json()),
+    fetch('/api/documents').then(r => r.ok ? r.json() : []).catch(() => []),
   ]);
   const perShop = await Promise.all(
     shops.map(s => fetch(`/api/squadron/shops/${s.id}/members`).then(r => r.json()))
@@ -1022,9 +1032,17 @@ async function loadBuilderRefData() {
     };
   }).filter(g => g.members.length > 0);
   CATEGORIES = cats;
+  DOCUMENTS = Array.isArray(docs) ? docs : [];
   renderRoster();
   renderCategoryOptions();
   builderLoaded = true;
+}
+
+// <option> list for an attached-form select: None + every Resources form.
+function docOptions(selectedId) {
+  return '<option value="">None</option>' + DOCUMENTS.map(d =>
+    `<option value="${d.id}"${d.id === selectedId ? ' selected' : ''}>${escapeHtml(d.title)}</option>`
+  ).join('');
 }
 
 /* ── render roster ── */
@@ -1051,6 +1069,8 @@ function renderRoster() {
 function renderCategoryOptions() {
   const sel = document.getElementById('f-cat');
   sel.innerHTML = CATEGORIES.map(c => `<option value="${c.code}">${escapeHtml(c.label)}</option>`).join('');
+  const docSel = document.getElementById('f-doc');
+  if (docSel) docSel.innerHTML = docOptions(null);
 }
 
 /* ── home screen: real data ── */
@@ -1396,6 +1416,10 @@ function lcAddRender() {
       <input id="lc-a-title" class="lc-input" type="text" placeholder="e.g. Cyber Awareness CBT">
       <label class="lc-lbl" for="lc-a-det">Details</label>
       <input id="lc-a-det" class="lc-input" type="text" placeholder="Optional">
+      <label class="lc-lbl" for="lc-a-link">Link</label>
+      <input id="lc-a-link" class="lc-input" type="url" placeholder="Optional — https://… gives members an “Open link” button">
+      <label class="lc-lbl" for="lc-a-doc">Attached form</label>
+      <select id="lc-a-doc" class="lc-input">${docOptions(null)}</select>
 
       <label class="lc-lbl" for="lc-a-paste" style="margin-top:14px">Paste names (optional)</label>
       <textarea id="lc-a-paste" class="lc-pastebox"
@@ -1531,6 +1555,8 @@ async function lcAddSubmit() {
   const category_code = document.getElementById('lc-a-cat').value;
   const urgency = document.getElementById('lc-a-urg').value;
   const details = document.getElementById('lc-a-det').value.trim();
+  const link_url = document.getElementById('lc-a-link').value.trim() || null;
+  const document_id = parseInt(document.getElementById('lc-a-doc').value) || null;
   if (!title) return uiToast('Give the task a title', 'error');
   if (!LC_ADD_SEL.size) return uiToast('Select at least one member', 'error');
 
@@ -1541,13 +1567,16 @@ async function lcAddSubmit() {
     res = await fetch(`/api/cycles/${cyc.id}/tasks`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        title, category_code, details: details || null,
+        title, category_code, details: details || null, link_url, document_id,
         assignments: [{ member_ids: [...LC_ADD_SEL], urgency }],
       }),
     });
   } catch (e) { btn.disabled = false; return uiToast('Could not reach the server', 'error'); }
   btn.disabled = false;
-  if (!res.ok) return uiToast('Could not add that task', 'error');
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    return uiToast(d.error || 'Could not add that task', 'error');
+  }
 
   const r = await res.json();
   // `skipped` is the ON CONFLICT count — members who already had this exact
@@ -1732,6 +1761,11 @@ function lcEditorHtml(g) {
       <input id="lc-det-in" class="lc-input" type="text"
              value="${g.details_mixed ? '' : lcEsc(g.details || '')}"
              placeholder="${g.details_mixed ? 'Members have different details' : 'Optional'}">
+      <label class="lc-lbl" for="lc-link-in">Link</label>
+      <input id="lc-link-in" class="lc-input" type="url"
+             value="${lcEsc(g.link_url || '')}" placeholder="Optional — https://…">
+      <label class="lc-lbl" for="lc-doc-in">Attached form</label>
+      <select id="lc-doc-in" class="lc-input">${docOptions(g.document_id || null)}</select>
       ${g.urgency_mixed ? `<p class="lc-warn" role="note">Members of this group
         currently have different urgencies. Choosing one here applies it to all
         ${g.count}; leaving this as "Leave unchanged" keeps each member's own.</p>` : ''}
@@ -1745,6 +1779,8 @@ function lcEditorHtml(g) {
 async function lcSaveGroup(categoryCode, title, group) {
   const urgencyEl = document.getElementById('lc-urg-in');
   const detailsEl = document.getElementById('lc-det-in');
+  const linkEl = document.getElementById('lc-link-in');
+  const docEl = document.getElementById('lc-doc-in');
 
   const body = { category_code: categoryCode, title };
   // Only send urgency when the operator actually chose one. The select's
@@ -1756,16 +1792,28 @@ async function lcSaveGroup(categoryCode, title, group) {
   // typed something. Otherwise an untouched placeholder on a mixed group would
   // silently blank every member's details.
   if (!group.details_mixed || detailsEl.value.trim()) body.details = detailsEl.value || null;
+  // Link and form are prefilled with the group's current values, so only send
+  // them when the operator actually changed something — an untouched editor
+  // stays a no-op for every field.
+  const newLink = linkEl.value.trim() || null;
+  if (newLink !== (group.link_url || null)) body.link_url = newLink;
+  const newDoc = parseInt(docEl.value) || null;
+  if (newDoc !== (group.document_id || null)) body.document_id = newDoc;
 
-  // Neither field actually changed: treat Save as a no-op Cancel rather than
+  // Nothing actually changed: treat Save as a no-op Cancel rather than
   // sending a request that writes nothing but would still claim success.
-  if (!('urgency' in body) && !('details' in body)) { LC_EDIT = null; await lcRender(); return; }
+  if (!('urgency' in body) && !('details' in body) && !('link_url' in body) && !('document_id' in body)) {
+    LC_EDIT = null; await lcRender(); return;
+  }
 
   const res = await fetch(`/api/cycles/${lcTarget().id}/groups`, {
     method: 'PUT', headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) return uiToast('Could not save that change', 'error');
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    return uiToast(d.error || 'Could not save that change', 'error');
+  }
   LC_EDIT = null;
   uiToast('Task updated', 'success');
   await lcRender();
@@ -2294,6 +2342,8 @@ async function commitNewTask() {
     title: document.getElementById('f-title').value.trim(),
     category_code: document.getElementById('f-cat').value,
     details: document.getElementById('f-det').value.trim(),
+    link_url: document.getElementById('f-link').value.trim() || null,
+    document_id: parseInt(document.getElementById('f-doc').value) || null,
     assignments: finalAssignments,
   };
   const btn = document.getElementById('btn-add');
