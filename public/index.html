@@ -2090,6 +2090,96 @@
       font-size: 12.5px; color: var(--t2); line-height: 1.5;
       background: var(--s2); border-radius: var(--rs); padding: 12px 14px;
     }
+    /* ── Rollout feedback additions (Aug 2026) ──────────────────────────── */
+    /* Segmented scope/view toggles (Squadron Present/All, My Shop member/category) */
+    .seg-toggle {
+      display: inline-flex; gap: 2px; padding: 3px;
+      background: var(--s2); border: 1px solid var(--border); border-radius: 10px;
+    }
+    .seg-btn {
+      border: 0; background: none; color: var(--t2); cursor: pointer;
+      font-family: inherit; font-size: 12.5px; font-weight: 600;
+      padding: 6px 12px; border-radius: 8px; -webkit-tap-highlight-color: transparent;
+    }
+    .seg-btn.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .seg-note { font-size: 11.5px; color: var(--t2); margin-top: 6px; }
+
+    /* Category drill-in: category rows expand to task → who hasn't done it */
+    .cat-row.drillable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .cat-row .cat-head .chevron { transition: transform .2s; color: var(--t3); flex: none; }
+    .cat-row.open .cat-head .chevron { transform: rotate(90deg); }
+    .cat-drill { display: none; padding: 4px 0 10px; }
+    .cat-row.open .cat-drill { display: block; }
+    .drill-task { padding: 8px 0 2px; border-bottom: 1px dashed var(--border); }
+    .drill-task:last-child { border-bottom: 0; }
+    .drill-task-hd { display: flex; align-items: baseline; gap: 8px; }
+    .drill-task-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .drill-task-frac { font-size: 12px; color: var(--t2); white-space: nowrap; }
+    .nd-chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 0 8px; }
+    .nd-chip {
+      font-size: 11.5px; padding: 3px 8px; border-radius: 999px;
+      background: var(--s2); border: 1px solid var(--border); color: var(--text);
+    }
+    .nd-chip .nd-shop { color: var(--t2); }
+    .nd-all-done { font-size: 12px; color: var(--ok); padding: 4px 0 8px; }
+    .away-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: .04em;
+      padding: 1px 5px; border-radius: 4px; margin-left: 5px;
+      background: var(--wrn-bg); color: var(--warn);
+      text-transform: uppercase;
+    }
+
+    /* Student Flight card */
+    .sf-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .sf-row:last-child { border-bottom: 0; }
+    .sf-head { display: flex; align-items: center; gap: 8px; }
+    .sf-name { font-size: 13.5px; font-weight: 600; flex: 1; }
+    .sf-shop { font-size: 11.5px; color: var(--t2); }
+    .sf-edit {
+      border: 0; background: none; color: var(--info); cursor: pointer;
+      font-family: inherit; font-size: 12px; font-weight: 600; padding: 4px 6px;
+    }
+    .sf-dates { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .sf-pill {
+      font-size: 11.5px; padding: 3px 8px; border-radius: 6px;
+      background: var(--s2); border: 1px solid var(--border);
+    }
+    .sf-pill b { font-weight: 700; }
+    .sf-notes { font-size: 12px; color: var(--t2); margin-top: 5px; }
+    .sf-empty { font-size: 13px; color: var(--t2); padding: 6px 0; }
+
+    /* Task helpers: link + attached form pills on a task row */
+    .task-helpers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .task-helper {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; text-decoration: none;
+      color: var(--info); background: var(--info-bg);
+      border: 1px solid var(--info-bd); border-radius: 8px; padding: 4px 9px;
+    }
+    .task-helper:hover { border-color: var(--info); }
+    .task-helper svg { width: 12px; height: 12px; flex: none; }
+    .task-det a { color: var(--info); word-break: break-all; }
+
+    /* My Shop category view */
+    .sct-group { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .sct-group:last-child { border-bottom: 0; }
+    .sct-cat { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--t2); margin-bottom: 4px; }
+    .sct-task { padding: 7px 0; }
+    .sct-task-hd { display: flex; align-items: baseline; gap: 8px; }
+    .sct-task-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .sct-task-frac { font-size: 12px; color: var(--t2); white-space: nowrap; }
+    .sct-mems { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .sct-mem {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      padding: 4px 9px; border-radius: 999px; cursor: pointer;
+      background: var(--s2); border: 1px solid var(--border); color: var(--text);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sct-mem.done { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+    .sct-mem.done .sct-tick { color: var(--ok); }
+    .sct-mem .sct-tick { font-size: 11px; color: var(--t3); }
+    .sct-mem.readonly { cursor: default; }
   </style>
 </head>
 <body>
@@ -2341,12 +2431,22 @@
         <div id="shop-members-section">
           <div class="sec-hd">
             <h2 class="sec-title" id="shop-members-title">Structures Shop</h2>
-            <div class="sec-sub">Tap a member to expand</div>
+            <div class="sec-sub" id="shop-members-sub">Tap a member to expand</div>
+          </div>
+          <!-- Member view / category view. Supervisors only — the category cut
+               exposes every member's per-task state, which plain members don't
+               get from the roster list. -->
+          <div class="mb-sm" id="shop-viewtoggle" style="display:none">
+            <div class="seg-toggle" role="tablist" aria-label="Shop task view">
+              <button class="seg-btn active" id="shop-vt-member" onclick="setShopView('member')">By member</button>
+              <button class="seg-btn" id="shop-vt-category" onclick="setShopView('category')">By category</button>
+            </div>
           </div>
           <!-- Supervisor-only: how many of the shop have never opened the app.
                Hidden entirely once everyone has signed in at least once. -->
           <div id="shop-activation-note" class="act-note" style="display:none"></div>
           <div class="card" id="member-list"></div>
+          <div class="card" id="shop-cat-list" style="display:none"></div>
         </div>
       </div>
 
@@ -2471,7 +2571,7 @@
             <div class="stat has-arrow stat-flush">
               <div class="stat-num" id="sq-members">—</div>
               <div class="stat-lbl-arrow">
-                Total Members
+                <span id="sq-members-lbl">Total Members</span>
                 <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M6 3l3 3-3 3"/></svg>
               </div>
             </div>
@@ -2489,6 +2589,16 @@
       <!-- ── Stats: squadron completion roll-ups (read-only) ── -->
       <div id="sq-pane-stats" class="sq-pane active">
 
+      <!-- Present/All scope. Both flavors of every count arrive in the same
+           payloads; this just switches which one renders. -->
+      <div class="mb-md">
+        <div class="seg-toggle" role="tablist" aria-label="Completion scope">
+          <button class="seg-btn active" id="sq-scope-all" onclick="setSqScope('all')">All members</button>
+          <button class="seg-btn" id="sq-scope-present" onclick="setSqScope('present')">At drill</button>
+        </div>
+        <div class="seg-note" id="sq-scope-note" hidden></div>
+      </div>
+
       <!-- Mobile-only quick-stats (since the desk-only stats don't show on mobile) -->
       <div class="card mob-only card-pad mb-md">
         <div class="mini-grid mini-grid-2col">
@@ -2498,7 +2608,7 @@
           </div>
           <div class="mini-cell mini-cell-left">
             <div class="mini-num" id="sq-members-mob">—</div>
-            <div class="mini-lbl">Total Members</div>
+            <div class="mini-lbl" id="sq-members-mob-lbl">Total Members</div>
           </div>
         </div>
       </div>
@@ -2509,6 +2619,7 @@
           <div class="chart-meta" id="sq-cat-meta">All — members</div>
         </div>
         <div class="cat-list" id="sq-cat-list"></div>
+        <div class="seg-note">Tap a category to see each task and who still owes it.</div>
       </div>
 
       <!-- Medical services. The category card reports Medical / Fitness as a
@@ -2521,6 +2632,20 @@
         </div>
         <div class="cat-list" id="sq-med-list"></div>
         <div class="med-note" id="sq-med-note" hidden></div>
+      </div>
+
+      <!-- Student Flight: the First Sergeant's centralized list of trainees
+           awaiting BMT / Tech School, with their pipeline dates. -->
+      <div class="card card-pad mb-md sq-breakdown">
+        <div class="chart-label-row mb-md">
+          <div class="chart-label">Student Flight</div>
+          <div class="chart-meta" id="sq-sf-meta">&mdash;</div>
+        </div>
+        <div id="sq-sf-list"><div class="skeleton skeleton-sm"></div></div>
+        <button class="add-btn" style="margin-top:10px" onclick="openStudentModal(null)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+          Add Member
+        </button>
       </div>
 
       <!-- Collapsed by default: it's a drill-down, not a headline. #sq-alerts is
@@ -3279,6 +3404,14 @@
         <option value="info">Info Only</option>
       </select>
     </div>
+    <div class="modal-field">
+      <label>Link (optional)</label>
+      <input type="url" id="at-link" placeholder="https://… (opens from the task)">
+    </div>
+    <div class="modal-field">
+      <label>Attached form (optional)</label>
+      <select id="at-doc"></select>
+    </div>
     <div id="at-error" class="login-error" style="display:none"></div>
     <button class="modal-submit" id="at-submit" onclick="submitAddTask()">Add Task</button>
   </div>
@@ -3362,8 +3495,59 @@
       <label>Appointment Location (optional)</label>
       <input type="text" id="sqt-appt-location" placeholder="e.g. Bldg 110, Rm 5">
     </div>
+    <div class="modal-field">
+      <label>Link (optional)</label>
+      <input type="url" id="sqt-link" placeholder="https://… (opens from the task)">
+    </div>
+    <div class="modal-field">
+      <label>Attached form (optional)</label>
+      <select id="sqt-doc"></select>
+    </div>
     <div id="sqt-error" class="login-error" style="display:none"></div>
     <button class="modal-submit" id="sqt-submit" onclick="submitSquadronAddTask()">Add Task</button>
+  </div>
+</div>
+
+<!-- ═══ STUDENT FLIGHT MODAL (leadership) ═══════ -->
+<div class="modal-backdrop" id="student-modal" onclick="if(event.target===this)closeModal('student-modal')">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <h2 class="modal-title" id="sf-modal-title">Add to Student Flight</h2>
+      <button class="modal-close" onclick="closeModal('student-modal')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="modal-field" id="sf-member-field">
+      <label>Member</label>
+      <select id="sf-member"></select>
+    </div>
+    <div class="field-row">
+      <div class="modal-field">
+        <label>BMT start</label>
+        <input type="date" id="sf-bmt-start">
+      </div>
+      <div class="modal-field">
+        <label>BMT graduation</label>
+        <input type="date" id="sf-bmt-grad">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="modal-field">
+        <label>Tech School start</label>
+        <input type="date" id="sf-tech-start">
+      </div>
+      <div class="modal-field">
+        <label>Tech School graduation</label>
+        <input type="date" id="sf-tech-grad">
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Notes (optional)</label>
+      <textarea id="sf-notes" rows="2" placeholder="e.g. AFSC, base, shipping status"></textarea>
+    </div>
+    <div id="sf-error" class="login-error" style="display:none"></div>
+    <button class="modal-submit" id="sf-submit" onclick="submitStudent()">Save</button>
+    <button class="add-btn" id="sf-remove" style="display:none;width:100%;margin-top:10px;color:var(--urgent)" onclick="removeStudent()">Remove from Student Flight</button>
   </div>
 </div>
 
@@ -3867,6 +4051,8 @@ function onShopSwitch(shopId) {
   // loadShopMembers rebuilds the roster (collapsing any expanded member).
   loadShopEvents(true);   // switched shop → always fetch fresh (cache is keyed per shop)
   loadShopMembers();
+  // The category view is keyed to the shop too — refetch it for the new one.
+  if (shopViewMode === 'category') loadShopTasks();
   // Keep an open attendance takeover pointed at the shop now being viewed,
   // otherwise leadership would be marking the previous shop's roster.
   if (document.getElementById('view-supervisor').classList.contains('att-open')) loadAttendance();
@@ -4026,6 +4212,32 @@ function badgeFor(urgency, state) {
 
 const NOTE_ICO = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="1" width="10" height="10" rx="2"/><path d="M3.5 4h5M3.5 6.5h5M3.5 9h3"/></svg>`;
 
+/* ── Task helpers: clickable link + attached form ──
+   The link renders as a real anchor (http/https only — the server enforces the
+   scheme on write), the form as a download from the Resources library. Both
+   stop propagation so a tap never toggles the surrounding row. */
+const HELPER_LINK_ICO = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l4.5-4.5M6.5 2.5H9.5V5.5"/><path d="M9.5 7.5v2a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h2"/></svg>`;
+const HELPER_DOC_ICO  = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 1.5h4L9.5 4v6.5h-6.5z"/><path d="M7 1.5V4h2.5"/><path d="M4.7 6.5h2.6M4.7 8.5h2.6"/></svg>`;
+
+function helpersHTML(t) {
+  const bits = [];
+  if (t.link_url) {
+    bits.push(`<a class="task-helper" href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${HELPER_LINK_ICO}Open link</a>`);
+  }
+  if (t.document_id && t.document_title) {
+    bits.push(`<a class="task-helper" href="/api/documents/${t.document_id}/file" target="_blank" rel="noopener" onclick="event.stopPropagation()">${HELPER_DOC_ICO}${escapeHtml(t.document_title)}</a>`);
+  }
+  return bits.length ? `<div class="task-helpers">${bits.join('')}</div>` : '';
+}
+
+// Turn bare URLs inside already-escaped detail text into anchors. Runs strictly
+// AFTER escapeHtml — the only '<' in the input is ours, and quotes inside a URL
+// are already &quot; so they cannot break out of the href attribute.
+function linkifyEscaped(esc) {
+  return esc.replace(/\bhttps?:\/\/[^\s<]*[^\s<.,;:!?)\]&]/g, u =>
+    `<a href="${u}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${u}</a>`);
+}
+
 function taskHTML(t) {
   const b    = badgeFor(t.urgency, t.state);
   const apptParts = [t.appt_day, t.appt_time, t.appt_location].filter(Boolean);
@@ -4039,7 +4251,8 @@ function taskHTML(t) {
     </div>
     <div class="task-body">
       <div class="task-title">${flagStar}${escapeHtml(t.title)}</div>
-      ${det ? `<div class="task-det">${escapeHtml(det)}</div>` : ''}
+      ${det ? `<div class="task-det">${linkifyEscaped(escapeHtml(det))}</div>` : ''}
+      ${helpersHTML(t)}
       <button class="note-btn" onclick="toggleNote(event,'ti-${t.id}')">${NOTE_ICO}${t.note ? 'View note' : 'Add note'}</button>
       <div class="note-area" id="note-ti-${t.id}">
         <textarea class="note-input" rows="2" placeholder="Add a note for your supervisor…" onclick="event.stopPropagation()">${escapeHtml(t.note || '')}</textarea>
@@ -4055,7 +4268,8 @@ function upcomingHTML(t) {
     <div class="chk"></div>
     <div class="task-body">
       <div class="task-title">${escapeHtml(t.title)}</div>
-      ${t.details ? `<div class="task-det">${escapeHtml(t.details)}</div>` : ''}
+      ${t.details ? `<div class="task-det">${linkifyEscaped(escapeHtml(t.details))}</div>` : ''}
+      ${helpersHTML(t)}
     </div>
     <div class="badge b-upcoming">Info</div>
   </div>`;
@@ -4514,6 +4728,8 @@ function memActivityMark(m) {
 function updateShopActivityNote() {
   const el = document.getElementById('shop-activation-note');
   if (!el) return;
+  // Hidden alongside the member list while the category view is up.
+  if (shopViewMode === 'category') { el.style.display = 'none'; return; }
   const never = shopMembers.filter(m => m.activated === false && !m.last_login_at).length;
   if (!never) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const total = shopMembers.length;
@@ -4597,7 +4813,8 @@ async function renderMemberTasks(memberId) {
           <span class="mem-task-icon" style="color:${sc}">${si}</span>
           <div class="mem-task-body">
             <div class="mem-task-title">${flagStar}${escapeHtml(t.title)}</div>
-            ${t.details ? `<div class="mem-task-sub">${escapeHtml(t.details)}</div>` : ''}
+            ${t.details ? `<div class="mem-task-sub">${linkifyEscaped(escapeHtml(t.details))}</div>` : ''}
+            ${helpersHTML(t)}
             ${t.note    ? `<div class="mem-task-sub note">Note: ${escapeHtml(t.note)}</div>` : ''}
           </div>
           ${isSup ? `<div class="task-actions">
@@ -4626,6 +4843,113 @@ async function renderMemberTasks(memberId) {
   }
 }
 
+/* ── My Shop: member view / category view ─────────────────────────────────
+   Category view re-cuts the same tasks as category → task → who's done it.
+   Supervisor-only (the endpoint is role-gated too); a tap on a member chip
+   toggles that member's task. Always fetched fresh on entry — the member
+   view's add/delete/toggle flows would otherwise leave it stale. */
+let shopViewMode = 'member';
+let shopCatTasks = null;   // current render state of the category view
+
+function setShopView(mode) {
+  shopViewMode = mode;
+  document.getElementById('shop-vt-member')?.classList.toggle('active', mode === 'member');
+  document.getElementById('shop-vt-category')?.classList.toggle('active', mode === 'category');
+  const memberHost = document.getElementById('member-list');
+  const catHost = document.getElementById('shop-cat-list');
+  const note = document.getElementById('shop-activation-note');
+  const sub = document.getElementById('shop-members-sub');
+  const catMode = mode === 'category';
+  if (memberHost) memberHost.style.display = catMode ? 'none' : '';
+  if (catHost) catHost.style.display = catMode ? '' : 'none';
+  if (note && catMode) note.style.display = 'none';   // updateShopActivityNote restores it on the member view
+  if (sub) sub.textContent = catMode ? 'Every task, and who still owes it' : 'Tap a member to expand';
+  if (catMode) loadShopTasks();
+  else updateShopActivityNote();
+}
+
+async function loadShopTasks() {
+  const host = document.getElementById('shop-cat-list');
+  if (!host) return;
+  const key = shopQ();
+  host.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch('/api/shop/tasks' + key);
+    if (!res.ok) throw new Error();
+    const rows = await res.json();
+    if (shopQ() !== key) return;   // lost a race with a shop switch
+    shopCatTasks = rows;
+    buildShopCatView();
+  } catch {
+    host.innerHTML = '<p style="color:var(--urgent);font-size:13px;padding:14px 16px">Failed to load.</p>';
+  }
+}
+
+function buildShopCatView() {
+  const host = document.getElementById('shop-cat-list');
+  if (!host) return;
+  const rows = shopCatTasks || [];
+  if (!rows.length) {
+    host.innerHTML = '<p style="color:var(--t2);font-size:13px;padding:14px 16px">No tasks assigned this UTA.</p>';
+    return;
+  }
+  const isSup = ['supervisor','leadership'].includes(currentMember?.role);
+  const cats = new Map();
+  for (const t of rows) {
+    if (!cats.has(t.category_code)) cats.set(t.category_code, { label: t.category_label, titles: new Map() });
+    const c = cats.get(t.category_code);
+    if (!c.titles.has(t.title)) c.titles.set(t.title, []);
+    c.titles.get(t.title).push(t);
+  }
+  let html = '';
+  for (const [, c] of cats) {
+    html += `<div class="sct-group"><div class="sct-cat">${escapeHtml(c.label)}</div>`;
+    for (const [title, list] of c.titles) {
+      const done = list.filter(t => t.state === 'done').length;
+      html += `<div class="sct-task">
+        <div class="sct-task-hd">
+          <div class="sct-task-title">${escapeHtml(title)}</div>
+          <div class="sct-task-frac">${done}/${list.length} done</div>
+        </div>
+        <div class="sct-mems">${list.map(t => sctMemHTML(t, isSup)).join('')}</div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  host.innerHTML = html;
+}
+
+function sctMemHTML(t, isSup) {
+  const isDone = t.state === 'done';
+  const away = t.present === false ? '<span class="away-badge">Away</span>' : '';
+  const label = `<span class="sct-tick">${isDone ? '✓' : '○'}</span>${escapeHtml(t.rank)} ${escapeHtml(t.last_name)}${away}`;
+  if (!isSup) return `<span class="sct-mem readonly${isDone ? ' done' : ''}">${label}</span>`;
+  return `<button type="button" class="sct-mem${isDone ? ' done' : ''}" id="sct-${t.id}"
+    title="${isDone ? 'Mark not done' : 'Mark done'}" onclick="sctToggle(${t.id})">${label}</button>`;
+}
+
+async function sctToggle(taskId) {
+  const t = (shopCatTasks || []).find(x => x.id === taskId);
+  if (!t) return;
+  const prev = t.state;
+  t.state = prev === 'done' ? 'none' : 'done';
+  buildShopCatView();
+  try {
+    // Resend the member's own note so the upsert doesn't wipe it.
+    const res = await fetch('/api/tasks/' + taskId, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: t.state, note: t.note || null }),
+    });
+    if (!res.ok) throw new Error();
+    showToast('Task updated', 'success');
+    refreshShopMembers();   // keep the member view's bars in step
+  } catch {
+    t.state = prev;
+    buildShopCatView();
+    showToast('Failed to update task', 'error');
+  }
+}
+
 async function toggleShop(shopId) {
   const item  = document.getElementById('shopitem-'+shopId);
   const panel = document.getElementById('shop-expand-'+shopId);
@@ -4651,9 +4975,10 @@ async function renderShopMembers(shopId) {
       const done  = parseInt(m.done_tasks)||0;
       const total = parseInt(m.total_tasks)||0;
       const pct   = total ? Math.round(done/total*100) : 0;
+      const away  = m.present === false ? '<span class="away-badge">Away</span>' : '';
       return `<div class="shop-mem-row">
         <div class="shop-mem-rank-c">${escapeHtml(m.rank)}</div>
-        <div class="shop-mem-name-c">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.</div>
+        <div class="shop-mem-name-c">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.${away}</div>
         <div class="shop-mem-bar-c"><div class="shop-mem-fill-c" style="width:${pct}%"></div></div>
         <div class="shop-mem-pct-c">${pct}%</div>
       </div>`;
@@ -4838,120 +5163,349 @@ function renderMedical(med) {
   }
 }
 
+/* Squadron stats render in one of two scopes. 'all' is every active member;
+   'present' excludes members whose attendance says they're away this UTA
+   (lib/presence.js rule: unmarked still counts as present). Both flavors of
+   every number arrive together, so the toggle is a pure re-render. */
+let sqScope = 'all';
+let sqData = null;         // { shops, cats, membersAll, membersPresent }
+let sqDrillCache = {};     // category code → drill-in rows
+
+function setSqScope(scope) {
+  sqScope = scope;
+  document.getElementById('sq-scope-all')?.classList.toggle('active', scope === 'all');
+  document.getElementById('sq-scope-present')?.classList.toggle('active', scope === 'present');
+  if (sqData) renderSquadronStats();
+}
+
 async function loadSquadron() {
   const shopListEl = document.getElementById('shop-list');
   const alertsEl = document.getElementById('sq-alerts');
   if (shopListEl) shopListEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   if (alertsEl) alertsEl.innerHTML = '<div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div>';
   try {
-    const [shops, cats, members, med] = await Promise.all([
+    const [shops, cats, membersAll, membersPresent, med, students] = await Promise.all([
       fetch('/api/squadron').then(r => r.json()),
       fetch('/api/squadron/categories').then(r => r.json()),
       fetch('/api/squadron/members').then(r => r.json()),
+      fetch('/api/squadron/members?present=true').then(r => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/squadron/medical').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/squadron/students').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     if (!Array.isArray(shops)) return;
 
-    const totalDone  = shops.reduce((s, r) => s + parseInt(r.done_tasks  || 0), 0);
-    const totalTasks = shops.reduce((s, r) => s + parseInt(r.total_tasks || 0), 0);
-    const totalMems  = shops.reduce((s, r) => s + parseInt(r.member_count || 0), 0);
-    const remaining  = totalTasks - totalDone;
-    const pct = totalTasks ? Math.round(totalDone / totalTasks * 100) : 0;
-
-    gauge('g-lead', pct);
-    document.getElementById('sq-pct').textContent          = pct + '%';
-    document.getElementById('sq-done').textContent         = totalDone;
-    document.getElementById('sq-remaining').textContent    = remaining;
-    document.getElementById('sq-critical').textContent     = remaining;
-    document.getElementById('sq-members').textContent      = totalMems;
-    document.getElementById('sq-critical-mob').textContent = remaining;
-    document.getElementById('sq-members-mob').textContent  = totalMems;
-    document.getElementById('sq-shop-count').textContent   = shops.length + ' shop' + (shops.length !== 1 ? 's' : '');
-    document.getElementById('sq-cat-meta').textContent     = 'All ' + totalMems + ' members';
-
-    // Completion by shop bar chart
-    // pg returns COUNT() as a *string*, so "0" is truthy — coerce before the
-    // zero-check or a shop with no tasks divides 0/0 and renders NaN%.
-    barChart('squad-shop-chart', shops.map(s => {
-      const t = parseInt(s.total_tasks) || 0;
-      const d = parseInt(s.done_tasks)  || 0;
-      return { label: s.shop, pct: t ? Math.round(d / t * 100) : 0 };
-    }));
-
-    // Squadron by category — one row per category carrying label, count and
-    // percentage together, so nothing has to be cross-referenced between two
-    // charts. Percentage takes the health colour, matching the shop list.
-    const catList = document.getElementById('sq-cat-list');
-    if (catList) {
-      catList.innerHTML = (Array.isArray(cats) && cats.length)
-        ? cats.map(c => {
-            const done = parseInt(c.done)  || 0;
-            const tot  = parseInt(c.total) || 0;
-            const pct  = tot ? Math.round(done / tot * 100) : 0;
-            return `<div class="cat-row">
-              <div class="cat-head">
-                <div class="cat-name" title="${escapeHtml(c.label)}">${escapeHtml(c.label)}</div>
-                <div class="cat-nums">
-                  <span class="cat-frac">${done}/${tot}</span>
-                  <span class="cat-pct" style="color:${healthColor(pct)}">${pct}%</span>
-                </div>
-              </div>
-              <div class="cat-track"><div class="cat-fill" style="width:${pct}%"></div></div>
-            </div>`;
-          }).join('')
-        : '<div class="cat-empty">No categories in this cycle yet.</div>';
-    }
-
+    sqData = { shops, cats, membersAll, membersPresent };
+    sqDrillCache = {};
+    renderSquadronStats();
     renderMedical(med);
+    renderStudents(students);
+  } catch(e) { console.error('loadSquadron', e); }
+}
 
-    // Members most behind
-    const alerts = document.getElementById('sq-alerts');
-    if (Array.isArray(members) && members.length) {
-      alerts.innerHTML = members.map(m => {
-        const done  = parseInt(m.done_tasks  || 0);
-        const total = parseInt(m.total_tasks || 0);
-        const p     = total ? Math.round(done / total * 100) : 0;
-        const color = healthColor(p);
-        return `<div class="alert-row">
-          <div>
-            <div class="alert-name">${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}</div>
-            <div class="alert-shop">${escapeHtml(m.shop)} · ${done}/${total} done</div>
-          </div>
-          <div class="alert-pct" style="color:${color}">${p}%</div>
-        </div>`;
-      }).join('');
-    } else {
-      alerts.innerHTML = '<p style="color:var(--t2);font-size:13px">All members are on track.</p>';
+function renderSquadronStats() {
+  const { shops, cats, membersAll, membersPresent } = sqData;
+  const present = sqScope === 'present';
+  const shopTot  = s => parseInt(present ? s.total_tasks_present : s.total_tasks) || 0;
+  const shopDone = s => parseInt(present ? s.done_tasks_present  : s.done_tasks)  || 0;
+
+  const totalDone  = shops.reduce((s, r) => s + shopDone(r), 0);
+  const totalTasks = shops.reduce((s, r) => s + shopTot(r), 0);
+  const totalMems  = shops.reduce((s, r) => s + (parseInt(r.member_count || 0)), 0);
+  const presentMems = shops.reduce((s, r) => s + (parseInt(r.present_count || 0)), 0);
+  const remaining  = totalTasks - totalDone;
+  const pct = totalTasks ? Math.round(totalDone / totalTasks * 100) : 0;
+
+  gauge('g-lead', pct);
+  document.getElementById('sq-pct').textContent          = pct + '%';
+  document.getElementById('sq-done').textContent         = totalDone;
+  document.getElementById('sq-remaining').textContent    = remaining;
+  document.getElementById('sq-critical').textContent     = remaining;
+  document.getElementById('sq-members').textContent      = present ? presentMems : totalMems;
+  document.getElementById('sq-critical-mob').textContent = remaining;
+  document.getElementById('sq-members-mob').textContent  = present ? presentMems : totalMems;
+  // The number changes meaning with the scope, so the caption follows it.
+  const memLbl = present ? 'Members at Drill' : 'Total Members';
+  const lblEl = document.getElementById('sq-members-lbl');
+  if (lblEl) lblEl.textContent = memLbl;
+  const lblMobEl = document.getElementById('sq-members-mob-lbl');
+  if (lblMobEl) lblMobEl.textContent = memLbl;
+  document.getElementById('sq-shop-count').textContent   = shops.length + ' shop' + (shops.length !== 1 ? 's' : '');
+  document.getElementById('sq-cat-meta').textContent     = present
+    ? presentMems + ' of ' + totalMems + ' members at drill'
+    : 'All ' + totalMems + ' members';
+
+  // Why the numbers moved (or didn't): the away count under the toggle.
+  const note = document.getElementById('sq-scope-note');
+  if (note) {
+    const away = totalMems - presentMems;
+    note.hidden = !present;
+    note.textContent = away
+      ? 'Excluding ' + away + ' member' + (away === 1 ? '' : 's') + ' marked away by attendance (RUTA, orders processed as away, AWOL, …).'
+      : 'No one is marked away yet — the numbers match "All members" until attendance is marked in My Shop.';
+  }
+
+  // Completion by shop bar chart
+  // pg returns COUNT() as a *string*, so "0" is truthy — coerce before the
+  // zero-check or a shop with no tasks divides 0/0 and renders NaN%.
+  barChart('squad-shop-chart', shops.map(s => {
+    const t = shopTot(s), d = shopDone(s);
+    return { label: s.shop, pct: t ? Math.round(d / t * 100) : 0 };
+  }));
+
+  // Squadron by category — one row per category carrying label, count and
+  // percentage together. Each row expands into its tasks and who still owes
+  // them (lazy-fetched once per visit, cached in sqDrillCache).
+  const catList = document.getElementById('sq-cat-list');
+  if (catList) {
+    const openCodes = new Set(Array.from(catList.querySelectorAll('.cat-row.open')).map(r => r.dataset.code));
+    catList.innerHTML = (Array.isArray(cats) && cats.length)
+      ? cats.map(c => {
+          const done = parseInt(present ? c.done_present  : c.done)  || 0;
+          const tot  = parseInt(present ? c.total_present : c.total) || 0;
+          const pct  = tot ? Math.round(done / tot * 100) : 0;
+          return `<div class="cat-row drillable${openCodes.has(c.code) ? ' open' : ''}" id="catrow-${escapeHtml(c.code)}" data-code="${escapeHtml(c.code)}">
+            <div class="cat-head" onclick="toggleCatDrill('${escapeHtml(c.code)}')">
+              <div class="cat-name" title="${escapeHtml(c.label)}">${escapeHtml(c.label)}</div>
+              <div class="cat-nums">
+                <span class="cat-frac">${done}/${tot}</span>
+                <span class="cat-pct" style="color:${healthColor(pct)}">${pct}%</span>
+              </div>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <div class="cat-track"><div class="cat-fill" style="width:${pct}%"></div></div>
+            <div class="cat-drill" id="cat-drill-${escapeHtml(c.code)}"></div>
+          </div>`;
+        }).join('')
+      : '<div class="cat-empty">No categories in this cycle yet.</div>';
+    // A row that was open before the re-render keeps its drill content.
+    for (const code of openCodes) {
+      if (sqDrillCache[code]) {
+        const host = document.getElementById('cat-drill-' + code);
+        if (host) host.innerHTML = renderCatDrill(sqDrillCache[code]);
+      }
     }
+  }
 
-    // All Shops list
-    const list = document.getElementById('shop-list');
-    list.innerHTML = shops.map(s => {
-      const done  = parseInt(s.done_tasks  || 0);
-      const total = parseInt(s.total_tasks || 0);
-      const mems  = parseInt(s.member_count || 0);
+  // Members most behind. The present-only ranking is its own server-side
+  // top-10 — filtering the all-members list could leave it nearly empty.
+  const alerts = document.getElementById('sq-alerts');
+  const members = present ? membersPresent : membersAll;
+  if (Array.isArray(members) && members.length) {
+    alerts.innerHTML = members.map(m => {
+      const done  = parseInt(m.done_tasks  || 0);
+      const total = parseInt(m.total_tasks || 0);
       const p     = total ? Math.round(done / total * 100) : 0;
       const color = healthColor(p);
-      const initials = s.shop.split(/\s+/).map(w => w[0]).join('').slice(0,3).toUpperCase();
-      return `<div class="shop-item" id="shopitem-${s.id}">
-        <div class="shop-row" onclick="toggleShop(${s.id})">
-          <div class="shop-icon">${initials}</div>
-          <div class="shop-meta-wrap">
-            <div class="shop-name">${escapeHtml(s.shop)}</div>
-            <div class="shop-sub">${mems} member${mems !== 1 ? 's' : ''} · ${done}/${total} tasks done</div>
-          </div>
-          <div><div class="shop-pct" style="color:${color}">${p}%</div></div>
-          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      const away  = m.present === false ? '<span class="away-badge">Away</span>' : '';
+      return `<div class="alert-row">
+        <div>
+          <div class="alert-name">${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}${away}</div>
+          <div class="alert-shop">${escapeHtml(m.shop)} · ${done}/${total} done</div>
         </div>
-        <div class="expand-panel" id="shop-expand-${s.id}">
-          <div class="shop-expand-inner" id="shop-expand-inner-${s.id}">
-            <p style="color:var(--t2);font-size:13px">Loading…</p>
-          </div>
-        </div>
+        <div class="alert-pct" style="color:${color}">${p}%</div>
       </div>`;
     }).join('');
+  } else {
+    alerts.innerHTML = '<p style="color:var(--t2);font-size:13px">All members are on track.</p>';
+  }
 
-  } catch(e) { console.error('loadSquadron', e); }
+  // All Shops list
+  const list = document.getElementById('shop-list');
+  list.innerHTML = shops.map(s => {
+    const done  = shopDone(s);
+    const total = shopTot(s);
+    const mems  = parseInt(s.member_count || 0);
+    const p     = total ? Math.round(done / total * 100) : 0;
+    const color = healthColor(p);
+    const initials = s.shop.split(/\s+/).map(w => w[0]).join('').slice(0,3).toUpperCase();
+    return `<div class="shop-item" id="shopitem-${s.id}">
+      <div class="shop-row" onclick="toggleShop(${s.id})">
+        <div class="shop-icon">${initials}</div>
+        <div class="shop-meta-wrap">
+          <div class="shop-name">${escapeHtml(s.shop)}</div>
+          <div class="shop-sub">${mems} member${mems !== 1 ? 's' : ''} · ${done}/${total} tasks done</div>
+        </div>
+        <div><div class="shop-pct" style="color:${color}">${p}%</div></div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="expand-panel" id="shop-expand-${s.id}">
+        <div class="shop-expand-inner" id="shop-expand-inner-${s.id}">
+          <p style="color:var(--t2);font-size:13px">Loading…</p>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── Category drill-in: which tasks, and who still owes them ── */
+async function toggleCatDrill(code) {
+  const row = document.getElementById('catrow-' + code);
+  if (!row) return;
+  const open = row.classList.toggle('open');
+  if (!open) return;
+  const host = document.getElementById('cat-drill-' + code);
+  if (!host) return;
+  if (!sqDrillCache[code]) {
+    host.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+    try {
+      const res = await fetch('/api/squadron/categories/' + encodeURIComponent(code) + '/tasks');
+      if (!res.ok) throw new Error();
+      sqDrillCache[code] = await res.json();
+    } catch {
+      host.innerHTML = '<p style="color:var(--urgent);font-size:12px">Failed to load.</p>';
+      return;
+    }
+  }
+  host.innerHTML = renderCatDrill(sqDrillCache[code]);
+}
+
+function renderCatDrill(rows) {
+  if (!Array.isArray(rows) || !rows.length) return '<p class="sf-empty">No tasks in this category.</p>';
+  return rows.map(r => {
+    const done = parseInt(r.done) || 0, tot = parseInt(r.total) || 0;
+    const nd = r.not_done || [];
+    const chips = nd.length
+      ? `<div class="nd-chips">${nd.map(m =>
+          `<span class="nd-chip">${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}` +
+          `${m.shop ? ` <span class="nd-shop">· ${escapeHtml(m.shop)}</span>` : ''}` +
+          `${m.present === false ? '<span class="away-badge">Away</span>' : ''}</span>`).join('')}</div>`
+      : '<div class="nd-all-done">Everyone has completed this.</div>';
+    return `<div class="drill-task">
+      <div class="drill-task-hd">
+        <div class="drill-task-title">${escapeHtml(r.title)}</div>
+        <div class="drill-task-frac">${done}/${tot} done</div>
+      </div>
+      ${chips}
+    </div>`;
+  }).join('');
+}
+
+/* ── Student Flight: the First Sergeant's pipeline list ── */
+let sfStudents = [], sfCandidates = [], sfEditingId = null;
+
+const SF_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// 'YYYY-MM-DD' → '14 Sep 2026'. String split on purpose: new Date('YYYY-MM-DD')
+// parses as UTC midnight and can render a day early in western timezones.
+function fmtSfDate(d) {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  const [y, m, day] = d.split('-');
+  return parseInt(day, 10) + ' ' + SF_MONTHS[parseInt(m, 10) - 1] + ' ' + y;
+}
+function sfRangePill(label, start, grad) {
+  const s = fmtSfDate(start), g = fmtSfDate(grad);
+  if (s && g) return `<span class="sf-pill"><b>${label}</b> ${s} – ${g}</span>`;
+  if (s) return `<span class="sf-pill"><b>${label}</b> starts ${s}</span>`;
+  if (g) return `<span class="sf-pill"><b>${label}</b> graduates ${g}</span>`;
+  return '';
+}
+
+function renderStudents(data) {
+  const host = document.getElementById('sq-sf-list');
+  const meta = document.getElementById('sq-sf-meta');
+  if (!host) return;
+  if (!data) {
+    host.innerHTML = '<div class="sf-empty">Could not load Student Flight.</div>';
+    if (meta) meta.textContent = '—';
+    return;
+  }
+  sfStudents = data.students || [];
+  sfCandidates = data.candidates || [];
+  if (meta) meta.textContent = sfStudents.length
+    ? sfStudents.length + ' member' + (sfStudents.length === 1 ? '' : 's')
+    : '—';
+  if (!sfStudents.length) {
+    host.innerHTML = '<div class="sf-empty">No members in Student Flight yet. Add trainees to track their BMT and Tech School dates in one place.</div>';
+    return;
+  }
+  host.innerHTML = sfStudents.map(s => {
+    const pills = [sfRangePill('BMT', s.bmt_start, s.bmt_grad),
+                   sfRangePill('Tech School', s.tech_start, s.tech_grad)].filter(Boolean);
+    if (!pills.length) pills.push('<span class="sf-pill">No dates entered yet</span>');
+    return `<div class="sf-row">
+      <div class="sf-head">
+        <div class="sf-name">${escapeHtml(s.rank)} ${escapeHtml(s.last_name)}, ${escapeHtml(s.first_name)}</div>
+        <div class="sf-shop">${escapeHtml(s.shop || '')}</div>
+        <button class="sf-edit" onclick="openStudentModal(${s.id})">Edit</button>
+      </div>
+      <div class="sf-dates">${pills.join('')}</div>
+      ${s.student_notes ? `<div class="sf-notes">${escapeHtml(s.student_notes)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function refreshStudents() {
+  try {
+    const res = await fetch('/api/squadron/students');
+    if (res.ok) renderStudents(await res.json());
+  } catch {}
+}
+
+function openStudentModal(memberId) {
+  sfEditingId = memberId;
+  const isEdit = memberId != null;
+  const s = isEdit ? sfStudents.find(x => x.id === memberId) : null;
+  document.getElementById('sf-modal-title').textContent = isEdit
+    ? 'Edit — ' + (s ? s.rank + ' ' + s.last_name : 'Student')
+    : 'Add to Student Flight';
+  document.getElementById('sf-member-field').style.display = isEdit ? 'none' : '';
+  document.getElementById('sf-remove').style.display = isEdit ? '' : 'none';
+  document.getElementById('sf-error').style.display = 'none';
+  if (!isEdit) {
+    document.getElementById('sf-member').innerHTML = sfCandidates.map(c =>
+      `<option value="${c.id}">${escapeHtml(c.rank)} ${escapeHtml(c.last_name)}, ${escapeHtml(c.first_name)}${c.shop ? ' · ' + escapeHtml(c.shop) : ''}</option>`
+    ).join('');
+  }
+  document.getElementById('sf-bmt-start').value  = s?.bmt_start  || '';
+  document.getElementById('sf-bmt-grad').value   = s?.bmt_grad   || '';
+  document.getElementById('sf-tech-start').value = s?.tech_start || '';
+  document.getElementById('sf-tech-grad').value  = s?.tech_grad  || '';
+  document.getElementById('sf-notes').value      = s?.student_notes || '';
+  openModal('student-modal');
+}
+
+async function submitStudent() {
+  const btn = document.getElementById('sf-submit');
+  const err = document.getElementById('sf-error');
+  err.style.display = 'none';
+  const id = sfEditingId != null ? sfEditingId : parseInt(document.getElementById('sf-member').value);
+  if (!id) { err.textContent = 'Pick a member to add'; err.style.display = ''; return; }
+  const body = {
+    bmt_start:  document.getElementById('sf-bmt-start').value  || null,
+    bmt_grad:   document.getElementById('sf-bmt-grad').value   || null,
+    tech_start: document.getElementById('sf-tech-start').value || null,
+    tech_grad:  document.getElementById('sf-tech-grad').value  || null,
+    student_notes: document.getElementById('sf-notes').value.trim() || null,
+  };
+  if (sfEditingId == null) body.is_student_flight = true;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/squadron/students/' + id, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error); }
+    closeModal('student-modal');
+    showToast('Student Flight updated', 'success');
+    await refreshStudents();
+  } catch (e) {
+    err.textContent = e.message || 'Failed to save'; err.style.display = '';
+  }
+  btn.disabled = false; btn.textContent = 'Save';
+}
+
+async function removeStudent() {
+  if (sfEditingId == null) return;
+  if (!confirm('Remove this member from Student Flight? Their dates are kept in case they return.')) return;
+  try {
+    const res = await fetch('/api/squadron/students/' + sfEditingId, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_student_flight: false }),
+    });
+    if (!res.ok) throw new Error();
+    closeModal('student-modal');
+    showToast('Removed from Student Flight', 'success');
+    await refreshStudents();
+  } catch { showToast('Failed to remove', 'error'); }
 }
 
 /* ── View switch ────────────────────────────────── */
@@ -4983,6 +5537,10 @@ function switchView(btn) {
   if (name === 'supervisor') {
     closeAttendance();   // returning to My Shop shows the tabs, not a stale takeover
     switchShopPane('members'); loadShopEvents(false); loadShopMembers();
+    // Member/category toggle is supervisor business; plain members keep the roster.
+    const vt = document.getElementById('shop-viewtoggle');
+    if (vt) vt.style.display = ['supervisor','leadership'].includes(m?.role) ? '' : 'none';
+    if (shopViewMode === 'category') loadShopTasks();
   }
   if (name === 'leadership') {
     switchSqPane('stats');
@@ -5691,6 +6249,7 @@ async function uploadDocument() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Upload failed');
     showToast('Form uploaded', 'success');
+    cachedDocuments = null;   // the task-helper form pickers refetch next open
     ['doc-title', 'doc-desc'].forEach(id => { document.getElementById(id).value = ''; });
     fileEl.value = '';
     loadDocuments();
@@ -5785,9 +6344,26 @@ async function getCategories() {
   return cachedCategories || [];
 }
 
+// Forms picker for the task-helper fields. Cached per session like categories;
+// failure degrades to an empty "None" select rather than blocking the modal.
+let cachedDocuments = null;
+async function getDocumentsForPicker() {
+  if (cachedDocuments) return cachedDocuments;
+  try {
+    const res = await fetch('/api/documents');
+    if (res.ok) cachedDocuments = await res.json();
+  } catch {}
+  return cachedDocuments || [];
+}
+function docOptionsHTML(docs, selectedId) {
+  return '<option value="">None</option>' + (docs || []).map(d =>
+    `<option value="${d.id}" ${d.id === selectedId ? 'selected' : ''}>${escapeHtml(d.title)}</option>`
+  ).join('');
+}
+
 /* ── Add Task ──────────────────────────────────── */
 async function openAddTask(memberId) {
-  const cats = await getCategories();
+  const [cats, docs] = await Promise.all([getCategories(), getDocumentsForPicker()]);
   const catSel = document.getElementById('at-category');
   catSel.innerHTML = cats.filter(c => c.code !== 'upcoming').map(c =>
     `<option value="${c.code}">${escapeHtml(c.label)}</option>`
@@ -5801,6 +6377,8 @@ async function openAddTask(memberId) {
   document.getElementById('at-title').value = '';
   document.getElementById('at-details').value = '';
   document.getElementById('at-urgency').value = 'this_uta';
+  document.getElementById('at-link').value = '';
+  document.getElementById('at-doc').innerHTML = docOptionsHTML(docs, null);
   document.getElementById('at-error').style.display = 'none';
   openModal('add-task-modal');
   setTimeout(() => document.getElementById('at-title').focus(), 100);
@@ -5823,6 +6401,8 @@ async function submitAddTask() {
         title,
         details: document.getElementById('at-details').value.trim() || null,
         urgency: document.getElementById('at-urgency').value,
+        link_url: document.getElementById('at-link').value.trim() || null,
+        document_id: parseInt(document.getElementById('at-doc').value) || null,
       }),
     });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
@@ -5847,9 +6427,10 @@ async function submitAddTask() {
 
 /* ── Add Squadron Task (leadership: shop or whole squadron) ────────── */
 async function openSquadronAddTask() {
-  const [cats, shops] = await Promise.all([
+  const [cats, shops, docs] = await Promise.all([
     getCategories(),
     fetch('/api/squadron').then(r => r.ok ? r.json() : []),
+    getDocumentsForPicker(),
   ]);
 
   document.getElementById('sqt-category').innerHTML = cats.filter(c => c.code !== 'upcoming').map(c =>
@@ -5866,6 +6447,8 @@ async function openSquadronAddTask() {
   document.getElementById('sqt-appt-day').value = '';
   document.getElementById('sqt-appt-time').value = '';
   document.getElementById('sqt-appt-location').value = '';
+  document.getElementById('sqt-link').value = '';
+  document.getElementById('sqt-doc').innerHTML = docOptionsHTML(docs, null);
   document.getElementById('sqt-error').style.display = 'none';
   openModal('add-sq-task-modal');
   setTimeout(() => document.getElementById('sqt-title').focus(), 100);
@@ -5888,6 +6471,8 @@ async function submitSquadronAddTask() {
     appt_day: document.getElementById('sqt-appt-day').value.trim() || null,
     appt_time: document.getElementById('sqt-appt-time').value.trim() || null,
     appt_location: document.getElementById('sqt-appt-location').value.trim() || null,
+    link_url: document.getElementById('sqt-link').value.trim() || null,
+    document_id: parseInt(document.getElementById('sqt-doc').value) || null,
   };
   if (body.scope === 'shop') body.shop_id = parseInt(target.split(':')[1]);
 

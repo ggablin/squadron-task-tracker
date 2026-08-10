@@ -62,6 +62,12 @@ All three nav tabs are visible to everyone; per-section gating hides what a role
 - Dark mode, self-hosted font, mobile + desktop layouts.
 - **Auth hardening (shipped 2026-06-20, PR #30):** all user input escaped in the member task renderers (stored-XSS fix); fixed broken leadership health-color tokens; UTA label now derived from data (not hardcoded); **change-password** flow + **forced change on first login** (`must_change_password`) + **admin password reset** (supervisor: own shop, leadership: any — generates a random one-time temp, forces a change); checkbox keyboard/ARIA; AA contrast fixes; self-hosted General Sans; stronger "overdue" color. See §8.
 - **Task Builder + Records (shipped 2026-07-06):** leadership-only `/build` (author a cycle in-browser: copy-forward + new tasks + review + go-live, with undo) and `/records` (per-member historical completion, read-only). Replaces the Excel/CLI workflow as the normal monthly path; retires the destructive full-replace risk for day-to-day use. Full detail in §6a.
+- **Rollout-feedback batch (2026-08-10, from the first partial rollout):**
+  - **Student Flight (First Sergeant):** `members.is_student_flight` + four pipeline dates (`bmt_start/bmt_grad/tech_start/tech_grad`) + `student_notes`. Managed entirely from a Squadron-tab card (any leadership, no roster-admin needed): add member / edit dates / remove (dates survive removal). API: `GET /api/squadron/students` (also returns `candidates` for the picker), `PATCH /api/squadron/students/:id`. Dates travel as `YYYY-MM-DD` strings both ways (`to_char` out, regex-checked in).
+  - **Squadron category drill-in:** every row of the "Squadron by Category" card expands to task titles with done/total and chips naming exactly who hasn't completed each, with an **Away** badge for members attendance marks absent. `GET /api/squadron/categories/:code/tasks` (leadership).
+  - **Present-vs-all percentages:** an "All members / At drill" toggle on the Squadron stats pane re-renders gauge, shop chart, category card, and most-behind list. Presence rule lives in `lib/presence.js`: a member is present unless attendance rows exist for the cycle and none is `present`/`agr_at_orders` — unmarked counts present, so both numbers match until attendance is marked. Both flavors ship in the same payloads (`*_present` columns on `/api/squadron` + `/api/squadron/categories`; `/api/squadron/members?present=true` is its own top-10).
+  - **My Shop category view:** "By member / By category" toggle on the Members pane (supervisors/leadership only). Category view groups category → task → member chips (tap to toggle done, away badge). `GET /api/shop/tasks` (supervisor own shop; leadership any via `?shop_id`).
+  - **Task helpers:** `tasks.link_url` + `tasks.document_id` (FK → Resources documents). Members get "Open link" / form-download pills on the task; bare URLs in details are auto-linkified. Authorable everywhere: supervisor Add Task, leadership bulk add, `/build` new-task + live-add + group editor; carried by copy-forward. Validation shared in `resolveTaskHelpers` (server.js): http(s) only, active documents only.
 
 ---
 
@@ -214,6 +220,9 @@ The maintainer's working copy contains work that was never committed. A fresh cl
 
 ## 11. Recent work
 
+### 2026-08-10 — Rollout feedback batch
+Branch `claude/rollout-feedback-features-q8lj7p`. Four features from the first partial rollout's feedback (First Sergeant + squadron leadership), detailed in §5: Student Flight tracking, Squadron category drill-in, present-vs-all completion percentages (new `lib/presence.js`), My Shop category view, and task helpers (links + attached Resources forms). Schema adds twin-migrated in `schema.sql` + the server.js boot block — note `tasks.document_id`'s ALTER must stay AFTER the `documents` CREATE TABLE in schema.sql (the early DO block swallows errors and would roll back silently). New test file `test/rollout-feedback-http.test.js` (12 tests).
+
 ### 2026-07-06 — Task Builder + Records
 Branch `claude/task-builder-records` off `origin/master`. Full spec-driven build (see §6a): `uta_cycles.status` + DB-enforced one-live-cycle invariant, `task_batches`, the `lib/` module layer, all cycle/batch/records endpoints, the `/build` and `/records` leadership pages, completion-write immutability gating, and the first automated test suite in this repo (22 `node:test` tests). Not yet merged to `master` at time of writing — see the branch's own progress ledger (`.superpowers/sdd/progress.md`) and spec (`docs/superpowers/specs/2026-07-06-task-builder-and-records-design.md`) for the full task-by-task trail and final-review notes.
 
@@ -225,6 +234,7 @@ Ran `/impeccable critique` and shipped the P1 findings as PR #30 (merged to `mas
 ## 12. Key files
 - `server.js` — API routes, auth, roles, boot migrations, cron registration. Task Builder/Records routes are thin wrappers over `lib/`.
 - `lib/db.js`, `lib/cycles.js`, `lib/tasks.js`, `lib/batches.js`, `lib/records.js` — Task Builder + Records logic layer (§6a).
+- `lib/presence.js` — the "present at drill" rule for the two-way rollup percentages (shared join fragment + expression).
 - `public/index.html` — the entire member/supervisor/leadership SPA (styles + markup + JS).
 - `public/build.html` — the `/build` Task Builder page (leadership).
 - `public/records.html` — the `/records` Records page (leadership + supervisor own-shop).
