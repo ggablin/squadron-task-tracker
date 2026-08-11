@@ -5191,6 +5191,16 @@ function renderMedical(med) {
   const note = document.getElementById('sq-med-note');
   if (!host) return;
 
+  // Failure is not "nothing due" — the old copy claimed an empty (fine) card
+  // when the fetch had actually died.
+  if (med && med.failed) {
+    host.innerHTML = '<div class="cat-empty">Couldn\'t load medical services.</div>';
+    if (meta) meta.textContent = '—';
+    if (note) note.hidden = true;
+    syncMedScopeNote();
+    return;
+  }
+
   if (!med || !Array.isArray(med.services) || !med.services.length) {
     host.innerHTML = '<div class="cat-empty">Nothing due from medical this UTA.</div>';
     if (meta) meta.textContent = '—';
@@ -5241,28 +5251,97 @@ function setSqScope(scope) {
   if (sqData) renderSquadronStats();
 }
 
-async function loadSquadron() {
+/* The medical fetch failing is not the same as medical having nothing due —
+   renderMedical tells them apart by this marker. (Students already pass null
+   for failure; medical's null used to mean "empty", so it needs a third value.) */
+const MED_LOAD_FAILED = { failed: true };
+
+let _sqLoaded = false, _sqInFlight = false;
+let sqMedData = null, sqStudentsData = null;
+
+async function fetchSquadronData() {
+  const [shops, cats, membersAll, membersPresent, med, students] = await Promise.all([
+    fetch('/api/squadron').then(r => r.json()),
+    fetch('/api/squadron/categories').then(r => r.json()),
+    fetch('/api/squadron/members').then(r => r.json()),
+    // Auxiliary payloads keep individual fallbacks: present-members null (not
+    // []) so the present-scope list can say "couldn't load" instead of the
+    // misleading "all on track"; medical gets its failure marker.
+    fetch('/api/squadron/members?present=true').then(r => r.ok ? r.json() : null).catch(() => null),
+    fetch('/api/squadron/medical').then(r => r.ok ? r.json() : MED_LOAD_FAILED).catch(() => MED_LOAD_FAILED),
+    fetch('/api/squadron/students').then(r => r.ok ? r.json() : null).catch(() => null),
+  ]);
+  // The three core payloads make the pane; a 500 or an expired session gives
+  // {error} objects here, and rendering must not quietly swallow that.
+  if (!Array.isArray(shops) || !Array.isArray(cats) || !Array.isArray(membersAll)) {
+    throw new Error('squadron stats payload was not usable');
+  }
+  return { shops, cats, membersAll, membersPresent, med, students };
+}
+
+function applySquadronData(d) {
+  sqData = { shops: d.shops, cats: d.cats, membersAll: d.membersAll, membersPresent: d.membersPresent };
+  sqMedData = d.med;
+  sqStudentsData = d.students;
+  sqDrillCache = {};
+  renderSquadronStats();
+  renderMedical(sqMedData);
+  renderStudents(sqStudentsData);
+}
+
+function showSquadronError() {
+  const retry = '<button class="add-btn" style="margin:10px 16px 14px" onclick="loadSquadron(true)">Try again</button>';
+  const failP = '<p style="color:var(--urgent);font-size:13px;padding:14px 16px 0">Couldn\'t load squadron stats. Check your connection, or sign in again if you\'ve been away.</p>';
+  const shopListEl = document.getElementById('shop-list');
+  if (shopListEl) shopListEl.innerHTML = failP + retry;
+  const catList = document.getElementById('sq-cat-list');
+  if (catList) catList.innerHTML = '<div class="cat-empty">Couldn\'t load.</div>';
+  const alertsEl = document.getElementById('sq-alerts');
+  if (alertsEl) alertsEl.innerHTML = '';
+  renderMedical(MED_LOAD_FAILED);
+  renderStudents(null);
+}
+
+async function loadSquadron(forceRefresh = false) {
+  // Cache-first, same shape as loadTasks: paint the last-known stats
+  // immediately, then revalidate quietly. Before this, every visit to the
+  // Squadron tab refired all six fetches behind a skeleton flash.
+  if (!forceRefresh && _sqLoaded && sqData) {
+    renderSquadronStats();
+    renderMedical(sqMedData);
+    renderStudents(sqStudentsData);
+    if (_sqInFlight) return;
+    _sqInFlight = true;
+    try {
+      applySquadronData(await fetchSquadronData());
+    } catch (e) { /* keep the cached view on a transient failure */ }
+    finally { _sqInFlight = false; }
+    return;
+  }
+
+  // Cold path: first load or a forced refresh after a mutation.
+  if (_sqInFlight && !forceRefresh) return;
+  _sqInFlight = true;
   const shopListEl = document.getElementById('shop-list');
   const alertsEl = document.getElementById('sq-alerts');
   if (shopListEl) shopListEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   if (alertsEl) alertsEl.innerHTML = '<div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div><div class="skeleton skeleton-sm"></div>';
   try {
-    const [shops, cats, membersAll, membersPresent, med, students] = await Promise.all([
-      fetch('/api/squadron').then(r => r.json()),
-      fetch('/api/squadron/categories').then(r => r.json()),
-      fetch('/api/squadron/members').then(r => r.json()),
-      fetch('/api/squadron/members?present=true').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('/api/squadron/medical').then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/squadron/students').then(r => r.ok ? r.json() : null).catch(() => null),
-    ]);
-    if (!Array.isArray(shops)) return;
-
-    sqData = { shops, cats, membersAll, membersPresent };
-    sqDrillCache = {};
-    renderSquadronStats();
-    renderMedical(med);
-    renderStudents(students);
-  } catch(e) { console.error('loadSquadron', e); }
+    applySquadronData(await fetchSquadronData());
+    _sqLoaded = true;
+  } catch (e) {
+    console.error('loadSquadron', e);
+    // A failure over a still-usable cached view keeps the stale data; with
+    // nothing to show, the pane says so and offers a retry instead of
+    // leaving skeletons up forever.
+    if (_sqLoaded && sqData) {
+      renderSquadronStats();
+      renderMedical(sqMedData);
+      renderStudents(sqStudentsData);
+    } else {
+      showSquadronError();
+    }
+  } finally { _sqInFlight = false; }
 }
 
 function renderSquadronStats() {
@@ -5353,13 +5432,9 @@ function renderSquadronStats() {
           </div>`;
         }).join('')
       : '<div class="cat-empty">No categories in this cycle yet.</div>';
-    // A row that was open before the re-render keeps its drill content.
-    for (const code of openCodes) {
-      if (sqDrillCache[code]) {
-        const host = document.getElementById('cat-drill-' + code);
-        if (host) host.innerHTML = renderCatDrill(sqDrillCache[code]);
-      }
-    }
+    // A row that was open before the re-render keeps its drill content —
+    // re-fetched via loadCatDrill when the cache was just invalidated.
+    for (const code of openCodes) loadCatDrill(code);
   }
 
   // Members most behind. The present-only ranking is its own server-side
@@ -5381,6 +5456,9 @@ function renderSquadronStats() {
         <div class="alert-pct" style="color:${color}">${p}%</div>
       </div>`;
     }).join('');
+  } else if (present && membersPresent === null) {
+    // The present-members fetch failed; saying "on track" here would be a lie.
+    alerts.innerHTML = '<p style="color:var(--t2);font-size:13px">Couldn\'t load the at-drill list.</p>';
   } else {
     alerts.innerHTML = '<p style="color:var(--t2);font-size:13px">All members are on track.</p>';
   }
@@ -5415,12 +5493,11 @@ function renderSquadronStats() {
 }
 
 /* ── Category drill-in: which tasks, and who still owes them ── */
-async function toggleCatDrill(code) {
-  const row = document.getElementById('catrow-' + code);
-  if (!row) return;
-  const open = row.classList.toggle('open');
-  row.querySelector('.cat-head')?.setAttribute('aria-expanded', open);
-  if (!open) return;
+// Fill one category's drill host, fetching (and caching) if needed. Shared by
+// the tap handler and the post-refresh restore: a background revalidate wipes
+// sqDrillCache, so rows that are open afterwards refetch rather than sitting
+// open and empty.
+async function loadCatDrill(code) {
   const host = document.getElementById('cat-drill-' + code);
   if (!host) return;
   if (!sqDrillCache[code]) {
@@ -5435,6 +5512,15 @@ async function toggleCatDrill(code) {
     }
   }
   host.innerHTML = renderCatDrill(sqDrillCache[code]);
+}
+
+async function toggleCatDrill(code) {
+  const row = document.getElementById('catrow-' + code);
+  if (!row) return;
+  const open = row.classList.toggle('open');
+  row.querySelector('.cat-head')?.setAttribute('aria-expanded', open);
+  if (!open) return;
+  await loadCatDrill(code);
 }
 
 function renderCatDrill(rows) {
@@ -6611,7 +6697,7 @@ async function submitSquadronAddTask() {
     const d = await res.json();
     closeModal('add-sq-task-modal');
     showToast(`Task added for ${d.created} member${d.created === 1 ? '' : 's'}`, 'success');
-    await loadSquadron();
+    await loadSquadron(true);   // mutation: skip the cache, repaint from the server
   } catch (e) {
     err.textContent = e.message || 'Failed to add task'; err.style.display = '';
   }
