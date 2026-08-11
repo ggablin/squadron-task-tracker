@@ -248,7 +248,7 @@
       margin-bottom: 18px;
       gap: 16px;
     }
-    .chart-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); white-space: nowrap; }
+    .chart-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); white-space: nowrap; margin: 0; }
     .chart-meta { font-size: 11px; color: var(--t2); white-space: nowrap; }
 
     .bar-chart {
@@ -337,6 +337,15 @@
     .cat-head {
       display: flex; align-items: baseline; justify-content: space-between;
       gap: 12px; margin-bottom: 7px;
+    }
+    /* The drillable rows render .cat-head as a real <button> (keyboard + AT
+       reach); the Medical card keeps the compact non-interactive div. 44px
+       matches the app's tap-target floor. */
+    button.cat-head {
+      width: 100%; background: none; border: 0; padding: 0; margin: 0 0 7px;
+      font: inherit; color: inherit; text-align: left; cursor: pointer;
+      min-height: 44px; align-items: center;
+      -webkit-tap-highlight-color: transparent;
     }
     .cat-name {
       font-size: 12.5px; font-weight: 600; color: var(--text); min-width: 0;
@@ -593,6 +602,8 @@
       cursor: pointer; transition: background .1s;
       -webkit-tap-highlight-color: transparent;
     }
+    /* Rendered as a <button> so the expand is keyboard-reachable. */
+    button.shop-row { width: 100%; background: none; border: 0; margin: 0; font: inherit; color: inherit; text-align: left; }
     .shop-row:hover { background: var(--cream); }
     .shop-icon {
       width: 38px; height: 38px; border-radius: 8px;
@@ -1466,8 +1477,13 @@
       display: flex; align-items: center; gap: 10px; width: 100%;
       background: none; border: 0; padding: 0; margin: 0;
       font-family: inherit; text-align: left; cursor: pointer;
+      min-height: 44px;   /* was 16px tall — under the 24px WCAG floor, let alone the app's 44px norm */
       -webkit-tap-highlight-color: transparent;
     }
+    /* Disclosure pattern: the toggle button sits inside a heading, so the
+       section shows up in AT outlines. Neutralize the h2's own type styles —
+       the inner .chart-label / .chart-meta set their own. */
+    .sq-collapse-wrap { margin: 0; font-size: inherit; font-weight: inherit; }
     .sq-collapse-hd .chart-label { flex: 1; }
     .sq-collapse-hd .chevron { transition: transform .2s; }
     .sq-collapse-hd[aria-expanded="true"] .chevron { transform: rotate(90deg); }
@@ -2043,6 +2059,9 @@
     }
     .tool-card:hover { background: var(--cream); border-color: var(--bm); }
     .tool-card:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+    /* Same treatment for every control the keyboard pass added or touched. */
+    button.cat-head:focus-visible, button.shop-row:focus-visible, .sq-collapse-hd:focus-visible,
+    .seg-btn:focus-visible, .sq-tab:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
     .tool-ic {
       width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
       background: var(--cream); color: var(--t2);
@@ -2099,7 +2118,8 @@
     .seg-btn {
       border: 0; background: none; color: var(--t2); cursor: pointer;
       font-family: inherit; font-size: 12.5px; font-weight: 600;
-      padding: 6px 12px; border-radius: 8px; -webkit-tap-highlight-color: transparent;
+      padding: 6px 14px; border-radius: 8px; -webkit-tap-highlight-color: transparent;
+      min-height: 44px;   /* app-wide tap-target norm; was 29px */
     }
     .seg-btn.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
     .seg-note { font-size: 11.5px; color: var(--t2); margin-top: 6px; }
@@ -2309,7 +2329,7 @@
           <div class="hero-section">
             <div class="hero-gauge">
               <div class="gauge-wrap">
-                <svg id="g-member" viewBox="0 0 160 92" width="172" height="100"></svg>
+                <svg id="g-member" aria-hidden="true" focusable="false" viewBox="0 0 160 92" width="172" height="100"></svg>
                 <div class="gauge-center">
                   <div class="gauge-pct" id="gp-member">&mdash;</div>
                   <div class="gauge-lbl">Complete</div>
@@ -2384,7 +2404,7 @@
         <div class="hero-section">
           <div class="hero-gauge">
             <div class="gauge-wrap">
-              <svg id="g-sup" viewBox="0 0 160 92" width="138" height="80"></svg>
+              <svg id="g-sup" aria-hidden="true" focusable="false" viewBox="0 0 160 92" width="138" height="80"></svg>
               <div class="gauge-center">
                 <div class="gauge-pct">&mdash;</div>
                 <div class="gauge-lbl">Shop</div>
@@ -2453,9 +2473,9 @@
                exposes every member's per-task state, which plain members don't
                get from the roster list. -->
           <div class="mb-sm" id="shop-viewtoggle" style="display:none">
-            <div class="seg-toggle" role="tablist" aria-label="Shop task view">
-              <button class="seg-btn active" id="shop-vt-member" onclick="setShopView('member')">By member</button>
-              <button class="seg-btn" id="shop-vt-category" onclick="setShopView('category')">By category</button>
+            <div class="seg-toggle" role="group" aria-label="Shop task view">
+              <button class="seg-btn active" id="shop-vt-member" aria-pressed="true" onclick="setShopView('member')">By member</button>
+              <button class="seg-btn" id="shop-vt-category" aria-pressed="false" onclick="setShopView('category')">By category</button>
             </div>
           </div>
           <!-- Supervisor-only: how many of the shop have never opened the app.
@@ -2545,7 +2565,7 @@
         <div class="hero-section">
           <div class="hero-gauge">
             <div class="gauge-wrap">
-              <svg id="g-lead" viewBox="0 0 160 92" width="138" height="80"></svg>
+              <svg id="g-lead" aria-hidden="true" focusable="false" viewBox="0 0 160 92" width="138" height="80"></svg>
               <div class="gauge-center">
                 <div class="gauge-pct" id="sq-pct">—</div>
                 <div class="gauge-lbl">Squadron</div>
@@ -2568,7 +2588,7 @@
         <div class="hero-section">
           <div class="chart-section">
             <div class="chart-label-row">
-              <div class="chart-label">Completion by Shop</div>
+              <h2 class="chart-label">Completion by Shop</h2>
               <div class="chart-meta" id="sq-shop-count">— shops</div>
             </div>
             <div class="bar-chart" id="squad-shop-chart"></div>
@@ -2596,21 +2616,26 @@
 
       </div><!-- /hero -->
 
-      <div class="sq-tabs" role="tablist">
-        <button class="sq-tab active" data-sq="stats" onclick="switchSqPane('stats')">Stats</button>
-        <button class="sq-tab" data-sq="attendance" onclick="switchSqPane('attendance')">Attendance</button>
-        <button class="sq-tab" data-sq="tools" onclick="switchSqPane('tools')">Tools</button>
+      <!-- Real tabs pattern: aria-selected + roving tabindex kept in sync by
+           switchSqPane; Left/Right arrows move between them (wired near it). -->
+      <div class="sq-tabs" role="tablist" aria-label="Squadron sections">
+        <button class="sq-tab active" id="sq-tab-stats" role="tab" aria-selected="true" aria-controls="sq-pane-stats" data-sq="stats" onclick="switchSqPane('stats')">Stats</button>
+        <button class="sq-tab" id="sq-tab-attendance" role="tab" aria-selected="false" tabindex="-1" aria-controls="sq-pane-attendance" data-sq="attendance" onclick="switchSqPane('attendance')">Attendance</button>
+        <button class="sq-tab" id="sq-tab-tools" role="tab" aria-selected="false" tabindex="-1" aria-controls="sq-pane-tools" data-sq="tools" onclick="switchSqPane('tools')">Tools</button>
       </div>
 
       <!-- ── Stats: squadron completion roll-ups (read-only) ── -->
-      <div id="sq-pane-stats" class="sq-pane active">
+      <div id="sq-pane-stats" class="sq-pane active" role="tabpanel" aria-labelledby="sq-tab-stats">
 
       <!-- Present/All scope. Both flavors of every count arrive in the same
            payloads; this just switches which one renders. -->
       <div class="mb-md">
-        <div class="seg-toggle" role="tablist" aria-label="Completion scope">
-          <button class="seg-btn active" id="sq-scope-all" onclick="setSqScope('all')">All members</button>
-          <button class="seg-btn" id="sq-scope-present" onclick="setSqScope('present')">At drill</button>
+        <!-- A value toggle, not tabs: two pressed-state buttons. (It used to
+             claim role="tablist" with no tabs inside, which reads as an empty
+             tab list to assistive tech.) -->
+        <div class="seg-toggle" role="group" aria-label="Completion scope">
+          <button class="seg-btn active" id="sq-scope-all" aria-pressed="true" onclick="setSqScope('all')">All members</button>
+          <button class="seg-btn" id="sq-scope-present" aria-pressed="false" onclick="setSqScope('present')">At drill</button>
         </div>
         <div class="seg-note" id="sq-scope-note" hidden></div>
       </div>
@@ -2631,7 +2656,7 @@
 
       <div class="card card-pad mb-md sq-breakdown">
         <div class="chart-label-row mb-md">
-          <div class="chart-label">Squadron by Category</div>
+          <h2 class="chart-label">Squadron by Category</h2>
           <div class="chart-meta" id="sq-cat-meta">All — members</div>
         </div>
         <div class="cat-list" id="sq-cat-list"></div>
@@ -2643,7 +2668,7 @@
            immunizations" — this does, counting distinct members per service. -->
       <div class="card card-pad mb-md sq-breakdown">
         <div class="chart-label-row mb-md">
-          <div class="chart-label">Medical Services</div>
+          <h2 class="chart-label">Medical Services</h2>
           <div class="chart-meta" id="sq-med-meta">&mdash;</div>
         </div>
         <div class="cat-list" id="sq-med-list"></div>
@@ -2655,7 +2680,7 @@
            awaiting BMT / Tech School, with their pipeline dates. -->
       <div class="card card-pad mb-md sq-breakdown">
         <div class="chart-label-row mb-md">
-          <div class="chart-label">Student Flight</div>
+          <h2 class="chart-label">Student Flight</h2>
           <div class="chart-meta" id="sq-sf-meta">&mdash;</div>
         </div>
         <div id="sq-sf-list"><div class="skeleton skeleton-sm"></div></div>
@@ -2668,12 +2693,12 @@
       <!-- Collapsed by default: it's a drill-down, not a headline. #sq-alerts is
            always populated by loadSquadron() whether or not the panel is open. -->
       <div class="card card-pad mb-md sq-breakdown">
-        <button class="sq-collapse-hd" id="sq-alerts-toggle" aria-expanded="false"
+        <h2 class="sq-collapse-wrap"><button class="sq-collapse-hd" id="sq-alerts-toggle" aria-expanded="false"
                 aria-controls="sq-alerts-panel" onclick="toggleSqAlerts()">
           <div class="chart-label">Members Most Behind</div>
           <div class="chart-meta">Tap to expand</div>
-          <svg class="chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
-        </button>
+          <svg class="chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+        </button></h2>
         <div class="expand-panel" id="sq-alerts-panel">
           <div style="padding-top:14px"><div id="sq-alerts"></div></div>
         </div>
@@ -2691,7 +2716,7 @@
            Marking stays in My Shop's takeover; this answers "which shops
            still owe attendance, and who exactly" and feeds the transcription
            export. Least complete shop first; shops collapsed by default. ── -->
-      <div id="sq-pane-attendance" class="sq-pane">
+      <div id="sq-pane-attendance" class="sq-pane" role="tabpanel" aria-labelledby="sq-tab-attendance">
         <div class="sec-hd">
           <h2 class="sec-title">Attendance</h2>
           <div class="sec-sub" id="sq-att-sub">&mdash;</div>
@@ -2706,7 +2731,7 @@
       </div><!-- /#sq-pane-attendance -->
 
       <!-- ── Tools: everything leadership goes here to DO something ── -->
-      <div id="sq-pane-tools" class="sq-pane">
+      <div id="sq-pane-tools" class="sq-pane" role="tabpanel" aria-labelledby="sq-tab-tools">
         <div class="card card-pad mb-md" id="sq-leader-tools">
           <div class="sec-hd" style="padding:0 0 12px">
             <h2 class="sec-title">Leadership Tools</h2>
@@ -4870,8 +4895,12 @@ let shopCatTasks = null;   // current render state of the category view
 
 function setShopView(mode) {
   shopViewMode = mode;
-  document.getElementById('shop-vt-member')?.classList.toggle('active', mode === 'member');
-  document.getElementById('shop-vt-category')?.classList.toggle('active', mode === 'category');
+  const memBtn = document.getElementById('shop-vt-member');
+  const catBtn = document.getElementById('shop-vt-category');
+  memBtn?.classList.toggle('active', mode === 'member');
+  memBtn?.setAttribute('aria-pressed', mode === 'member');
+  catBtn?.classList.toggle('active', mode === 'category');
+  catBtn?.setAttribute('aria-pressed', mode === 'category');
   const memberHost = document.getElementById('member-list');
   const catHost = document.getElementById('shop-cat-list');
   const note = document.getElementById('shop-activation-note');
@@ -4973,6 +5002,7 @@ async function toggleShop(shopId) {
   const inner = document.getElementById('shop-expand-inner-'+shopId);
   const isOpen = item.classList.toggle('expanded');
   panel.classList.toggle('open', isOpen);
+  item.querySelector('.shop-row')?.setAttribute('aria-expanded', isOpen);
   item.querySelector('.chevron').style.transform = isOpen ? 'rotate(90deg)' : '';
   if (isOpen && inner.querySelector('p')) await renderShopMembers(shopId);
 }
@@ -5202,8 +5232,12 @@ let sqDrillCache = {};     // category code → drill-in rows
 
 function setSqScope(scope) {
   sqScope = scope;
-  document.getElementById('sq-scope-all')?.classList.toggle('active', scope === 'all');
-  document.getElementById('sq-scope-present')?.classList.toggle('active', scope === 'present');
+  const allBtn = document.getElementById('sq-scope-all');
+  const presBtn = document.getElementById('sq-scope-present');
+  allBtn?.classList.toggle('active', scope === 'all');
+  allBtn?.setAttribute('aria-pressed', scope === 'all');
+  presBtn?.classList.toggle('active', scope === 'present');
+  presBtn?.setAttribute('aria-pressed', scope === 'present');
   if (sqData) renderSquadronStats();
 }
 
@@ -5305,14 +5339,15 @@ function renderSquadronStats() {
           const tot  = parseInt(present ? c.total_present : c.total) || 0;
           const pct  = tot ? Math.round(done / tot * 100) : 0;
           return `<div class="cat-row drillable${openCodes.has(c.code) ? ' open' : ''}" id="catrow-${escapeHtml(c.code)}" data-code="${escapeHtml(c.code)}">
-            <div class="cat-head" onclick="toggleCatDrill('${escapeHtml(c.code)}')">
+            <button type="button" class="cat-head" onclick="toggleCatDrill('${escapeHtml(c.code)}')"
+                    aria-expanded="${openCodes.has(c.code)}" aria-controls="cat-drill-${escapeHtml(c.code)}">
               <div class="cat-name" title="${escapeHtml(c.label)}">${escapeHtml(c.label)}</div>
               <div class="cat-nums">
                 <span class="cat-frac">${done}/${tot}</span>
                 <span class="cat-pct" style="color:${healthColor(pct)}">${pct}%</span>
               </div>
-              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-            </div>
+              <svg class="chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
             <div class="cat-track"><div class="cat-fill" style="width:${pct}%"></div></div>
             <div class="cat-drill" id="cat-drill-${escapeHtml(c.code)}"></div>
           </div>`;
@@ -5360,15 +5395,16 @@ function renderSquadronStats() {
     const color = healthColor(p);
     const initials = s.shop.split(/\s+/).map(w => w[0]).join('').slice(0,3).toUpperCase();
     return `<div class="shop-item" id="shopitem-${s.id}">
-      <div class="shop-row" onclick="toggleShop(${s.id})">
+      <button type="button" class="shop-row" onclick="toggleShop(${s.id})"
+              aria-expanded="false" aria-controls="shop-expand-${s.id}">
         <div class="shop-icon">${initials}</div>
         <div class="shop-meta-wrap">
           <div class="shop-name">${escapeHtml(s.shop)}</div>
           <div class="shop-sub">${mems} member${mems !== 1 ? 's' : ''} · ${done}/${total} tasks done</div>
         </div>
         <div><div class="shop-pct" style="color:${color}">${p}%</div></div>
-        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-      </div>
+        <svg class="chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
       <div class="expand-panel" id="shop-expand-${s.id}">
         <div class="shop-expand-inner" id="shop-expand-inner-${s.id}">
           <p style="color:var(--t2);font-size:13px">Loading…</p>
@@ -5383,6 +5419,7 @@ async function toggleCatDrill(code) {
   const row = document.getElementById('catrow-' + code);
   if (!row) return;
   const open = row.classList.toggle('open');
+  row.querySelector('.cat-head')?.setAttribute('aria-expanded', open);
   if (!open) return;
   const host = document.getElementById('cat-drill-' + code);
   if (!host) return;
@@ -6345,13 +6382,31 @@ async function deleteDocument(id) {
 
 /* ── Squadron sub-tabs (Stats | Attendance | Tools) ── */
 function switchSqPane(name) {
-  document.querySelectorAll('.sq-tab').forEach(b =>
-    b.classList.toggle('active', b.dataset.sq === name));
+  document.querySelectorAll('.sq-tab').forEach(b => {
+    const sel = b.dataset.sq === name;
+    b.classList.toggle('active', sel);
+    b.setAttribute('aria-selected', sel);
+    b.tabIndex = sel ? 0 : -1;   // roving tabindex: Tab lands on the active tab, arrows move between them
+  });
   document.querySelectorAll('.sq-pane').forEach(p =>
     p.classList.toggle('active', p.id === 'sq-pane-' + name));
   // Fresh fetch on every open; collapse state deliberately resets with it.
   if (name === 'attendance') loadSqAttGrid();
 }
+
+// Tabs move with Left/Right arrows and activate on focus (APG "tabs with
+// automatic activation"). Tab itself lands only on the active tab, per the
+// roving tabindex switchSqPane maintains.
+document.querySelector('.sq-tabs')?.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const tabs = [...document.querySelectorAll('.sq-tab')];
+  const i = tabs.indexOf(document.activeElement);
+  if (i < 0) return;
+  e.preventDefault();
+  const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+  next.focus();
+  switchSqPane(next.dataset.sq);
+});
 
 /* Members Most Behind — a drill-down, so it opens collapsed. Not persisted;
    nothing else in the app remembers open/closed state. */
