@@ -2152,7 +2152,7 @@
     .drill-shop-n { font-weight: 500; color: var(--t3-nav-text); }
     .drill-shop-names { min-width: 0; color: var(--text); }
     .drill-nm { white-space: nowrap; }
-    .drill-sep { color: var(--t3); }
+    .drill-sep { color: var(--t2); }   /* --t3 sat at 3.25:1 in dark mode — the one contrast miss in either theme */
     @media (max-width: 480px) {
       .drill-shop-row { flex-direction: column; gap: 0; }
       .drill-shop-name { width: auto; }
@@ -3897,6 +3897,25 @@ function dismissOnboard() {
   try { localStorage.setItem('onboarded', 'true'); } catch(e) {}
 }
 
+// Single owner of the checkbox-hint banner. The hint retires itself the moment
+// the member's data shows a completed task — proof they understand the checkbox
+// — which also retires it on a new phone or cleared storage, since it reads the
+// server's data rather than a local event. It never shows over an empty list
+// (nothing to tap) and never over the all-clear moment (everything tapped).
+function syncOnboardHint() {
+  const ob = document.getElementById('onboard-banner');
+  if (!ob) return;
+  let dismissed = false;
+  try { dismissed = !!localStorage.getItem('onboarded'); } catch (e) {}
+  const checkable = currentTasks.filter(t => !t.informational);
+  const done = checkable.filter(t => t.state === 'done').length;
+  if (done > 0) {
+    if (!dismissed) dismissOnboard();
+    return;
+  }
+  ob.style.display = (!dismissed && checkable.length) ? '' : 'none';
+}
+
 /* ── Change Password ───────────────────────────── */
 function openChangePw(forced) {
   forcePwChange = !!forced;
@@ -4009,12 +4028,8 @@ function showApp() {
   loadShopMembers();
   startNotifPolling();
   if (currentMember.role === 'leadership') loadSquadron();
-  try {
-    if (!localStorage.getItem('onboarded')) {
-      const ob = document.getElementById('onboard-banner');
-      if (ob) ob.style.display = '';
-    }
-  } catch(e) {}
+  // The onboarding hint is shown/retired by syncOnboardHint (via
+  // updateMemberStats) once tasks arrive — it needs the data to decide.
 }
 
 function populateUserUI() {
@@ -4224,6 +4239,19 @@ async function loadTasks(forceRefresh = false) {
 }
 
 function buildTasks() {
+  // A member with nothing to show gets told why, not a blank void that reads
+  // as a failed load. Two different whys: no cycle is live at all (the gap
+  // between UTAs — every member sees this), or a live cycle just has nothing
+  // for them yet. uta_name comes off the session payload and is NULL exactly
+  // when no cycle is current.
+  if (!currentTasks.length) {
+    const msg = currentMember?.uta_name
+      ? 'No tasks assigned for this UTA yet. Check back closer to drill weekend.'
+      : 'No UTA cycle is live right now. Your tasks will appear here when the next one is published.';
+    document.getElementById('member-tasks').innerHTML =
+      '<div class="sf-empty" style="margin-top:4px">' + msg + '</div>';
+    return;
+  }
   const groups = {}, order = [];
   for (const t of currentTasks) {
     if (!groups[t.category_code]) { groups[t.category_code] = {label:t.category_label,tasks:[]}; order.push(t.category_code); }
@@ -4372,6 +4400,7 @@ function updateMemberStats() {
   gauge('g-member', pct);
   renderMemberBars(checkable, done, total);
   syncAllClear(done, total);
+  syncOnboardHint();
   updateNavBadges();
 }
 
