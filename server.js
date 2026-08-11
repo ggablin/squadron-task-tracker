@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
@@ -32,6 +33,12 @@ const pool = new Pool({
     ? { rejectUnauthorized: false }
     : false,
 });
+
+// Registered first so every response body — the ~400KB single-file SPA above
+// all — goes out gzipped. Express doesn't compress by default and Railway's
+// proxy passes bodies through as-is, so without this, members on base wifi
+// were pulling the full uncompressed page on every cold load.
+app.use(compression());
 
 app.use(express.json());
 
