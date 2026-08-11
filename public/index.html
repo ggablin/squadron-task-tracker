@@ -2103,6 +2103,7 @@
     }
     .seg-btn.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
     .seg-note { font-size: 11.5px; color: var(--t2); margin-top: 6px; }
+    .drill-scope-note { font-size: 11.5px; color: var(--t2); line-height: 1.45; margin-bottom: 10px; }
 
     /* Category drill-in: category rows expand to task → who hasn't done it */
     .cat-row.drillable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -2647,6 +2648,7 @@
         </div>
         <div class="cat-list" id="sq-med-list"></div>
         <div class="med-note" id="sq-med-note" hidden></div>
+        <div class="med-note" id="sq-med-scope-note" hidden>Counts all members. Attendance does not change this card.</div>
       </div>
 
       <!-- Student Flight: the First Sergeant's centralized list of trainees
@@ -5143,6 +5145,16 @@ async function loadOrgChart() {
 // Blood Draw, MHA, Dental Form Due. No grouping layer: an earlier version invented
 // buckets (Labs, Immunizations, Assessments) and had to guess which one DHA3
 // belonged in. The titles are already the breakout.
+// Shown only in "At drill" scope, and only when the card has rows: the Medical
+// rollup counts all members (its endpoint has no presence flavor), so the card
+// says so instead of letting its numbers silently ignore the toggle.
+function syncMedScopeNote() {
+  const sn = document.getElementById('sq-med-scope-note');
+  if (!sn) return;
+  const hasRows = !!document.querySelector('#sq-med-list .cat-row');
+  sn.hidden = sqScope !== 'present' || !hasRows;
+}
+
 function renderMedical(med) {
   const host = document.getElementById('sq-med-list');
   const meta = document.getElementById('sq-med-meta');
@@ -5153,6 +5165,7 @@ function renderMedical(med) {
     host.innerHTML = '<div class="cat-empty">Nothing due from medical this UTA.</div>';
     if (meta) meta.textContent = '—';
     if (note) note.hidden = true;
+    syncMedScopeNote();
     return;
   }
 
@@ -5176,6 +5189,7 @@ function renderMedical(med) {
     note.textContent = med.deferred + (med.deferred === 1 ? ' item is' : ' items are')
       + ' scheduled for a later UTA and not counted here.';
   }
+  syncMedScopeNote();
 }
 
 /* Squadron stats render in one of two scopes. 'all' is every active member;
@@ -5222,21 +5236,27 @@ function renderSquadronStats() {
   const present = sqScope === 'present';
   const shopTot  = s => parseInt(present ? s.total_tasks_present : s.total_tasks) || 0;
   const shopDone = s => parseInt(present ? s.done_tasks_present  : s.done_tasks)  || 0;
+  const shopCritTot  = s => parseInt(present ? s.crit_tasks_present : s.crit_tasks) || 0;
+  const shopCritDone = s => parseInt(present ? s.crit_done_present  : s.crit_done)  || 0;
 
   const totalDone  = shops.reduce((s, r) => s + shopDone(r), 0);
   const totalTasks = shops.reduce((s, r) => s + shopTot(r), 0);
   const totalMems  = shops.reduce((s, r) => s + (parseInt(r.member_count || 0)), 0);
   const presentMems = shops.reduce((s, r) => s + (parseInt(r.present_count || 0)), 0);
   const remaining  = totalTasks - totalDone;
+  // Critical = overdue + this-UTA work still open. Distinct from `remaining`,
+  // which also carries next-UTA and future tasks — the tile used to show
+  // `remaining` under the "Critical" label and overstated the number.
+  const critRemaining = shops.reduce((s, r) => s + shopCritTot(r) - shopCritDone(r), 0);
   const pct = totalTasks ? Math.round(totalDone / totalTasks * 100) : 0;
 
   gauge('g-lead', pct);
   document.getElementById('sq-pct').textContent          = pct + '%';
   document.getElementById('sq-done').textContent         = totalDone;
   document.getElementById('sq-remaining').textContent    = remaining;
-  document.getElementById('sq-critical').textContent     = remaining;
+  document.getElementById('sq-critical').textContent     = critRemaining;
   document.getElementById('sq-members').textContent      = present ? presentMems : totalMems;
-  document.getElementById('sq-critical-mob').textContent = remaining;
+  document.getElementById('sq-critical-mob').textContent = critRemaining;
   document.getElementById('sq-members-mob').textContent  = present ? presentMems : totalMems;
   // The number changes meaning with the scope, so the caption follows it.
   const memLbl = present ? 'Members at Drill' : 'Total Members';
@@ -5254,10 +5274,16 @@ function renderSquadronStats() {
   if (note) {
     const away = totalMems - presentMems;
     note.hidden = !present;
+    // The away list must match lib/presence.js: AGR/AT/Orders is a PRESENT
+    // status, so it must never be described as away here.
     note.textContent = away
-      ? 'Excluding ' + away + ' member' + (away === 1 ? '' : 's') + ' marked away by attendance (RUTA, orders processed as away, AWOL, …).'
+      ? 'Excluding ' + away + ' member' + (away === 1 ? '' : 's') + ' marked away by attendance (RUTA, unexcused, AWOL, maternity, equivalent training, transfer or separation). Members on AGR, AT or orders count as at drill.'
       : 'No one is marked away yet — the numbers match "All members" until attendance is marked in My Shop.';
   }
+
+  // The Medical card has no present-scoped flavor of its numbers, so under the
+  // "At drill" scope it says so rather than silently keeping all-members counts.
+  syncMedScopeNote();
 
   // Completion by shop bar chart
   // pg returns COUNT() as a *string*, so "0" is truthy — coerce before the
@@ -5376,7 +5402,15 @@ async function toggleCatDrill(code) {
 
 function renderCatDrill(rows) {
   if (!Array.isArray(rows) || !rows.length) return '<p class="sf-empty">No tasks in this category.</p>';
-  return rows.map(r => {
+  // The drill's fractions are all-members (the endpoint has no present flavor),
+  // so under the "At drill" scope they can sit beside a present-scoped header
+  // and disagree with it. Say which rule these numbers follow rather than
+  // letting the mismatch read as a bug. Rendered on every pass, so it appears
+  // and retires as the scope toggles.
+  const scopeNote = sqScope === 'present'
+    ? '<div class="drill-scope-note">Task counts below include all members; those marked away are badged.</div>'
+    : '';
+  return scopeNote + rows.map(r => {
     const done = parseInt(r.done) || 0, tot = parseInt(r.total) || 0;
     const nd = r.not_done || [];
     let body;
