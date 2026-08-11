@@ -10,7 +10,7 @@ const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
 // Shared with the newsletter so the app and the printed cover stat never disagree
 // about what counts as work — see lib/informational.js.
-const { informationalSql } = require('./lib/informational');
+const { informationalSql, criticalSql } = require('./lib/informational');
 // Who counts as "present at drill" for the two-way rollup percentages.
 const { presenceJoinSql, presentExpr } = require('./lib/presence');
 const medical = require('./lib/medical');
@@ -2145,7 +2145,11 @@ app.get('/api/squadron', requireAuth, requireRole('leadership'), async (req, res
              COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                                  AS total_tasks,
              COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})            AS done_tasks,
              COUNT(t.id) FILTER (WHERE NOT ${informationalSql()} AND ${presentExpr()})              AS total_tasks_present,
-             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()} AND ${presentExpr()}) AS done_tasks_present
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()} AND ${presentExpr()}) AS done_tasks_present,
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql()} AND ${criticalSql()})              AS crit_tasks,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()} AND ${criticalSql()}) AS crit_done,
+             COUNT(t.id) FILTER (WHERE NOT ${informationalSql()} AND ${criticalSql()} AND ${presentExpr()})   AS crit_tasks_present,
+             COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()} AND ${criticalSql()} AND ${presentExpr()}) AS crit_done_present
       FROM shops s
       LEFT JOIN members m ON m.shop_id = s.id AND m.active = true
       ${presenceJoinSql()}
@@ -2174,6 +2178,11 @@ app.get('/api/squadron/categories', requireAuth, requireRole('leadership'), asyn
       FROM task_categories cat
       JOIN tasks t ON t.category_id = cat.id
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      -- Inactive members leave every rollup. Without this filter a mid-cycle
+      -- separation kept its tasks in these counts while the shops rollup and
+      -- this card's own drill-in (both of which do filter) dropped them, so the
+      -- header contradicted the detail beneath it.
+      JOIN members m ON m.id = t.member_id AND m.active = true
       ${presenceJoinSql('att', 't.member_id')}
       LEFT JOIN task_completions tc ON tc.task_id = t.id
       GROUP BY cat.code, cat.label, cat.sort_order
@@ -2243,6 +2252,8 @@ app.get('/api/squadron/medical', requireAuth, requireRole('leadership'), async (
       SELECT t.title, t.urgency, (tc.state = 'done') AS done
         FROM tasks t
         JOIN task_categories cat ON cat.id = t.category_id
+        -- Same rule as every rollup: inactive members' tasks don't count.
+        JOIN members m ON m.id = t.member_id AND m.active = true
         LEFT JOIN task_completions tc ON tc.task_id = t.id
        WHERE cat.code = 'medical'
          AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
