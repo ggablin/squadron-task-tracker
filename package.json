@@ -8,6 +8,9 @@
     "seed": "node seed.js",
     "test": "node --env-file=.env.test --test --test-concurrency=1 test/*.test.js"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "dependencies": {
     "bcrypt": "^5.1.1",
     "compression": "^1.8.1",

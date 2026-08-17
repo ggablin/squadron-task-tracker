@@ -47,7 +47,7 @@ All three nav tabs are visible to everyone; per-section gating hides what a role
 
 - **My Tasks (member):** hero gauge + stats + "progress by category" bars, then the member's task list grouped by category with tap-to-complete checkboxes and per-task notes. Sub-tabs: **My Tasks / Timeline / Work Orders**. Timeline = the squadron_events schedule for the UTA.
 - **My Shop (supervisor):** shop gauge + per-member bar chart, the shop schedule, and an expandable member roster. Supervisors can add/delete/flag tasks for their shop's members, manage shop schedule items and work orders (status tracking), and **reset a member's password**. Leadership can switch which shop they're viewing (shop switcher).
-- **Squadron (leadership):** org chart / chain of command (visible to all), plus leadership-only roll-ups: squadron completion gauge, completion-by-shop and by-category charts, "members most behind," an all-shops list, leadership **bulk task creation**, and a "Generate Newsletter" button (⚠ that generator is uncommitted WIP — see §9).
+- **Squadron (leadership):** org chart / chain of command (visible to all), plus leadership-only roll-ups: squadron completion gauge, completion-by-shop and by-category charts, "members most behind," an all-shops list, leadership **bulk task creation**, and a "Generate Newsletter" button (`GET /newsletter` — shipped and live, see §9).
 
 ---
 
@@ -57,7 +57,7 @@ All three nav tabs are visible to everyone; per-section gating hides what a role
 - Supervisor/leadership roll-ups and dashboards (gauges, bar charts, health colors).
 - Shop schedule, work orders (with status + history), squadron timeline.
 - Org chart / chain of command derived from member `flight`/`position`/shop.
-- **Notifications:** in-app center (bell, 60s polling) **and** email (see §7). Includes a "your tasks are live" blast when a cycle is imported, and daily completion digests.
+- **Notifications:** in-app center (bell, 60s polling); an email channel is built but **not configured in production**, so in practice the bell is the only channel members have (see §7). Includes a "your tasks are live" blast when a cycle is imported, and daily completion digests.
 - Leadership bulk task creation; shop switcher for flight-level leaders.
 - Dark mode, self-hosted font, mobile + desktop layouts.
 - **Auth hardening (shipped 2026-06-20, PR #30):** all user input escaped in the member task renderers (stored-XSS fix); fixed broken leadership health-color tokens; UTA label now derived from data (not hardcoded); **change-password** flow + **forced change on first login** (`must_change_password`) + **admin password reset** (supervisor: own shop, leadership: any — generates a random one-time temp, forces a change); checkbox keyboard/ARIA; AA contrast fixes; self-hosted General Sans; stronger "overdue" color. See §8.
@@ -96,7 +96,13 @@ What the script does: finds/creates the named `uta_cycle` and marks it `is_curre
 **Convention: one path per cycle.** Don't mix the Task Builder and the legacy CLI on the same cycle — `import-tasks.js` doesn't know about `task_batches`/draft-live state and its destructive full-replace would blow away builder-authored data. This is a documented convention, not code-enforced in v1 (see §6a "out of scope").
 
 ### Where the template comes from
-There is a `generate-sample-template.js` (and a `generate-sample-newsletter.js`) that produce the Excel template / sample data — **but these are currently uncommitted local WIP, not on `master`** (see §9). These matter less now that `/build` is the normal path; they'd only be needed for a legacy-CLI bulk load.
+Nowhere, anymore. Two generator scripts (`generate-sample-template.js` for the Excel
+template, `generate-sample-newsletter.js` for a sample newsletter) once lived uncommitted in
+the maintainer's working copy; both were **deleted on 2026-08-17** as obsolete (see §9).
+They were only ever needed for a legacy-CLI bulk load, and `/build` has been the normal path
+since 2026-07-06. If a legacy bulk load is ever needed again, hand-build the workbook to the
+column spec above, or copy an existing `*.xlsx` from the project folder — do not go looking
+for a generator script.
 
 ### Other data helpers
 - `seed.js` (`npm run seed`) — one-shot initial DB setup: applies `schema.sql` and seeds the Structures shop + sample members/tasks/events. **Destructive** (re-seeding resets seeded members' passwords and tasks). For initial bring-up / local dev only, never against a live cycle.
@@ -144,7 +150,14 @@ TEST_DATABASE_URL=<pg-connection-string> ENABLE_CRON=false node --test --test-co
 
 ## 7. Notifications (in-app + email)
 
-- **In-app:** `notifications` table; the SPA polls the bell every 60s. `notify()` in `server.js` writes rows (e.g., task assigned, tasks-live).
+> **⚠ Email has never actually sent in production.** The production service has no `SMTP_*`
+> variables set (verified 2026-08-17 — only `DATABASE_URL` and `SESSION_SECRET` are), so
+> `mailer.js` no-ops by design and every `notifications` row still has `emailed_at IS NULL`.
+> The in-app bell is the only channel members have ever received. **Before configuring SMTP,
+> run `UPDATE notifications SET emailed_at = NOW() WHERE emailed_at IS NULL`** — otherwise
+> the next flush emails the entire backlog since launch, 200 rows every 5 minutes.
+
+- **In-app:** `notifications` table; the SPA polls the bell every 60s. `notify()` in `server.js` writes rows (e.g., task assigned, tasks-live). There is a second insert site: `notify-digests.js` writes `completion_digest` rows directly.
 - **Email:** `mailer.js` = `nodemailer` over SMTP. `notify-emails.js` flushes queued emails; `notify-digests.js` builds daily completion digests. Both are runnable by hand and are driven on a timer by cron in `server.js`:
   - `cron.schedule('0 21 * * *', …)` → **completion digest daily at 21:00**.
   - `cron.schedule('*/5 * * * *', …)` → **flush pending emails every 5 minutes**.
@@ -156,7 +169,13 @@ TEST_DATABASE_URL=<pg-connection-string> ENABLE_CRON=false node --test --test-co
 
 **Deploy:** merge/push to `master` → Railway auto-builds and deploys the `squadron-task-tracker` service. Verify at https://108ces.up.railway.app (`/` → 200, `/api/auth/me` → 401 means healthy). Boot runs idempotent migrations, so schema changes via `ADD COLUMN IF NOT EXISTS` ship safely.
 
-**Environment variables** (set in Railway service settings):
+**Environment variables.** The table below is the full set the code *reads*, not the set that
+is *configured*. On the production service only **`DATABASE_URL` and `SESSION_SECRET` are
+actually set** (verified 2026-08-17); `PORT` is injected by Railway, `NODE_ENV=production`
+comes from the Railpack builder's defaults rather than from anyone setting it, and the rest
+are absent — which is why email is a no-op (§7) and cron runs (opt-out, so unset = on).
+The builder is **Railpack**, which also resolves Node to `lts` unless `engines.node` pins it.
+
 | Var | Purpose |
 |---|---|
 | `DATABASE_URL` | Postgres connection (SSL auto-enabled when the URL contains `railway`) |
@@ -184,20 +203,37 @@ Seeded test accounts (local): members `becerra`/`derose`/`fowler`/`glenn`/`grada
 
 ---
 
-## 9. Uncommitted local WIP (NOT on `master` / not deployed)
+## 9. Uncommitted local WIP — none (resolved 2026-08-17)
 
-The maintainer's working copy contains work that was never committed. A fresh clone will NOT have these; the deployed app does NOT run them. Do not assume they exist:
-- `newsletter/` (from-db.js, render.js, slides.js, …) + `generate-sample-newsletter.js` — a **UTA-newsletter generator** (leadership "Generate Newsletter" → renders the slide-deck HTML from live DB data, print to PDF). The Squadron view has the button, but the route/module are uncommitted. **Decide: finish + commit, or drop.**
-- `generate-sample-template.js` — the Excel task-template generator (see §6).
-- `build-athoc-template.js`, `sync-athoc.js` — AtHoc (mass-notification) tooling, standalone.
+**There is no uncommitted WIP any more. `master` is the whole project.** This section used to
+warn that the maintainer's working copy held work a fresh clone wouldn't have. That is no
+longer true, and the working copy has been synced to `origin/master` with a clean
+`git status`. Resolved as follows:
+
+- **UTA-newsletter generator — shipped.** `newsletter/` (`from-db.js`, `render.js`,
+  `slides.js`, `shape.js`, `theme.js`, `org-chart.js`, `static/*`) and the leadership
+  `GET /newsletter` route are on `master` and live. The Squadron view's "Generate Newsletter"
+  button works.
+- **`generate-sample-newsletter.js` — deleted.** A 22-line wrapper around
+  `newsletter/from-sample.js` + `newsletter/render.js`, both of which are on `master`.
+- **`generate-sample-template.js` — deleted.** The Excel template generator, built around a
+  hardcoded May 2026 roster that had gone stale against Postgres, `/roster`, and
+  `import-members.js` (see §6).
+- **`build-athoc-template.js`, `sync-athoc.js` — deleted.** One-off AtHoc tooling pinned to
+  the **June 2026** cycle, premised on the spreadsheet being the system of record. Superseded
+  by `/build` (the normal path) and `sync-tasks.js` (additive mid-cycle inserts).
+
+> If you need any of them back, the pre-sync working copy is preserved in the maintainer's
+> local `stash@{0}` ("stale tree before master sync 2026-08-17"). Nothing was pushed, and
+> nothing on `master` changed.
 
 ---
 
 ## 10. What's left to do / open items
 
 **Data workflow — DONE (2026-07-06):** additive mid-cycle sync and the in-browser Task Builder are both shipped (§6a). `import-tasks.js`/`sync-tasks.js` remain only as legacy/backup for bulk loads.
-- Still open: decide the fate of the uncommitted **newsletter generator** (§9) — unrelated to the Task Builder, still sitting as WIP.
-- Still open (lower priority now that `/build` is the normal path): formalize/commit the Excel template generator, only relevant if the legacy CLI path is ever needed again.
+- **Closed 2026-08-17:** the newsletter generator shipped to `master`, and the Excel template
+  generator plus the AtHoc scripts were deleted as obsolete. No WIP remains — see §9.
 
 **Product / UX — member-first hierarchy redesign: DONE.** The member-first UI (task list led, dashboard demoted, softened Shop/Squadron tabs for plain members) shipped prior to this feature; see git history around that work if you need the specifics — the design critique that drove it is no longer an open item.
 - Read-only rows (info items, schedule, work orders) currently reuse the checkbox-style `.task-item` and look tappable — give them a distinct non-checkbox affordance.
