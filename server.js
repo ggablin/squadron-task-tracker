@@ -6,6 +6,7 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
+const { acquireMigrationLock } = require('./lib/db');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
@@ -72,8 +73,14 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
 }
 
 // ── Auto-migration (runs once on startup) ──────────────────────────────────
+// Held under an advisory lock so a second instance booting mid-deploy — or a
+// test process applying schema.sql at the same moment — queues behind this one
+// instead of deadlocking against it. withDeadlockRetry below stays as a second
+// line of defence for anything the lock doesn't cover. See lib/db.js.
 (async () => {
+  let releaseMigrationLock = null;
   try {
+    releaseMigrationLock = await acquireMigrationLock(pool);
     await withDeadlockRetry('schema migration', () => pool.query(`
       ALTER TABLE shops ADD COLUMN IF NOT EXISTS manages_work_orders BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
@@ -273,6 +280,8 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
     `);
   } catch (e) {
     console.error('Migration warning:', e.message);
+  } finally {
+    if (releaseMigrationLock) await releaseMigrationLock();
   }
 })();
 

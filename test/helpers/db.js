@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { makePool } = require('../../lib/db');
+const { makePool, acquireMigrationLock } = require('../../lib/db');
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('Set TEST_DATABASE_URL to a throwaway Railway/local Postgres');
@@ -11,22 +11,32 @@ const pool = makePool(url);
 // waiting for anyone, while this runs schema.sql on a second connection. Both take
 // DDL locks on the same tables and can deadlock; Postgres kills one side.
 //
-// server.js already retries (see withDeadlockRetry there). This is the other half:
-// whichever side loses has to come back, or the suite is red on the roll of a dice.
-// It was — the same commit passed three runs, then failed with five deadlocks, all
-// of them thrown here rather than in the app.
+// Retrying alone made that survivable but not reliable — the same commit passed
+// three runs, then failed with five deadlocks, and CI reproduced it immediately
+// (run 1 red, run 2 green, no changes). So both sides now take the advisory lock
+// from lib/db.js first and queue instead of colliding. server.js holds the same
+// lock around its boot migration.
+//
+// The retry loop stays as a second line of defence: the lock orders the two
+// schema writers, but nothing stops an unrelated statement elsewhere from taking
+// a conflicting lock, and a deadlock is transient by definition.
 const DEADLOCK_CODES = new Set(['40P01', '55P03', '40001']);
 
 async function applySchema(attempts = 4) {
   const sql = fs.readFileSync(path.join(__dirname, '..', '..', 'schema.sql'), 'utf8');
-  for (let i = 1; ; i++) {
-    try {
-      await pool.query(sql);
-      return;
-    } catch (err) {
-      if (!DEADLOCK_CODES.has(err && err.code) || i >= attempts) throw err;
-      await new Promise(r => setTimeout(r, 150 * i));
+  const release = await acquireMigrationLock(pool);
+  try {
+    for (let i = 1; ; i++) {
+      try {
+        await pool.query(sql);
+        return;
+      } catch (err) {
+        if (!DEADLOCK_CODES.has(err && err.code) || i >= attempts) throw err;
+        await new Promise(r => setTimeout(r, 150 * i));
+      }
     }
+  } finally {
+    await release();
   }
 }
 

@@ -1,0 +1,53 @@
+name: test
+
+# Runs the node:test suite on every PR and on every push to master.
+#
+# Why this exists: merging to master auto-deploys to Railway, into the environment
+# the whole squadron is working in. Until this workflow, the 28-file suite only ran
+# when someone remembered to run it locally. Pair this with Railway's "Wait for CI"
+# setting (service → Settings) so a red run actually blocks the deploy rather than
+# just reporting after the fact — the push trigger below is what that setting needs.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      # A local throwaway Postgres per run. The suite applies schema.sql and resets
+      # data, so it must never point at a shared database.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - run: npm ci
+
+      # npm test runs `node --env-file=.env.test`, and .env.test is gitignored
+      # (it holds a real connection string locally), so CI writes its own.
+      - name: Write .env.test
+        run: echo 'TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/tracker_test' > .env.test
+
+      # --test-concurrency=1 is set in the npm script and is required: every file
+      # shares one database and applies schema.sql at startup.
+      - run: npm test
