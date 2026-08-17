@@ -162,6 +162,27 @@ error.
 link), an `app.all('/api/*')` JSON 404 (`~2848`), then `app.get('*')` → `index.html`
 (`2855`).
 
+> **⚠ The catch-all swallows missing files, and this shapes several phases.** Any
+> unmatched path returns `index.html` with **200 and `Content-Type: text/html`** — verified
+> against staging 2026-08-17:
+>
+> | Path | Status | Content-Type |
+> |---|---|---|
+> | `/definitely-not-real` | 200 | `text/html` |
+> | `/sw.js` | 200 | `text/html` |
+> | `/manifest.webmanifest` | 200 | `text/html` |
+> | `/icons/icon-192.png` | 200 | `text/html` |
+> | `/api/not-real` | 404 | `application/json` ← correct, has its own handler |
+>
+> Three consequences. **(1)** A typo'd or missing icon/manifest path does not 404 — the
+> browser gets HTML and fails while parsing it, which is a miserable thing to debug. Verify
+> every asset added in Phase 1 by `Content-Type`, not by status code. **(2)** The `/sw.js`
+> route must sit before *both* `express.static` and the catch-all, or it serves HTML that
+> the browser rejects as a worker script. **(3)** Most important, for §8.1: a cache
+> predicate of `response.ok && response.type === 'basic'` is **satisfied by
+> HTML-for-a-missing-asset**, so a single typo could persist an HTML body under an asset
+> URL on every member's device. The predicate must also check `Content-Type`.
+
 **Boot migrations.** `server.js:75–~220` runs one `withDeadlockRetry`-wrapped statement of
 `ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS` on *every* startup (retry codes
 `40P01`, `55P03`, `40001`). Convention: every schema change is twinned into `schema.sql`
@@ -417,6 +438,30 @@ Also add `"engines": { "node": "24.x" }` to `package.json` so CI, Railpack, and 
 agree on a Node major (local is 24.14; Railpack's `lts` default resolves to 24 today but
 will move on its own; `--env-file` in the test script needs ≥ 20.6). Cheap, and it removes
 a whole class of "works on my machine."
+
+### 5.2a Make the suite deterministic first — CI that flakes is worse than no CI
+
+The very first CI run failed on `error: deadlock detected`, and a re-run of the **identical
+commit** passed. `test/helpers/db.js` already documented the race: requiring `server.js`
+fires its boot migration unawaited while the harness applies `schema.sql` on a second
+connection, both take `AccessExclusiveLock` on the same tables, and Postgres kills one side.
+Retrying made it survivable, not reliable — *"red on the roll of a dice."* CI makes it
+**more** likely, not less: a local Postgres container is faster than Railway over a proxy,
+so the two racers collide more often.
+
+A flaky check cannot be a merge gate, so this is a prerequisite for §5.3, not a nicety. The
+fix is a Postgres advisory lock (`lib/db.js`, `acquireMigrationLock`) held across both
+writers, so they queue rather than collide. It is held on a dedicated connection because
+advisory locks are session-scoped, and Postgres drops it automatically if the process dies,
+so a crashed migration cannot wedge the next boot. `withDeadlockRetry` stays as a second
+line of defence.
+
+This also fixes the **production** case the original comment names: a Railway deploy briefly
+runs two instances, and both execute the boot migration block unconditionally.
+
+Covered by `test/migration-lock.test.js`, which asserts the mechanism (a second acquirer
+blocks; releasing frees the lock in `pg_locks`; sequential acquires don't leak) rather than
+the symptom — a test that only fails sometimes is worse than no test.
 
 ### 5.3 Make CI actually gate deploys
 
@@ -856,10 +901,16 @@ Strategy, keyed on the fact that the app is auth-gated and the data is live:
 | `design.css`, `ui.js`, `member-browser.js`, `offline.js` | Stale-while-revalidate | Change occasionally; not content-hashed |
 | Anything else (non-GET, cross-origin, document downloads) | **Not intercepted** | |
 
-Rules inside the handler: cache only `response.ok && response.type === 'basic'`; cache
-names `shell-${VERSION}` / `assets-${VERSION}`; on `activate`, delete every cache not
-matching the current `VERSION` then `clients.claim()`; precache `/`, the four SWR files,
-the manifest and `icon-192` on `install` using `cache: 'reload'` requests.
+Rules inside the handler: cache only `response.ok && response.type === 'basic'` **and a
+`Content-Type` matching what was asked for** — see the catch-all warning in §2, which makes
+the first two conditions true for a missing asset that came back as `index.html`. Without
+the content-type check a single typo'd path persists an HTML body under an asset URL on
+every member's device, which is precisely the failure the kill switch exists for and is not
+worth spending. Cache names `shell-${VERSION}` / `assets-${VERSION}`; on `activate`, delete
+every cache not matching the current `VERSION` then `clients.claim()`; precache `/`, the
+four SWR files, the manifest and `icon-192` on `install` using `cache: 'reload'` requests,
+and **fail the install if any precache response is not the expected type** — a failed
+install leaves the old worker in place, which is the safe outcome.
 
 ### 8.2 `public/offline.js` — identity + task cache
 
@@ -1022,6 +1073,7 @@ plan and the repo has zero client-side tests today.
 | Path | Phase | Purpose |
 |---|---|---|
 | `.github/workflows/test.yml` | 0 | CI |
+| `test/migration-lock.test.js` | 0 | Proves the advisory lock serializes schema writers (§5.2a) |
 | `public/manifest.webmanifest` | 1 | PWA manifest |
 | `public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon-180.png` | 1 | Icons |
 | `public/favicon.ico` | 1 | Desktop tab |
@@ -1037,6 +1089,8 @@ plan and the repo has zero client-side tests today.
 | Path | Change |
 |---|---|
 | `package.json` | `engines.node` (0); `web-push` (2) |
+| `lib/db.js` | `acquireMigrationLock` + `MIGRATION_LOCK_KEY` (0, §5.2a) |
+| `test/helpers/db.js` | `applySchema` takes the migration lock (0, §5.2a) |
 | `server.js` | `rolling: true` in the session options at `:44–56` (1); `/sw.js` route before `express.static` at `:2764` (2); push routes near `:2545` (2); `push_subscriptions` + `pushed_at` at the end of the boot-migration statement, ~`:209` (2); `notify()` at `:451` kicks `flushPush` (2); cron catch-up at `:2889` (2); `code` fields in `PUT /api/tasks/:id` at `:904–956` (4) |
 | `schema.sql` | `push_subscriptions`, `pushed_at`, indexes (2) |
 | `public/index.html` | `<head>` block (1); Resources install card + onboarding pointer (1); `applyDeepLink` (1); SW registration + `message` listener (2); alerts toggle in `#notif-panel` (2); `offline.js` include, `init()` offline branch, `fetchWithTimeout`, `loadTasks` cold-path catch, `setOffline`, `doLogout` wipe + offline-safety (3); `cycleTask` wrap, overlay, flush, rejections notice, logout guard (4) |
@@ -1052,7 +1106,9 @@ set to `kill`, then removed.
 
 ## 11. Rollout order to production
 
-1. **Phase 0** — staging, CI, Wait-for-CI, `engines`, `NODE_ENV`. Nothing user-visible.
+1. **Phase 0** — staging, CI, the migration-lock fix that makes the suite deterministic
+   (§5.2a — a prerequisite for Wait-for-CI and branch protection, both of which are useless
+   against a flaky check), then Wait-for-CI, `engines`, `NODE_ENV`. Nothing user-visible.
 2. **Phase 1** — manifest + icons + head meta + install card + deep link + rolling session +
    comms post. Additive; gets the icon onto home screens and proves the deploy path.
 3. **Phase 2** — push-only worker + `lib/push.js` + toggle, after the backup. Comms
