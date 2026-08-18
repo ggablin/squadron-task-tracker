@@ -10,17 +10,37 @@
        same tick, ahead of first paint. -->
   <meta name="theme-color" id="theme-color" content="#f6f7ed">
   <script>
+    // Theme resolution, in one place and before first paint so there is no flash.
+    // Three states, not two:
+    //   · nothing stored  -> follow the phone's own light/dark setting
+    //   · 'dark'/'light'  -> the member tapped the toggle; their choice wins
+    // Following the OS by default also keeps the system bars honest: Android paints
+    // the gesture nav bar from the system theme and a PWA cannot override it, so a
+    // light app on a dark phone gets a black band under it no matter what we do.
     (function () {
-      try {
-        var dark = localStorage.getItem('theme') === 'dark';
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function stored() {
+        try { return localStorage.getItem('theme'); } catch (e) { return null; }
+      }
+      function paint(dark) {
         if (dark) document.documentElement.dataset.theme = 'dark';
-        // The status bar must follow the APP's theme, which is a manual toggle in
-        // localStorage — it deliberately does not follow the OS. Keying the colour
-        // to prefers-color-scheme (as this file briefly did) puts a black bar above
-        // a cream app whenever the phone is in dark mode but the app is not.
+        else delete document.documentElement.dataset.theme;
+        // Status bar follows the app, never the OS directly — see above.
         var m = document.getElementById('theme-color');
         if (m) m.setAttribute('content', dark ? '#2a2724' : '#f6f7ed');
-      } catch (e) {}
+      }
+
+      var s = stored();
+      paint(s === 'dark' || (s !== 'light' && mq.matches));
+
+      // Track the phone flipping to dark at sunset, but only while the member has
+      // expressed no preference of their own.
+      var onChange = function (e) { if (!stored()) paint(e.matches); };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);   // older WebKit
+
+      window.__setTheme = paint;   // used by toggleTheme()
     })();
   </script>
   <title>108th CES UTA Tracker</title>
@@ -4057,15 +4077,13 @@ async function doLogout() {
 }
 
 function toggleTheme() {
-  var root = document.documentElement;
-  var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
-  if (next === 'dark') root.dataset.theme = 'dark';
-  else delete root.dataset.theme;
+  var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  // Tapping the toggle is an explicit choice and from here on it outranks the
+  // phone's setting — the head script only follows the OS while this is unset.
   try { localStorage.setItem('theme', next); } catch (e) {}
-  // Carry the phone's status bar across with the rest of the UI, or it stays on
-  // the old theme until the next reload — a black bar over a cream app.
-  var m = document.getElementById('theme-color');
-  if (m) m.setAttribute('content', next === 'dark' ? '#2a2724' : '#f6f7ed');
+  // Repaint through the same function the head script uses, so the class, the
+  // status-bar colour and the stored value can never drift apart.
+  (window.__setTheme || function () {})(next === 'dark');
 }
 
 function showLogin() {

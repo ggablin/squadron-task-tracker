@@ -10,9 +10,25 @@
      would let them be installed as separate home-screen apps by mistake. -->
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
-<meta name="theme-color" content="#f6f7ed" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#2a2724" media="(prefers-color-scheme: dark)">
-<script>try{if(localStorage.getItem('theme')==='dark')document.documentElement.dataset.theme='dark';}catch(e){}</script>
+<meta name="theme-color" id="theme-color" content="#f6f7ed">
+<script>
+// Follow the phone's light/dark setting until the member picks one themselves,
+// and keep the status bar on the app's theme rather than the OS's. Mirrors the
+// head script in index.html; see the long comment there.
+(function(){try{
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  function stored(){try{return localStorage.getItem('theme');}catch(e){return null;}}
+  function paint(d){
+    if(d)document.documentElement.dataset.theme='dark';else delete document.documentElement.dataset.theme;
+    var m=document.getElementById('theme-color');
+    if(m)m.setAttribute('content',d?'#2a2724':'#f6f7ed');
+  }
+  var s=stored();paint(s==='dark'||(s!=='light'&&mq.matches));
+  var f=function(e){if(!stored())paint(e.matches);};
+  if(mq.addEventListener)mq.addEventListener('change',f);else if(mq.addListener)mq.addListener(f);
+  window.__setTheme=paint;
+}catch(e){}})();
+</script>
 <link rel="stylesheet" href="/design.css">
 <script src="/ui.js" defer></script>
 <style>
