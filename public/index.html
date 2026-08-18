@@ -3,12 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!-- Colours the phone's status bar. Matches .mob-hdr (var(--cream)), which sits
+       directly beneath it, so the bar and the header read as one surface.
+       Declared BEFORE the theme script below so that script can correct it in the
+       same tick, ahead of first paint. -->
+  <meta name="theme-color" id="theme-color" content="#f6f7ed">
   <script>
     (function () {
       try {
-        if (localStorage.getItem('theme') === 'dark') {
-          document.documentElement.dataset.theme = 'dark';
-        }
+        var dark = localStorage.getItem('theme') === 'dark';
+        if (dark) document.documentElement.dataset.theme = 'dark';
+        // The status bar must follow the APP's theme, which is a manual toggle in
+        // localStorage — it deliberately does not follow the OS. Keying the colour
+        // to prefers-color-scheme (as this file briefly did) puts a black bar above
+        // a cream app whenever the phone is in dark mode but the app is not.
+        var m = document.getElementById('theme-color');
+        if (m) m.setAttribute('content', dark ? '#2a2724' : '#f6f7ed');
       } catch (e) {}
     })();
   </script>
@@ -21,8 +32,6 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
-  <meta name="theme-color" content="#fdfdfa" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#1a1816" media="(prefers-color-scheme: dark)">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -4053,6 +4062,10 @@ function toggleTheme() {
   if (next === 'dark') root.dataset.theme = 'dark';
   else delete root.dataset.theme;
   try { localStorage.setItem('theme', next); } catch (e) {}
+  // Carry the phone's status bar across with the rest of the UI, or it stays on
+  // the old theme until the next reload — a black bar over a cream app.
+  var m = document.getElementById('theme-color');
+  if (m) m.setAttribute('content', next === 'dark' ? '#2a2724' : '#f6f7ed');
 }
 
 function showLogin() {
