@@ -59,6 +59,18 @@ body{
   font-weight:600;border-radius:999px;cursor:pointer;font-size:13px;font-family:inherit;
 }
 .toolbar .hint{opacity:.7;font-size:12px;}
+/* The newsletter opens in a new tab from the tracker. In an installed PWA there
+   is no browser chrome to go back with, so it needs its own way home.
+   A <button> rather than an <a href>: this deck gets emailed and saved as a PDF,
+   and test/newsletter-http.test.js enforces that the page carries no src/href
+   outside data: URIs so it survives that. A relative link would point nowhere in
+   an emailed copy anyway. It sits in .no-print, like the print button, so it
+   never reaches the PDF. */
+.toolbar button.back{
+  background:transparent;color:var(--cream);opacity:.85;
+  border:1px solid rgba(255,255,255,.3);padding:6px 14px;white-space:nowrap;
+}
+.toolbar button.back:hover{opacity:1;background:rgba(255,255,255,.12);}
 
 .deck{display:flex;flex-direction:column;align-items:center;gap:20px;padding:20px;}
 

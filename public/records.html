@@ -4,8 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#f6f7ed">
 <title>Member Records — 108th CES</title>
+<!-- Tab icon + themed status bar, so a leader landing here directly sees the same
+     app. These pages are desktop tools: no manifest and no *-capable metas, which
+     would let them be installed as separate home-screen apps by mistake. -->
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+<meta name="theme-color" content="#f6f7ed" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#2a2724" media="(prefers-color-scheme: dark)">
 <script>try{if(localStorage.getItem('theme')==='dark')document.documentElement.dataset.theme='dark';}catch(e){}</script>
 <link rel="stylesheet" href="/design.css">
 <script src="/ui.js" defer></script>

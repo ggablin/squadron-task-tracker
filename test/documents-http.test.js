@@ -125,7 +125,19 @@ test('a filename cannot inject a header or escape into a path', async () => {
   assert.ok(!/[\r\n]/.test(cd), 'no CR/LF may survive into the header');
   assert.ok(!cd.includes('..') && !cd.includes('/'), 'no path parts may survive');
   assert.strictEqual((cd.match(/"/g) || []).length, 2, 'exactly the two delimiting quotes');
-  assert.strictEqual(res.headers.get('set-cookie'), null, 'no injected header');
+
+  // The session is rolling (server.js), so every response legitimately re-issues
+  // connect.sid — a blanket "no Set-Cookie at all" would now fail for a reason
+  // that has nothing to do with this attack. Assert the real property instead:
+  // the smuggled cookie must be absent, and nothing but the session cookie may
+  // be set. That is strictly narrower than the old check, not weaker.
+  const setCookies = typeof res.headers.getSetCookie === 'function'
+    ? res.headers.getSetCookie()
+    : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : []);
+  assert.ok(!setCookies.some(c => /\bx=1\b/.test(c)),
+    'the filename must not smuggle a cookie into the response');
+  assert.ok(setCookies.every(c => c.startsWith('connect.sid=')),
+    `only the session cookie may be set, got: ${setCookies.join(' | ')}`);
 });
 
 test('a file whose bytes contradict its extension is refused, and stores nothing', async () => {
