@@ -687,6 +687,20 @@
       padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
       z-index: 200;
     }
+
+    /* Android paints its gesture-navigation bar itself and a PWA cannot colour it:
+       there is no manifest field for it, unlike theme_color for the status bar. In
+       dark mode it comes out pure black, which left a visible step against this
+       bar's warm near-black (--bg, #1a1816).
+
+       So meet it where it is, but ONLY inside the installed app — display-mode:
+       standalone — because in a browser tab there is no system bar to match and a
+       pure-black strip would just look wrong. The safe-area padding above already
+       reserves the space the system bar sits over, so this simply continues the
+       colour into it. */
+    @media (display-mode: standalone) {
+      [data-theme="dark"] .mob-nav { background: #000; border-top-color: #000; }
+    }
     .mob-btn {
       flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
       padding: 6px 8px; background: none; border: none;
