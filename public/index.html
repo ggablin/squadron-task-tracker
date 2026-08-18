@@ -4092,11 +4092,17 @@ async function doLogout() {
 
 function toggleTheme() {
   var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-  // Tapping the toggle is an explicit choice and from here on it outranks the
-  // phone's setting — the head script only follows the OS while this is unset.
-  try { localStorage.setItem('theme', next); } catch (e) {}
-  // Repaint through the same function the head script uses, so the class, the
-  // status-bar colour and the stored value can never drift apart.
+  var osDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  try {
+    // Landing on the value the phone already uses means "no override" — clear it
+    // and go back to following the OS. Without this there is no route back to
+    // automatic once anyone taps the toggle even once, which is exactly how a
+    // member ends up pinned to light on a dark phone and cannot explain why.
+    if ((next === 'dark') === osDark) localStorage.removeItem('theme');
+    else localStorage.setItem('theme', next);
+  } catch (e) {}
+  // Repaint through the same function the head script uses, so the attribute,
+  // the status-bar colour and the stored value can never drift apart.
   (window.__setTheme || function () {})(next === 'dark');
 }
 

@@ -198,9 +198,12 @@ input { font-family:inherit; }
 
 <script>
 function toggleTheme(){
-  var d=document.documentElement;
-  if(d.dataset.theme==='dark'){delete d.dataset.theme;try{localStorage.setItem('theme','light')}catch(e){}}
-  else{d.dataset.theme='dark';try{localStorage.setItem('theme','dark')}catch(e){}}
+  // Mirrors index.html: choosing the value the phone already uses clears the
+  // override and returns to following the OS, so "auto" is always reachable.
+  var dark=document.documentElement.dataset.theme!=='dark';
+  var osDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  try{ if(dark===osDark) localStorage.removeItem('theme'); else localStorage.setItem('theme',dark?'dark':'light'); }catch(e){}
+  (window.__setTheme||function(){})(dark);
 }
 
 function escapeHtml(s) {
