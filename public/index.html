@@ -2127,8 +2127,8 @@
        scroll position — a member has to know the list is stale BEFORE acting
        on it, not after scrolling back up. --warn/--wrn-bg are the AA-checked pair. */
     .offline-banner {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 300;
-      padding: calc(env(safe-area-inset-top, 0px) + 9px) 14px 9px;
+      flex: none;                       /* never squeezed by the scrolling view */
+      padding: 9px 14px;
       background: var(--wrn-bg); color: var(--warn);
       border-bottom: 1px solid var(--warn);
       font-size: 13px; font-weight: 550; line-height: 1.4; text-align: center;
@@ -2356,10 +2356,6 @@
 
 <div id="app" style="display:none">
 
-  <!-- Shown by setOffline(). role=status so a screen reader announces the
-       change without stealing focus from whatever the member is doing. -->
-  <div id="offline-banner" class="offline-banner" hidden role="status" aria-live="polite"></div>
-
   <!-- ═══ SIDEBAR (white) ════════════════════════ -->
   <aside class="sidebar">
     <div class="sb-top">
@@ -2427,6 +2423,12 @@
 
   <!-- ═══ MAIN ════════════════════════════════════ -->
   <main class="main">
+
+    <!-- Shown by setOffline(). Inside .main so it reserves its own space instead
+         of covering the header. It still cannot scroll away: .view is what
+         scrolls, not the page. role=status announces the change to a screen
+         reader without stealing focus. -->
+    <div id="offline-banner" class="offline-banner" hidden role="status" aria-live="polite"></div>
 
     <!-- DESKTOP TOPBAR -->
     <div class="desk-top">
