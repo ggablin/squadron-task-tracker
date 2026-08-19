@@ -1474,6 +1474,21 @@
       border-radius: var(--rs); box-shadow: 0 12px 32px rgba(0,0,0,.18);
       z-index: 9601;
     }
+    .notif-push {
+      border-top: 2px solid var(--border); padding: 12px 14px;
+      font-size: 13px; color: var(--t2); line-height: 1.5;
+    }
+    .notif-push b { color: var(--text); font-weight: 650; }
+    .notif-push button {
+      margin-top: 9px; min-height: 40px; padding: 0 14px; width: 100%;
+      border: 1px solid var(--text); border-radius: var(--rs);
+      background: var(--text); color: var(--bg);
+      font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .notif-push button.off { background: transparent; color: var(--text); }
+    .notif-push button:disabled { opacity: .5; cursor: default; }
+
     .notif-hdr {
       display: flex; align-items: center; justify-content: space-between;
       padding: 12px 14px; border-bottom: 2px solid var(--border);
@@ -3786,6 +3801,9 @@
     <button class="notif-markall" onclick="markAllNotifsRead()">Mark all read</button>
   </div>
   <div id="notif-list"></div>
+  <!-- Filled by syncPushRow(). Lives next to the bell because that is where a
+       member already goes to look for what they have been told. -->
+  <div class="notif-push" id="notif-push" style="display:none"></div>
 </div>
 
 <!-- ═══ CHANGE PASSWORD MODAL ═══════════════════ -->
@@ -3948,6 +3966,7 @@ function escapeHtml(s) {
 }
 
 function openNotifPanel() {
+  syncPushRow();   // permission can change in browser settings while the app is open
   document.getElementById('notif-backdrop').classList.add('open');
   document.getElementById('notif-panel').style.display = '';
   loadNotifications(true);
@@ -4074,7 +4093,7 @@ async function resetMemberPassword(memberId) {
 async function init() {
   try {
     const res = await fetch('/api/auth/me');
-    if (res.ok) { currentMember = await res.json(); showApp(); applyDeepLink(); }
+    if (res.ok) { currentMember = await res.json(); showApp(); applyDeepLink(); initPush(); }
     else showLogin();
   } catch { showLogin(); }
 }
@@ -5947,6 +5966,124 @@ async function doInstall() {
   deferredInstall = null;          // a prompt event is single-use
   try { await e.prompt(); await e.userChoice; } catch (err) {}
   syncInstallCard();
+}
+
+/* ══ Phone alerts (Web Push) ══════════════════════════════════════════════
+   The service worker here has NO fetch handler, so it cannot intercept a page
+   load or strand anyone on a stale shell — the reason push can ship before the
+   caching phase.
+
+   Permission is requested ONLY from the tap below. An unprompted permission
+   dialog is the fastest route to a permanent block, which no code can undo —
+   the member would have to dig through browser settings to recover. */
+let swReg = null;
+let vapidKey = null;
+
+async function initPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    swReg = await navigator.serviceWorker.register('/sw.js');
+    // A tapped notification focuses the existing window and posts here rather
+    // than navigating, so the member keeps their place.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'open-view') {
+        try { applyDeepLink(new URL(e.data.url)); } catch (err) {}
+      }
+    });
+    const r = await fetch('/api/push/vapid-key');
+    vapidKey = r.ok ? (await r.json()).key : null;
+    // Endpoints rotate, so re-post the current subscription on every load where
+    // permission already stands. The route upserts, making this free.
+    if (vapidKey && Notification.permission === 'granted') {
+      const sub = await swReg.pushManager.getSubscription();
+      if (sub) await postSubscription(sub);
+    }
+  } catch (e) { /* push is optional; the in-app bell still works */ }
+  syncPushRow();
+}
+
+function postSubscription(sub) {
+  return fetch('/api/push/subscribe', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sub.toJSON()),
+  });
+}
+
+// VAPID keys travel as base64url; subscribe() wants a Uint8Array.
+function urlBase64ToUint8Array(base64) {
+  const padded = (base64 + '='.repeat((4 - base64.length % 4) % 4))
+    .replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(padded);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+function syncPushRow() {
+  const row = document.getElementById('notif-push');
+  if (!row) return;
+  const supported = 'serviceWorker' in navigator && 'PushManager' in window;
+
+  // iOS grants push only to an app on the Home Screen (16.4+). Saying so is the
+  // difference between a member installing and a member concluding it is broken.
+  if (isIOS() && !isStandalone()) {
+    row.innerHTML = '<b>Phone alerts</b><br>Add this app to your Home Screen first, '
+      + 'then turn alerts on from here. Steps are under Resources.';
+    row.style.display = ''; return;
+  }
+  if (!supported || !vapidKey) { row.style.display = 'none'; return; }
+
+  if (Notification.permission === 'denied') {
+    row.innerHTML = '<b>Phone alerts</b><br>Notifications are blocked for this app '
+      + 'in your browser settings. They have to be re-allowed there.';
+    row.style.display = ''; return;
+  }
+  swReg && swReg.pushManager.getSubscription().then(sub => {
+    row.innerHTML = sub
+      ? '<b>Phone alerts are on</b><br>You will be told when tasks are assigned, '
+        + 'without opening the app.'
+        + '<button class="off" onclick="disablePush()">Turn off alerts</button>'
+      : '<b>Phone alerts</b><br>Get told when tasks are assigned, without opening the app.'
+        + '<button onclick="enablePush()">Turn on alerts</button>';
+    row.style.display = '';
+  });
+}
+
+async function enablePush() {
+  if (!swReg || !vapidKey) return;
+  const btn = document.querySelector('#notif-push button');
+  if (btn) { btn.disabled = true; btn.textContent = 'Just a moment...'; }
+  try {
+    // Must be inside the tap — see the note at the top of this section.
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { syncPushRow(); return; }
+    const sub = await swReg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+    const res = await postSubscription(sub);
+    if (!res.ok) throw new Error('subscribe failed');
+    showToast('Phone alerts are on', 'success');
+  } catch (e) {
+    showToast('Could not turn on alerts', 'error');
+  }
+  syncPushRow();
+}
+
+async function disablePush() {
+  if (!swReg) return;
+  try {
+    const sub = await swReg.pushManager.getSubscription();
+    if (sub) {
+      // Tell the server first: if unsubscribe() succeeds and the POST does not,
+      // the row lingers and the member keeps getting pushes they cannot stop.
+      await fetch('/api/push/unsubscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+      await sub.unsubscribe();
+    }
+    showToast('Phone alerts are off', 'success');
+  } catch (e) { showToast('Could not turn off alerts', 'error'); }
+  syncPushRow();
 }
 
 /* Deep link: /?view=member lands a member on their list rather than the default

@@ -298,3 +298,30 @@ CREATE TABLE IF NOT EXISTS session (
   CONSTRAINT session_pkey PRIMARY KEY (sid)
 );
 CREATE INDEX IF NOT EXISTS IDX_session_expire ON session (expire);
+
+-- ── Web Push subscriptions ─────────────────────────────────────────────────
+-- One row per browser+device that has granted notification permission. A member
+-- with a phone and a laptop has two. endpoint is the push service's URL for that
+-- installation and is the natural key: browsers rotate it, and the same device
+-- re-registering must update the existing row rather than accumulate duplicates,
+-- so writes are ON CONFLICT (endpoint) DO UPDATE.
+--
+-- ON DELETE CASCADE because a removed member's subscriptions are dead weight —
+-- the push service would 410 them anyway, and lib/push.js prunes on that.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          SERIAL PRIMARY KEY,
+  member_id   INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      TEXT NOT NULL,
+  auth        TEXT NOT NULL,
+  user_agent  TEXT,
+  created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_member ON push_subscriptions (member_id);
+
+-- Mirrors notifications.emailed_at: NULL means "not yet delivered by push".
+-- The partial index keeps the flush query cheap as the table grows, exactly as
+-- idx_notifications_unemailed does for the email channel.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_notifications_unpushed
+  ON notifications (pushed_at) WHERE pushed_at IS NULL;

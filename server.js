@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { acquireMigrationLock } = require('./lib/db');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
@@ -213,6 +214,23 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
       -- document_id's REFERENCES needs the documents table, created just above.
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS link_url    VARCHAR(500);
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS document_id INTEGER REFERENCES documents(id);
+      -- Web Push. Twinned from schema.sql; see the comment there for why endpoint
+      -- is the key. Placed last so members and notifications both already exist —
+      -- this block runs top to bottom and a REFERENCES to a table created later
+      -- in the same statement would fail.
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id          SERIAL PRIMARY KEY,
+        member_id   INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+        endpoint    TEXT NOT NULL UNIQUE,
+        p256dh      TEXT NOT NULL,
+        auth        TEXT NOT NULL,
+        user_agent  TEXT,
+        created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_push_subs_member ON push_subscriptions (member_id);
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed_at TIMESTAMP;
+      CREATE INDEX IF NOT EXISTS idx_notifications_unpushed
+        ON notifications (pushed_at) WHERE pushed_at IS NULL;
     `));
     console.log('Migration check complete');
 
@@ -474,6 +492,13 @@ async function notify(memberIds, { type, title, body = null, link = null }) {
        SELECT id, $2, $3, $4, $5 FROM unnest($1::int[]) AS id`,
       [ids, type, title, body, link]
     );
+    // Deliver immediately, but never in the request path: setImmediate detaches
+    // it and the catch means a push failure cannot break whatever wrote the
+    // notification. The cron tick below is the catch-up for anything missed.
+    setImmediate(() => {
+      require('./lib/push').flushPush({ pool })
+        .catch(e => console.error('push flush failed:', e.message));
+    });
   } catch (err) {
     console.error('notify() failed:', err.message);
   }
@@ -2602,6 +2627,59 @@ app.post('/api/notifications/read', requireAuth, async (req, res) => {
   }
 });
 
+// ── Web Push ────────────────────────────────────────────────────────────────
+// One row per browser+device. The client posts PushSubscription.toJSON(), which
+// is {endpoint, keys:{p256dh, auth}}. Delivery itself is a flush job, not a
+// direct send — see lib/push.js for why.
+
+// The client needs the public key to call pushManager.subscribe(). Returning
+// null rather than 404 when unset lets the UI hide the toggle cleanly instead
+// of treating a deliberate no-op as an error.
+app.get('/api/push/vapid-key', requireAuth, (req, res) => {
+  res.json({ key: process.env.VAPID_PUBLIC_KEY || null });
+});
+
+app.post('/api/push/subscribe', requireAuth, async (req, res) => {
+  try {
+    const { endpoint, keys } = req.body || {};
+    const p256dh = keys && keys.p256dh, auth = keys && keys.auth;
+    if (typeof endpoint !== 'string' || !endpoint.startsWith('https://')
+        || typeof p256dh !== 'string' || typeof auth !== 'string') {
+      return res.status(400).json({ error: 'A push subscription is required' });
+    }
+    // Re-subscribing is routine: browsers rotate endpoints, and the same device
+    // re-registers on every load where permission is already granted. Upsert on
+    // endpoint so that is idempotent, and reassign member_id so a shared phone
+    // moves the subscription to whoever is signed in rather than notifying the
+    // previous member.
+    await pool.query(`
+      INSERT INTO push_subscriptions (member_id, endpoint, p256dh, auth, user_agent)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (endpoint) DO UPDATE
+        SET member_id = EXCLUDED.member_id, p256dh = EXCLUDED.p256dh,
+            auth = EXCLUDED.auth, user_agent = EXCLUDED.user_agent
+    `, [req.session.memberId, endpoint, p256dh, auth, (req.get('user-agent') || '').slice(0, 300)]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/push/unsubscribe', requireAuth, async (req, res) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (typeof endpoint !== 'string') return res.status(400).json({ error: 'endpoint is required' });
+    // Scoped to the caller so one member cannot unsubscribe another's device.
+    await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND member_id = $2',
+      [endpoint, req.session.memberId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Roster management (capability-gated: members.can_manage_roster) ──────────
 function rosterFail(res, e) {
   if (e instanceof roster.RosterError) {
@@ -2777,6 +2855,30 @@ app.get('/api/export/shop-lists', requireAuth, requireRole('leadership'), async 
 
 // ── Static ────────────────────────────────────────────────────────────────────
 
+// ── Service worker ──────────────────────────────────────────────────────────
+// Served from a route rather than public/, for three reasons:
+//   · SW_MODE=kill swaps in the self-destruct worker from a Railway variable,
+//     with no code change and no deploy of new source — the only way to retire a
+//     worker already living on members' phones.
+//   · The cache name can carry the commit SHA without a build step, so every
+//     deploy is a byte-different worker and clients update on next open.
+//   · no-store is guaranteed. Browsers already bypass the HTTP cache for the
+//     worker script, but losing remote control of this file is not a risk worth
+//     taking for nothing.
+// MUST precede express.static, or a file of the same name would win.
+const SW_SRC  = fs.readFileSync(path.join(__dirname, 'lib', 'sw', 'sw.js'), 'utf8');
+const SW_KILL = fs.readFileSync(path.join(__dirname, 'lib', 'sw', 'sw-kill.js'), 'utf8');
+const SW_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA || String(Date.now());
+app.get('/sw.js', (req, res) => {
+  const body = process.env.SW_MODE === 'kill' ? SW_KILL : SW_SRC;
+  res.set({
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+  });
+  res.send(`const VERSION = ${JSON.stringify(SW_VERSION)};
+${body}`);
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Standalone task-builder prototype for review (public, no auth) — clean URL
@@ -2915,6 +3017,14 @@ if (require.main === module) {
     // Flush pending notification emails every 5 minutes.
     cron.schedule('*/5 * * * *', () => {
       flushEmails({ pool }).catch(e => console.error('email job failed:', e.message));
+    });
+
+    // Push catch-up every minute. notify() already kicks a flush inline, so this
+    // exists for the rows it does not write — notify-digests.js inserts directly
+    // — and for any send that failed transiently. A no-op when VAPID is unset.
+    const { flushPush } = require('./lib/push');
+    cron.schedule('* * * * *', () => {
+      flushPush({ pool }).catch(e => console.error('push job failed:', e.message));
     });
 
     console.log('Scheduled jobs registered (digests 21:00 daily, email flush every 5m)');
