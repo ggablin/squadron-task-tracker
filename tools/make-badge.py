@@ -67,8 +67,14 @@ scale = lambda pts: [(x * K, y * K) for x, y in pts]
 mask = Image.new('L', (N, N), 0)
 d = ImageDraw.Draw(mask)
 
+# Ram horns, not bull horns: out over the top of the skull, then curling DOWN
+# and back in, the tip finishing low near the jaw. Two chained curves rather than
+# one — a single quadratic cannot reverse direction, and a horn that only sweeps
+# up reads as a longhorn, which is not the animal in the artwork.
 for side in (1, -1):
-    horn = taper(bez((862, 900), (516, 892), (392, 588), 110), 168, 10)
+    centre = (bez((872, 868), (628, 672), (360, 880), 70)      # out and over the crown
+              + bez((360, 880), (206, 1150), (486, 1286), 70))  # curling down and in
+    horn = taper(centre, 170, 12)
     d.polygon(scale(horn if side == 1 else mirror(horn)), fill=255)
 
 head = (bez((788, 880), (1000, 700), (1212, 880))
