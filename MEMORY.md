@@ -1,8 +1,15 @@
 # 108th CES UTA Task Tracker — Project Handoff
 
-> Purpose of this file: give a new engineer/agent everything needed to be productive on this app in one read. It documents scope, architecture, the monthly data-update workflow, what's built, and what's left. Last updated 2026-07-06 (Task Builder + Records feature).
+> Purpose of this file: give a new engineer/agent everything needed to be productive on this app in one read. It documents scope, architecture, the monthly data-update workflow, what's built, and what's left. Last updated 2026-08-19 (mobile app + push notifications; see the note below).
 
 ---
+
+> **The tracker is an installable phone app with push notifications as of
+> 2026-08-19.** Read [`docs/2026-08-19-mobile-app-handoff.md`](docs/2026-08-19-mobile-app-handoff.md)
+> before touching the service worker, icons, notifications or the theme — it
+> records the platform traps (Android silhouettes the notification badge; this
+> app's SPA catch-all returns 200 + text/html for any missing file, so status
+> codes lie) and what is deliberately still undone.
 
 ## 1. TL;DR / where things live
 
@@ -57,7 +64,7 @@ All three nav tabs are visible to everyone; per-section gating hides what a role
 - Supervisor/leadership roll-ups and dashboards (gauges, bar charts, health colors).
 - Shop schedule, work orders (with status + history), squadron timeline.
 - Org chart / chain of command derived from member `flight`/`position`/shop.
-- **Notifications:** in-app center (bell, 60s polling); an email channel is built but **not configured in production**, so in practice the bell is the only channel members have (see §7). Includes a "your tasks are live" blast when a cycle is imported, and daily completion digests.
+- **Notifications:** in-app center (bell, 60s polling) **and real phone push** (opt-in, added 2026-08-19). The email channel is built but **has never been configured in production**, so push is the first out-of-app channel members actually receive (see §7). Includes a "your tasks are live" blast when a cycle is imported, and daily completion digests (digests are email-only and deliberately do not push).
 - Leadership bulk task creation; shop switcher for flight-level leaders.
 - Dark mode, self-hosted font, mobile + desktop layouts.
 - **Auth hardening (shipped 2026-06-20, PR #30):** all user input escaped in the member task renderers (stored-XSS fix); fixed broken leadership health-color tokens; UTA label now derived from data (not hardcoded); **change-password** flow + **forced change on first login** (`must_change_password`) + **admin password reset** (supervisor: own shop, leadership: any — generates a random one-time temp, forces a change); checkbox keyboard/ARIA; AA contrast fixes; self-hosted General Sans; stronger "overdue" color. See §8.
@@ -153,14 +160,17 @@ TEST_DATABASE_URL=<pg-connection-string> ENABLE_CRON=false node --test --test-co
 > **⚠ Email has never actually sent in production.** The production service has no `SMTP_*`
 > variables set (verified 2026-08-17 — only `DATABASE_URL` and `SESSION_SECRET` are), so
 > `mailer.js` no-ops by design and every `notifications` row still has `emailed_at IS NULL`.
-> The in-app bell is the only channel members have ever received. **Before configuring SMTP,
+> Until push shipped on 2026-08-19 the in-app bell was the only channel members had ever
+> received; push is now the first out-of-app one. **Before configuring SMTP,
 > run `UPDATE notifications SET emailed_at = NOW() WHERE emailed_at IS NULL`** — otherwise
 > the next flush emails the entire backlog since launch, 200 rows every 5 minutes.
 
 - **In-app:** `notifications` table; the SPA polls the bell every 60s. `notify()` in `server.js` writes rows (e.g., task assigned, tasks-live). There is a second insert site: `notify-digests.js` writes `completion_digest` rows directly.
+- **Push (added 2026-08-19):** real phone notifications. `lib/push.js` is a *flush* job shaped like `notify-emails.js`, not a send inside `notify()` — so `web-push` never runs in a request, both insert sites are covered, and a failed send simply retries on the next tick. `notify()` kicks a flush via `setImmediate`; a 1-minute cron is the catch-up. Rows are stamped `notifications.pushed_at`. Subscriptions live in `push_subscriptions`, keyed on `endpoint` (browsers rotate them). Digests are deliberately excluded — see `PUSH_TYPES`. No-ops when `VAPID_*` is unset, exactly as email no-ops without SMTP.
 - **Email:** `mailer.js` = `nodemailer` over SMTP. `notify-emails.js` flushes queued emails; `notify-digests.js` builds daily completion digests. Both are runnable by hand and are driven on a timer by cron in `server.js`:
   - `cron.schedule('0 21 * * *', …)` → **completion digest daily at 21:00**.
   - `cron.schedule('*/5 * * * *', …)` → **flush pending emails every 5 minutes**.
+  - `cron.schedule('* * * * *', …)` → **push catch-up every minute** (covers the digest insert site and any failed send).
   - Disable all cron with `ENABLE_CRON=false` (use for local/dev and one-off scripts so a CLI run doesn't also fire jobs).
 
 ---
@@ -185,6 +195,8 @@ The builder is **Railpack**, which also resolves Node to `lts` unless `engines.n
 | `ENABLE_CRON` | `false` disables the cron jobs (default: on) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | nodemailer transport (email is a no-op if `SMTP_HOST` is unset) |
 | `MAIL_FROM` | email From header |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push. **Production and staging hold DIFFERENT pairs** — a shared pair would let a staging test buzz real members' phones. Push no-ops if unset. |
+| `SW_MODE` | `kill` serves the self-destructing service worker instead of the real one. The only way to retire a worker already on members' phones — flippable from a phone, no deploy. |
 
 **Run locally:** needs a Postgres. There's no local Postgres/Docker on the maintainer's machine by default.
 ```
@@ -256,6 +268,15 @@ longer true, and the working copy has been synced to `origin/master` with a clea
 
 ## 11. Recent work
 
+### 2026-08-17 → 08-19 — The tracker becomes a phone app (PRs #74, #75, #76)
+Three phases, all on `master`. **Full detail and the platform traps are in
+[`docs/2026-08-19-mobile-app-handoff.md`](docs/2026-08-19-mobile-app-handoff.md)** — read that,
+not this summary, before touching any of it.
+- **Phase 0:** the repo had no CI at all while merging to `master` auto-deploys to the whole squadron. Added `.github/workflows/test.yml`, `engines.node`, branch protection and Railway "Wait for CI". Also a **migration advisory lock** (`lib/db.js`): the boot migration races the test harness's `schema.sql` and CI failed on a deadlock its first run — this fixes production too, where a deploy briefly runs two instances.
+- **Phase 1:** manifest, icons, install card, `?view=` deep links, `rolling: true` sessions, theme follows the phone.
+- **Phase 2:** Web Push — `push_subscriptions`, `notifications.pushed_at`, `lib/push.js`, a push-only service worker (**no `fetch` handler**, so it cannot strand anyone) and `SW_MODE=kill`.
+- **Not started, deliberately:** offline reads and the offline check-off queue (plan §8/§9), gated on whether a drill shows members need them.
+
 ### 2026-08-10 — Rollout feedback batch
 Branch `claude/rollout-feedback-features-q8lj7p`. Four features from the first partial rollout's feedback (First Sergeant + squadron leadership), detailed in §5: Student Flight tracking, Squadron category drill-in, present-vs-all completion percentages (new `lib/presence.js`), My Shop category view, and task helpers (links + attached Resources forms). Schema adds twin-migrated in `schema.sql` + the server.js boot block — note `tasks.document_id`'s ALTER must stay AFTER the `documents` CREATE TABLE in schema.sql (the early DO block swallows errors and would roll back silently). New test file `test/rollout-feedback-http.test.js` (12 tests).
 
@@ -275,6 +296,9 @@ Ran `/impeccable critique` and shipped the P1 findings as PR #30 (merged to `mas
 - `public/build.html` — the `/build` Task Builder page (leadership).
 - `public/records.html` — the `/records` Records page (leadership + supervisor own-shop).
 - `public/fonts/` — self-hosted General Sans woff2.
+- `lib/push.js` — Web Push flush + dead-subscription pruning. `PUSH_TYPES` decides what buzzes a phone.
+- `lib/sw/sw.js`, `lib/sw/sw-kill.js` — the service worker and its kill switch. Served by the `/sw.js` route in `server.js`, which must stay **before** `express.static`.
+- `tools/make-badge.py`, `tools/icons.md` — the notification badge (Android silhouettes it; an app icon becomes a white square) and how the app icons were made.
 - `schema.sql` — full data model, including `uta_cycles.status`, `uta_cycles_one_current`, `task_batches`, `tasks.batch_id`.
 - `seed.js` — initial DB setup + sample data (destructive).
 - `test/*.test.js`, `test/helpers/` — `node:test` suite (22 tests) for the Task Builder + Records data-safety invariants (§6a).
