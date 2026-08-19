@@ -48,8 +48,15 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-prod',
   resave: false,
   saveUninitialized: false,
+  // Re-issue the cookie on activity, so the 30 days run from LAST USE rather than
+  // from sign-in. Without this the store row is touched but the cookie is not, so
+  // a member is signed out 30 days after logging in no matter how often they open
+  // the app — and on a monthly drill cadence that lands on roughly every other
+  // UTA. An installed home-screen app that demands a password each drill is a
+  // bookmark with extra steps.
+  rolling: true,
   cookie: {
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days, now sliding
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
   },

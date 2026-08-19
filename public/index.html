@@ -3,16 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!-- Colours the phone's status bar. Matches .mob-hdr (var(--cream)), which sits
+       directly beneath it, so the bar and the header read as one surface.
+       Declared BEFORE the theme script below so that script can correct it in the
+       same tick, ahead of first paint. -->
+  <meta name="theme-color" id="theme-color" content="#f6f7ed">
   <script>
+    // Theme resolution, in one place and before first paint so there is no flash.
+    // Three states, not two:
+    //   · nothing stored  -> follow the phone's own light/dark setting
+    //   · 'dark'/'light'  -> the member tapped the toggle; their choice wins
+    // Following the OS by default also keeps the system bars honest: Android paints
+    // the gesture nav bar from the system theme and a PWA cannot override it, so a
+    // light app on a dark phone gets a black band under it no matter what we do.
     (function () {
-      try {
-        if (localStorage.getItem('theme') === 'dark') {
-          document.documentElement.dataset.theme = 'dark';
-        }
-      } catch (e) {}
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function stored() {
+        try { return localStorage.getItem('theme'); } catch (e) { return null; }
+      }
+      function paint(dark) {
+        if (dark) document.documentElement.dataset.theme = 'dark';
+        else delete document.documentElement.dataset.theme;
+        // Status bar follows the app, never the OS directly — see above.
+        var m = document.getElementById('theme-color');
+        if (m) m.setAttribute('content', dark ? '#2a2724' : '#f6f7ed');
+      }
+
+      var s = stored();
+      paint(s === 'dark' || (s !== 'light' && mq.matches));
+
+      // Track the phone flipping to dark at sunset, but only while the member has
+      // expressed no preference of their own.
+      var onChange = function (e) { if (!stored()) paint(e.matches); };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);   // older WebKit
+
+      window.__setTheme = paint;   // used by toggleTheme()
     })();
   </script>
   <title>108th CES UTA Tracker</title>
+
+  <!-- Installable-app metadata. Deliberately AFTER the theme script above, so the
+       FOUC-avoidance still runs first, and before design.css so the icons are
+       discovered early. theme_color is split by scheme: the manifest can only
+       carry one value, but these two let the status bar follow the app's theme. -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="UTA Tracker">
+
   <!-- Shared tokens + primitives. Must precede the page <style> so page-local
        rules still win on specificity ties. -->
   <link rel="stylesheet" href="/design.css">
@@ -642,6 +686,20 @@
       display: flex;
       padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
       z-index: 200;
+    }
+
+    /* Android paints its gesture-navigation bar itself and a PWA cannot colour it:
+       there is no manifest field for it, unlike theme_color for the status bar. In
+       dark mode it comes out pure black, which left a visible step against this
+       bar's warm near-black (--bg, #1a1816).
+
+       So meet it where it is, but ONLY inside the installed app — display-mode:
+       standalone — because in a browser tab there is no system bar to match and a
+       pure-black strip would just look wrong. The safe-area padding above already
+       reserves the space the system bar sits over, so this simply continues the
+       colour into it. */
+    @media (display-mode: standalone) {
+      [data-theme="dark"] .mob-nav { background: #000; border-top-color: #000; }
     }
     .mob-btn {
       flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -2049,6 +2107,36 @@
       display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
       gap: 10px;
     }
+    /* Install-the-app card. Sits above the Resources tabs rather than inside one,
+       so it is visible whichever tab is active — burying it in a pane would hide
+       the single thing that gets the app onto a member's home screen. */
+    .install-card {
+      display: none;                     /* shown by syncInstallCard() */
+      gap: 14px; align-items: flex-start;
+      padding: 14px 16px; margin: 0 0 18px;
+      background: var(--ok-bg); border: 1px solid var(--bm); border-radius: var(--r);
+    }
+    .install-card.show { display: flex; }
+    .install-ic {
+      flex: none; width: 40px; height: 40px; border-radius: var(--rs);
+      background: var(--bg); display: grid; place-items: center;
+    }
+    .install-ic img { width: 30px; height: 30px; border-radius: 7px; display: block; }
+    .install-bd { flex: 1; min-width: 0; }
+    .install-bd h3 { margin: 0 0 3px; font-size: 15px; font-weight: 650; color: var(--text); }
+    .install-bd p  { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--t2); }
+    .install-bd ol { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--t2); line-height: 1.65; }
+    .install-btn {
+      margin-top: 10px; min-height: 44px; padding: 0 18px;
+      border: 1px solid var(--text); border-radius: var(--rs);
+      background: var(--text); color: var(--bg);
+      font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .install-btn:hover { opacity: .9; }
+    .install-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+    .install-btn.secondary { background: transparent; color: var(--text); }
+
     .tool-card {
       display: flex; align-items: flex-start; gap: 12px; text-align: left;
       padding: 14px 16px; border-radius: var(--r);
@@ -2825,6 +2913,13 @@
     <!-- ═══ RESOURCES VIEW ════════════════════════ -->
     <div id="view-resources" class="view">
       <h1 class="vh">Resources</h1>
+
+      <!-- Populated and shown/hidden by syncInstallCard(). Above the tabs on
+           purpose: it is the one control that gets the tracker onto a phone. -->
+      <div class="install-card" id="install-card">
+        <div class="install-ic"><img src="/icons/icon-192.png" alt="" width="30" height="30"></div>
+        <div class="install-bd" id="install-body"></div>
+      </div>
 
       <div class="res-tabs" role="tablist">
         <button class="res-tab active" data-rt="pfra" onclick="switchResPane('pfra')">PT Calculator</button>
@@ -3979,7 +4074,7 @@ async function resetMemberPassword(memberId) {
 async function init() {
   try {
     const res = await fetch('/api/auth/me');
-    if (res.ok) { currentMember = await res.json(); showApp(); }
+    if (res.ok) { currentMember = await res.json(); showApp(); applyDeepLink(); }
     else showLogin();
   } catch { showLogin(); }
 }
@@ -3996,11 +4091,19 @@ async function doLogout() {
 }
 
 function toggleTheme() {
-  var root = document.documentElement;
-  var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
-  if (next === 'dark') root.dataset.theme = 'dark';
-  else delete root.dataset.theme;
-  try { localStorage.setItem('theme', next); } catch (e) {}
+  var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  var osDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  try {
+    // Landing on the value the phone already uses means "no override" — clear it
+    // and go back to following the OS. Without this there is no route back to
+    // automatic once anyone taps the toggle even once, which is exactly how a
+    // member ends up pinned to light on a dark phone and cannot explain why.
+    if ((next === 'dark') === osDark) localStorage.removeItem('theme');
+    else localStorage.setItem('theme', next);
+  } catch (e) {}
+  // Repaint through the same function the head script uses, so the attribute,
+  // the status-bar colour and the stored value can never drift apart.
+  (window.__setTheme || function () {})(next === 'dark');
 }
 
 function showLogin() {
@@ -5768,7 +5871,98 @@ function switchView(btn) {
     loadSquadron();
     loadActivity();
   }
-  if (name === 'resources') switchResPane('pfra');
+  if (name === 'resources') { switchResPane('pfra'); syncInstallCard(); }
+}
+
+/* ══ Install to home screen ═══════════════════════════════════════════════
+   Three states, because the two platforms behave differently and a member who
+   is told the wrong thing gives up:
+
+   · Android/Chrome fires beforeinstallprompt, but only once its engagement
+     heuristics are met (a tap plus ~30s on the page, at any time). So the
+     prompt is frequently NOT available on a first visit — the card must still
+     say something useful rather than render empty.
+   · iOS has no such event at all. Safari installs only through the Share
+     sheet, and — this is the part that reads as broken if unsaid — a
+     home-screen app on iOS gets its OWN cookie jar, so the member has to sign
+     in a second time inside the installed app. WebKit bug 181849.
+   · Already installed: offer a reload instead. A standalone iOS app has no
+     address bar, so this is the only recovery from a wedged page. */
+let deferredInstall = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();            // keep it; fire it from our own button
+  deferredInstall = e;
+  syncInstallCard();
+});
+window.addEventListener('appinstalled', () => { deferredInstall = null; syncInstallCard(); });
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
+function isIOS() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function syncInstallCard() {
+  const card = document.getElementById('install-card');
+  const body = document.getElementById('install-body');
+  if (!card || !body) return;
+
+  if (isStandalone()) {
+    body.innerHTML =
+      '<h3>Installed</h3>'
+      + '<p>You are using the app from your home screen. If a screen ever gets '
+      + 'stuck, reload it here — there is no address bar to refresh from.</p>'
+      + '<button class="install-btn secondary" onclick="location.reload()">Reload app</button>';
+  } else if (deferredInstall) {
+    body.innerHTML =
+      '<h3>Add to your home screen</h3>'
+      + '<p>Opens like a normal app, straight to your tasks — no browser, no typing the address.</p>'
+      + '<button class="install-btn" onclick="doInstall()">Install app</button>';
+  } else if (isIOS()) {
+    body.innerHTML =
+      '<h3>Add to your home screen</h3>'
+      + '<p>Opens like a normal app, straight to your tasks.</p>'
+      + '<ol><li>Tap the Share button at the bottom of Safari</li>'
+      + '<li>Choose <strong>Add to Home Screen</strong></li>'
+      + '<li>Open the new icon and sign in once more — the app keeps its own '
+      + 'sign-in, separate from Safari</li></ol>';
+  } else {
+    body.innerHTML =
+      '<h3>Add to your home screen</h3>'
+      + '<p>Open your browser’s menu and choose <strong>Install app</strong> or '
+      + '<strong>Add to Home screen</strong>. If you do not see it yet, use the '
+      + 'tracker for a moment and check again — browsers hold the option back '
+      + 'until you have actually used the page.</p>';
+  }
+  card.classList.add('show');
+}
+
+async function doInstall() {
+  if (!deferredInstall) return;
+  const e = deferredInstall;
+  deferredInstall = null;          // a prompt event is single-use
+  try { await e.prompt(); await e.userChoice; } catch (err) {}
+  syncInstallCard();
+}
+
+/* Deep link: /?view=member lands a member on their list rather than the default
+   pane. Used by chat/newsletter links now, and by notification taps in Phase 2 —
+   notifications.link already stores exactly these names. switchView() takes an
+   ELEMENT, so hand it the same {dataset} shape onNotifClick() uses. */
+const DEEP_LINK_VIEWS = ['member', 'supervisor', 'leadership', 'resources'];
+
+function applyDeepLink(url) {
+  const u = url || new URL(location.href);
+  const want = u.searchParams.get('view');
+  if (!want) return;
+  if (DEEP_LINK_VIEWS.includes(want)) switchView({ dataset: { view: want } });
+  // Drop the param so a later reload does not re-apply it over the member's
+  // own navigation. replaceState keeps it out of history entirely.
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
 }
 
 /* ══ Attendance ═══════════════════════════════════════════════════════════

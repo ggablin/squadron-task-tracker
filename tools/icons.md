@@ -1,0 +1,72 @@
+# App icons — source, pipeline, and the traps
+
+## What the source actually is
+
+`public/icons/icon-master-1536.png` — a 1536×1536 raster. Everything else in
+`public/icons/`, plus `public/favicon.ico`, is downsampled from it with LANCZOS.
+
+**There is no vector source.** Three attempts were made to obtain one:
+
+| delivered as | what it actually was |
+|---|---|
+| first pack | no SVG at all; a JPEG master and a resize script |
+| `icon-source.svg` (dark) | genuine vector — 4,853 traced paths, 28 colours |
+| `light-outline-icon-1.svg` | genuine vector, but a coarse 31-path posterisation; visibly ragged edges |
+| `ram-light-outline-fidelity.svg` | **not vector** — zero paths, one `<image>` tag wrapping a base64 JPEG |
+
+The artwork in use is the last of those, which has the best fidelity and the
+correct light treatment, so the wrapper was discarded and its embedded 1536px
+bitmap re-encoded losslessly to PNG as the master. 1536 covers every size the
+app needs (largest is 512), so this is sufficient today — but a real vector
+would still be worth asking for, since 1536 is the hard ceiling and the art
+cannot be cleanly recoloured or reshaped.
+
+Check any future "SVG" before trusting it:
+
+```
+grep -c "<image\|base64" icon.svg     # must be 0
+grep -c "<path"          icon.svg     # must be > 0
+```
+
+## Rebuilding the set
+
+Downsample the master with LANCZOS to each size. Required properties, all
+verified on the committed files:
+
+| file | size | requirement |
+|---|---|---|
+| `icon-192.png` | 192 | — |
+| `icon-512.png` | 512 | — |
+| `icon-maskable-512.png` | 512 | opaque to all four corners; artwork inside the centred 80% circle |
+| `apple-touch-icon-180.png` | 180 | **RGB, no alpha** — iOS composites transparency onto black |
+| `favicon.ico` | 16/32/48 | one file, all three sizes embedded |
+
+The maskable is built as a flat `#f5f0ec` field (the artwork's own background)
+with the art pasted at 70%, then downsampled.
+
+If a vector source ever does arrive, Chrome is the only rasterizer on this
+machine — there is no ImageMagick (`convert` on Windows is the FAT-partition
+tool), no Inkscape, no `rsvg-convert`, and Pillow cannot read SVG:
+
+```
+chrome --headless=new --disable-gpu --hide-scrollbars \
+       --force-device-scale-factor=1 --window-size=1536,1536 \
+       --screenshot=master-1536.png file:///ABSOLUTE/PATH/wrapper.html
+```
+
+The `file://` path must be absolute. A malformed one produces a silently blank
+white PNG rather than an error — check the output is ~900KB, not ~20KB.
+
+## Two things worth not re-learning
+
+**The maskable field must be flat, not a gradient.** A radial-gradient
+background reads as a grey vignette once a launcher crops it to a circle.
+
+**This artwork depends on its background tone and cannot be recoloured.** In the
+dark variant the bull's body sits at *1.00:1* contrast against its own field —
+it is deliberately negative space, and the silhouette you read is drawn entirely
+by the horns and clouds. Swapping the field to a light tone inverts the problem
+rather than solving it: the bull rises to 18:1 but the horns and clouds collapse
+to 1.1–2.1:1 and disappear. The light artwork committed here is a genuine redraw
+with dark outlines added to the horns, not a recolour. A new field colour means
+new artwork.

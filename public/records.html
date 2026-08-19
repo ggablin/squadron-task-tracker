@@ -4,9 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#f6f7ed">
 <title>Member Records — 108th CES</title>
-<script>try{if(localStorage.getItem('theme')==='dark')document.documentElement.dataset.theme='dark';}catch(e){}</script>
+<!-- Tab icon + themed status bar, so a leader landing here directly sees the same
+     app. These pages are desktop tools: no manifest and no *-capable metas, which
+     would let them be installed as separate home-screen apps by mistake. -->
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+<meta name="theme-color" id="theme-color" content="#f6f7ed">
+<script>
+// Follow the phone's light/dark setting until the member picks one themselves,
+// and keep the status bar on the app's theme rather than the OS's. Mirrors the
+// head script in index.html; see the long comment there.
+(function(){try{
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  function stored(){try{return localStorage.getItem('theme');}catch(e){return null;}}
+  function paint(d){
+    if(d)document.documentElement.dataset.theme='dark';else delete document.documentElement.dataset.theme;
+    var m=document.getElementById('theme-color');
+    if(m)m.setAttribute('content',d?'#2a2724':'#f6f7ed');
+  }
+  var s=stored();paint(s==='dark'||(s!=='light'&&mq.matches));
+  var f=function(e){if(!stored())paint(e.matches);};
+  if(mq.addEventListener)mq.addEventListener('change',f);else if(mq.addListener)mq.addListener(f);
+  window.__setTheme=paint;
+}catch(e){}})();
+</script>
 <link rel="stylesheet" href="/design.css">
 <script src="/ui.js" defer></script>
 <script src="/member-browser.js" defer></script>
@@ -176,9 +198,12 @@ input { font-family:inherit; }
 
 <script>
 function toggleTheme(){
-  var d=document.documentElement;
-  if(d.dataset.theme==='dark'){delete d.dataset.theme;try{localStorage.setItem('theme','light')}catch(e){}}
-  else{d.dataset.theme='dark';try{localStorage.setItem('theme','dark')}catch(e){}}
+  // Mirrors index.html: choosing the value the phone already uses clears the
+  // override and returns to following the OS, so "auto" is always reachable.
+  var dark=document.documentElement.dataset.theme!=='dark';
+  var osDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  try{ if(dark===osDark) localStorage.removeItem('theme'); else localStorage.setItem('theme',dark?'dark':'light'); }catch(e){}
+  (window.__setTheme||function(){})(dark);
 }
 
 function escapeHtml(s) {

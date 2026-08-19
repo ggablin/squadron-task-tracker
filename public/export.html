@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <title>Shop Handouts — 108th CES</title>
+<!-- Tab icon + themed status bar, so a leader landing here directly sees the same
+     app. These pages are desktop tools: no manifest and no *-capable metas, which
+     would let them be installed as separate home-screen apps by mistake. -->
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+<meta name="theme-color" content="#fdfdfa">
 <style>
 /* A print document in the app's own design language: General Sans, the
    design.css palette, badge pills, rounded checkbox squares, uppercase group
