@@ -4381,6 +4381,13 @@ async function doLogin() {
       // login screen — precisely the case offline reads exist to prevent.
       offlineStore.putIdentity(currentMember);
       showApp();
+      // initPush() also REGISTERS the service worker, which is what precaches
+      // the shell. init() calls it, doLogin did not — so a member who installed
+      // the app, signed in, and closed it had a cached identity but no cached
+      // shell. Offline, the browser could not load the page at all, and
+      // offline.js never got the chance to use that identity. Same install →
+      // sign in → arrive at drill path the putIdentity line above exists for.
+      initPush();
     }
     else { err.textContent = data.error || 'Login failed'; err.style.display = ''; }
   } catch { err.textContent = 'Connection error — try again'; err.style.display = ''; }
