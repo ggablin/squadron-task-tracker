@@ -62,6 +62,25 @@
   --gon:      #ece8e0;  --goff:    #3a3633;
 }
 
+/* ── Back to the tracker ──────────────────────────────────────────────────
+   One control, four pages (/build, /records, /roster, /export). It was a
+   ghost: --t2 text inside a --border outline, invisible at a glance on the
+   page members most need to leave. It now wears the app's inverted pill —
+   the same treatment as an active tab — because it IS the primary action on
+   every page that shows it. Hover flips to the outline form.
+   Declared here so the three per-page copies cannot drift again. */
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 0 16px 0 12px;
+  border-radius: 999px; border: 2px solid var(--text);
+  background: var(--text); color: var(--bg);
+  font-size: 12.5px; font-weight: 700; text-decoration: none;
+  letter-spacing: .02em;
+  transition: background .12s, color .12s;
+}
+.back-link:hover { background: var(--bg); color: var(--text); }
+.back-link svg { width: 15px; height: 15px; }
+
 /* ── Foreground on an inverting background ────────────────────────────────
    Any swatch that has a dark-mode value inverts: --text goes near-black to
    near-white, and --ok / --urgent lighten so they can sit on a dark surface.

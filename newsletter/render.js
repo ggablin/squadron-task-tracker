@@ -76,7 +76,7 @@ function renderNewsletter(data) {
 <style>${STYLES}</style>
 </head><body>
 <div class="toolbar no-print">
-  <button class="back" onclick="location.href='/'">&larr; Tracker</button>
+  <button class="back" onclick="location.href='/?view=leadership'">&larr; Tracker</button>
   <strong>108 CES — ${S.esc(data.cover.title)}</strong>
   <button onclick="window.print()">Print / Save as PDF</button>
   <span class="hint">Choose <b>Landscape</b>, paper <b>Letter</b>, and set margins to <b>None</b>.</span>
