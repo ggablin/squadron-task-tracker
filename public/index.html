@@ -61,6 +61,7 @@
        rules still win on specificity ties. -->
   <link rel="stylesheet" href="/design.css">
   <script src="/ui.js" defer></script>
+  <script src="/offline.js" defer></script>
   <style>
     /* Self-hosted General Sans — survives base-network blocking of api.fontshare.com */
     @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
@@ -2122,6 +2123,32 @@
       display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
       gap: 10px;
     }
+    /* Offline banner. Fixed to the top so it is legible from any view and any
+       scroll position — a member has to know the list is stale BEFORE acting
+       on it, not after scrolling back up. --warn/--wrn-bg are the AA-checked pair. */
+    .offline-banner {
+      flex: none;                       /* never squeezed by the scrolling view */
+      padding: 9px 14px;
+      background: var(--wrn-bg); color: var(--warn);
+      border-bottom: 1px solid var(--warn);
+      font-size: 13px; font-weight: 550; line-height: 1.4; text-align: center;
+    }
+    .offline-banner[hidden] { display: none; }
+
+    /* Phones only. Here the PAGE scrolls, so an in-flow banner scrolls away and
+       position:sticky is inert (.main is overflow:hidden — the same trap the
+       .pf-mobilebar note below documents). Fixed is the only thing that pins,
+       and fixed leaves no gap behind it, so #app reserves the exact height in
+       --offline-h, which syncOfflineOffset() keeps current as the text wraps.
+       Getting this wrong is what put the banner on top of the header. */
+    @media (max-width: 767px) {
+      .offline-banner {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+        padding-top: calc(env(safe-area-inset-top, 0px) + 9px);
+      }
+      #app { padding-top: var(--offline-h, 0px); }
+    }
+
     /* Install-the-app card. Sits above the Resources tabs rather than inside one,
        so it is visible whichever tab is active — burying it in a pane would hide
        the single thing that gets the app onto a member's home screen. */
@@ -2410,6 +2437,12 @@
 
   <!-- ═══ MAIN ════════════════════════════════════ -->
   <main class="main">
+
+    <!-- Shown by setOffline(). Inside .main so it reserves its own space instead
+         of covering the header. It still cannot scroll away: .view is what
+         scrolls, not the page. role=status announces the change to a screen
+         reader without stealing focus. -->
+    <div id="offline-banner" class="offline-banner" hidden role="status" aria-live="polite"></div>
 
     <!-- DESKTOP TOPBAR -->
     <div class="desk-top">
@@ -3903,6 +3936,9 @@ function shopQ() {
 /* Thin alias over the shared primitive in /ui.js, which adds the aria-live
    announcement. Kept as showToast so the existing call sites don't churn. */
 function showToast(msg, type) {
+  // showApp() fans out several requests at once; offline they all fail together
+  // and stack error toasts over the banner that already said it better.
+  if (_offline && type === 'error') return;
   uiToast(msg, type);
 }
 
@@ -4090,16 +4126,88 @@ async function resetMemberPassword(memberId) {
 }
 
 /* ── Boot ──────────────────────────────────────── */
+/* ══ Offline state ══════════════════════════════════════════════
+   The condition to design for is not clean airplane mode — it is one bar in a
+   metal building, where a request neither answers nor rejects. A plain fetch
+   waits forever there, so the app has to give up on its own. */
+function fetchWithTimeout(url, ms, opts) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, Object.assign({}, opts || {}, { signal: ctl.signal }))
+    .finally(() => clearTimeout(timer));
+}
+
+let _offline = false;
+
+function setOffline(on, since) {
+  _offline = !!on;
+  const el = document.getElementById('offline-banner');
+  if (!el) return;
+  if (!_offline) { el.hidden = true; syncOfflineOffset(); return; }
+  el.textContent = since
+    ? 'Offline — showing your tasks from ' + relativeTime(since, Date.now())
+    : 'Offline — no tasks saved on this device yet';
+  el.hidden = false;
+  syncOfflineOffset();
+}
+
+// The banner is fixed on phones, so it occupies no space of its own. Measure it
+// and hand the height to CSS. Measured rather than hardcoded because the text
+// wraps to two lines on a narrow phone, and the safe-area inset varies by device
+// — a guessed constant is how the header gets covered again.
+function syncOfflineOffset() {
+  const el = document.getElementById('offline-banner');
+  const h = (el && !el.hidden && window.innerWidth <= 767) ? el.offsetHeight : 0;
+  document.documentElement.style.setProperty('--offline-h', h + 'px');
+}
+
+// Rotating the phone or crossing the breakpoint changes both the wrap and
+// whether the banner is fixed at all.
+window.addEventListener('resize', syncOfflineOffset);
+window.addEventListener('orientationchange', syncOfflineOffset);
+
+window.addEventListener('online', () => {
+  setOffline(false);
+  if (currentMember) { loadTasks(true); loadNotifications(false); }
+});
+window.addEventListener('offline', async () => {
+  const rec = currentMember ? await offlineStore.getTasks(currentMember.id) : null;
+  setOffline(true, rec ? rec.fetchedAt : null);
+});
+
 async function init() {
-  try {
-    const res = await fetch('/api/auth/me');
-    if (res.ok) { currentMember = await res.json(); showApp(); applyDeepLink(); initPush(); }
-    else showLogin();
-  } catch { showLogin(); }
+  let res = null, threw = false;
+  try { res = await fetchWithTimeout('/api/auth/me', 8000); }
+  catch (e) { threw = true; }          // no network, or timed out — NOT a 401
+
+  const cached = threw ? await offlineStore.getIdentity() : null;
+  switch (bootDecision({ threw: threw, ok: !!(res && res.ok), hasCachedIdentity: !!cached })) {
+    case 'app':
+      currentMember = await res.json();
+      offlineStore.putIdentity(currentMember);
+      setOffline(false);
+      showApp(); applyDeepLink(); initPush();
+      break;
+    case 'offline-app':
+      // The whole point of this phase. Previously ANY thrown fetch landed on
+      // the login screen, which to a member with no signal is indistinguishable
+      // from having been signed out.
+      currentMember = cached.member;
+      setOffline(true, cached.fetchedAt);
+      showApp(); applyDeepLink(); initPush();
+      break;
+    default:
+      showLogin();                     // a 401 means the session really is gone
+  }
 }
 
 async function doLogout() {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  // Offline-safe: this used to be an unguarded await, so a logout with no
+  // signal threw here and cleared nothing — leaving a signed-in device and,
+  // now, a populated cache. The local wipe has to happen either way.
+  try { await fetchWithTimeout('/api/auth/logout', 5000, { method: 'POST' }); } catch (e) {}
+  await offlineStore.wipe();
+  setOffline(false);
   if (notifPollTimer) { clearInterval(notifPollTimer); notifPollTimer = null; }
   closeNotifPanel();
   currentMember = null; currentTasks = []; shopMembers = [];
@@ -4263,6 +4371,11 @@ async function doLogin() {
       // success is never turned into a false "connection error".
       try { currentMember = await fetch('/api/auth/me').then(r => r.ok ? r.json() : Promise.reject()); }
       catch { currentMember = data; }
+      // Cache the identity here too, not only in init(). A member who
+      // installs the app, signs in, closes it, and then reaches drill with
+      // no signal would otherwise have nothing stored and would land on the
+      // login screen — precisely the case offline reads exist to prevent.
+      offlineStore.putIdentity(currentMember);
       showApp();
     }
     else { err.textContent = data.error || 'Login failed'; err.style.display = ''; }
@@ -4344,8 +4457,12 @@ async function loadTasks(forceRefresh = false) {
     if (_tasksInFlight) return;
     _tasksInFlight = true;
     try {
-      const res = await fetch('/api/tasks');
-      if (res.ok) { currentTasks = await res.json(); buildTasks(); updateMemberStats(); }
+      const res = await fetchWithTimeout('/api/tasks', 8000);
+      if (res.ok) {
+        currentTasks = await res.json(); buildTasks(); updateMemberStats();
+        offlineStore.putTasks(currentMember.id, currentTasks);
+        setOffline(false);
+      }
     } catch (e) { /* keep the cached view on a transient failure */ }
     finally { _tasksInFlight = false; }
     return;
@@ -4355,8 +4472,25 @@ async function loadTasks(forceRefresh = false) {
   if (el && !_tasksLoaded) el.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   _tasksInFlight = true;
   try {
-    const res = await fetch('/api/tasks');
-    if (res.ok) { currentTasks = await res.json(); _tasksLoaded = true; buildTasks(); updateMemberStats(); }
+    const res = await fetchWithTimeout('/api/tasks', 8000);
+    if (res.ok) {
+      currentTasks = await res.json(); _tasksLoaded = true; buildTasks(); updateMemberStats();
+      offlineStore.putTasks(currentMember.id, currentTasks);
+      setOffline(false);
+    }
+  } catch (e) {
+    // This path had NO catch at all, so with no signal the skeleton stayed up
+    // forever. Fall back to whatever this member last saw.
+    const rec = currentMember ? await offlineStore.getTasks(currentMember.id) : null;
+    if (rec) {
+      currentTasks = rec.tasks; _tasksLoaded = true; buildTasks(); updateMemberStats();
+      setOffline(true, rec.fetchedAt);
+    } else {
+      if (el) el.innerHTML = '<div class="sf-empty" style="margin-top:4px">'
+        + 'You are offline, and this device has not saved your tasks yet. '
+        + 'They will appear the next time you open the app with a signal.</div>';
+      setOffline(true, null);
+    }
   } finally { _tasksInFlight = false; }
 }
 
@@ -4565,7 +4699,7 @@ async function cycleTask(el, event) {
   updateMemberStats();
   try {
     const note = el.querySelector('textarea')?.value || null;
-    const res = await fetch('/api/tasks/' + el.dataset.id, {
+    const res = await fetchWithTimeout('/api/tasks/' + el.dataset.id, 8000, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state: next, note }),
     });
@@ -4578,7 +4712,11 @@ async function cycleTask(el, event) {
     const rb = badgeFor(el.dataset.ou, prev);
     badge.className = 'badge ' + rb.cls; badge.textContent = rb.text;
     updateMemberStats();
-    showToast('Failed to save — try again', 'error');
+    // uiToast directly, NOT showToast: error toasts are suppressed while
+    // offline to stop the boot fan-out stacking five of them, but a member
+    // who just tapped a checkbox and watched it flip back is owed a reason.
+    if (_offline) uiToast('You are offline — that change was not saved', 'error');
+    else showToast('Failed to save — try again', 'error');
   }
 }
 
@@ -4652,7 +4790,7 @@ async function loadShopEvents(forceRefresh = false) {
   if (_eventsInFlight && !forceRefresh) return;   // a cold load is already in flight
   _eventsInFlight = true;
   try {
-    const res = await fetch('/api/shop/events' + key);
+    const res = await fetchWithTimeout('/api/shop/events' + key, 8000);
     if (res.ok) {
       const events = await res.json();
       if (shopQ() === key) {   // ignore a response that lost a race with a shop switch
@@ -4662,6 +4800,12 @@ async function loadShopEvents(forceRefresh = false) {
         renderShopEvents(events);
       }
     }
+  } catch (e) {
+    // try/finally with no catch — the same shape as the loadTasks cold-path
+    // bug, so with no signal this rejected unhandled and left the pane empty.
+    // The shop views are online-only; say so rather than failing silently.
+    const host = document.getElementById('shop-events-list');
+    if (host && !_eventsLoaded) host.innerHTML = '<p style="color:var(--t2);font-size:13px;padding:14px 16px">Your shop&rsquo;s view needs a connection. Your own tasks are above and work offline.</p>';
   } finally { _eventsInFlight = false; }
 }
 
@@ -4818,10 +4962,16 @@ function buildWorkOrders(events, hostId) {
 async function loadShopMembers() {
   const el = document.getElementById('member-list');
   if (el) el.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
-  const res = await fetch('/api/shop/members' + shopQ());
-  if (!res.ok) return;
-  shopMembers = await res.json();
-  buildMembers();
+  try {
+    const res = await fetchWithTimeout('/api/shop/members' + shopQ(), 8000);
+    if (!res.ok) return;
+    shopMembers = await res.json();
+    buildMembers();
+  } catch (e) {
+    // Online-only by design. Without this the fetch rejected unhandled and the
+    // skeletons stayed up for good.
+    if (el) el.innerHTML = '<p style="color:var(--t2);font-size:13px;padding:14px 16px">Your shop&rsquo;s view needs a connection. Your own tasks are above and work offline.</p>';
+  }
 }
 
 async function refreshShopMembers() {
