@@ -1,15 +1,22 @@
 # 108th CES UTA Task Tracker — Project Handoff
 
-> Purpose of this file: give a new engineer/agent everything needed to be productive on this app in one read. It documents scope, architecture, the monthly data-update workflow, what's built, and what's left. Last updated 2026-08-19 (mobile app + push notifications; see the note below).
+> Purpose of this file: give a new engineer/agent everything needed to be productive on this app in one read. It documents scope, architecture, the monthly data-update workflow, what's built, and what's left. Last updated 2026-08-20 (mobile app, push notifications, offline reads; see the note below).
 
 ---
 
-> **The tracker is an installable phone app with push notifications as of
-> 2026-08-19.** Read [`docs/2026-08-19-mobile-app-handoff.md`](docs/2026-08-19-mobile-app-handoff.md)
-> before touching the service worker, icons, notifications or the theme — it
-> records the platform traps (Android silhouettes the notification badge; this
-> app's SPA catch-all returns 200 + text/html for any missing file, so status
-> codes lie) and what is deliberately still undone.
+> **The tracker is an installable phone app with push notifications and offline
+> reads as of 2026-08-20.** Read [`docs/2026-08-19-mobile-app-handoff.md`](docs/2026-08-19-mobile-app-handoff.md)
+> before touching the service worker, icons, notifications, the theme or the
+> offline layer — it records the platform traps (Android silhouettes the
+> notification badge; this app's SPA catch-all returns 200 + text/html for any
+> missing file, so status codes lie; `unregister()` does not terminate a worker
+> that is still controlling the page) and what is deliberately still undone.
+>
+> **The service worker now has a `fetch` handler and caches the app shell.** That
+> is the one artifact here that a git revert cannot undo — it lives on each
+> member's phone. The only way to retire it is `SW_MODE=kill` on the Railway
+> service (§8). **That switch has never been rehearsed on a real device**, which
+> is the top open item in §10.
 
 ## 1. TL;DR / where things live
 
@@ -261,6 +268,20 @@ longer true, and the working copy has been synced to `origin/master` with a clea
 - Code-level guard preventing the legacy destructive CLI from running against a builder-managed cycle (currently a documented convention only — see §6a).
 
 **Ops**
+- **Rehearse `SW_MODE=kill` on a real phone — not yet done.** The caching service
+  worker went to production on 2026-08-20 and installs on members' phones as they
+  open the app. It is the only change here that does not roll back with a revert.
+  The kill switch is covered by `test/sw-route-http.test.js`, so the route is
+  known to serve the right script, but no one has confirmed a real device
+  actually drops the worker and its caches when told to. Do it before a drill
+  weekend, not during one: set `SW_MODE=kill` on the production service, open the
+  app once on a phone, confirm no worker and no caches remain, then unset it.
+- Rotate the preview/staging database password (`preview123`, exposed in a
+  working transcript 2026-08-17). Throwaway data, but publicly reachable and it
+  holds the imported roster.
+- No "send a test notification" affordance exists. Both push defects found so far
+  needed a real task assignment to surface, and a member who turns alerts on has
+  no way to confirm they work.
 - `must_change_password` currently defaults `true`, so the 2026-06-20 deploy **forces every member to reset on next login** — make sure squadron comms went out.
 - Confirm the `/build` and `/records` page-shell posture (served to any logged-in session; mutating APIs are what's actually gated) is the intended design — flagged non-blocking in the final branch review.
 
@@ -275,7 +296,40 @@ not this summary, before touching any of it.
 - **Phase 0:** the repo had no CI at all while merging to `master` auto-deploys to the whole squadron. Added `.github/workflows/test.yml`, `engines.node`, branch protection and Railway "Wait for CI". Also a **migration advisory lock** (`lib/db.js`): the boot migration races the test harness's `schema.sql` and CI failed on a deadlock its first run — this fixes production too, where a deploy briefly runs two instances.
 - **Phase 1:** manifest, icons, install card, `?view=` deep links, `rolling: true` sessions, theme follows the phone.
 - **Phase 2:** Web Push — `push_subscriptions`, `notifications.pushed_at`, `lib/push.js`, a push-only service worker (**no `fetch` handler**, so it cannot strand anyone) and `SW_MODE=kill`.
-- **Not started, deliberately:** offline reads and the offline check-off queue (plan §8/§9), gated on whether a drill shows members need them.
+- **Phase 3 (2026-08-20, PRs #77/#78/#79):** offline reads — see the entry below.
+- **Still not started, deliberately:** the offline check-off queue (plan §9). It
+  is the most expensive phase for the narrowest gain (tapping a box with no
+  signal instead of twenty minutes later) and stays gated on whether a drill
+  shows members actually need it.
+
+### 2026-08-20 — Offline reads (PRs #77, #78, #79)
+Members can now open the app with no signal and see their own task list instead
+of a login screen. `master` at `198fd56`, 346 tests.
+- **The worker gained a `fetch` handler.** Navigation to `/` is network-first
+  with a 4s timeout behind a cached shell; fonts/icons are cache-first; the four
+  unhashed front-end files are stale-while-revalidate. **`/api/*` is never
+  intercepted** — a safety property, not a performance choice, since caching
+  member data would let a shared phone serve it to whoever signs in next.
+  Everything unlisted falls through untouched.
+- **`public/offline.js`** caches the identity and the member's own task list in
+  IndexedDB, written by app code only and never by the worker. Records carry
+  their owner, so a cache belonging to another member is dropped on sight as well
+  as wiped at logout — and that wipe happens even when the logout request itself
+  fails, which offline it always does.
+- **Scope is deliberately narrow:** the member's own task list. Supervisor
+  rollups, attendance, roster, `/build` and `/records` stay online-only and now
+  say so instead of failing silently.
+- **Three bugs the plan did not anticipate**, all found by testing rather than
+  reading: `loadShopEvents` had the same `try/finally`-with-no-`catch` bug the
+  plan identified in `loadTasks` (and `loadShopMembers` had no guard at all);
+  suppressing error toasts offline also swallowed `cycleTask`'s failure, so a
+  checkbox flipped back silently; and `doLogin()` registered neither the worker
+  nor the identity, so install — sign in — arrive at drill offline was still
+  broken after the first two fixes (#79).
+- **`test/sw-policy.test.js` and `test/offline-store.test.js`** load the real
+  `sw.js` and `offline.js` into a `node:vm` with a stubbed worker scope, so the
+  routing policy is not duplicated and cannot drift from what ships.
+  `test/sw-route-http.test.js` covers the kill switch.
 
 ### 2026-08-10 — Rollout feedback batch
 Branch `claude/rollout-feedback-features-q8lj7p`. Four features from the first partial rollout's feedback (First Sergeant + squadron leadership), detailed in §5: Student Flight tracking, Squadron category drill-in, present-vs-all completion percentages (new `lib/presence.js`), My Shop category view, and task helpers (links + attached Resources forms). Schema adds twin-migrated in `schema.sql` + the server.js boot block — note `tasks.document_id`'s ALTER must stay AFTER the `documents` CREATE TABLE in schema.sql (the early DO block swallows errors and would roll back silently). New test file `test/rollout-feedback-http.test.js` (12 tests).
@@ -297,7 +351,8 @@ Ran `/impeccable critique` and shipped the P1 findings as PR #30 (merged to `mas
 - `public/records.html` — the `/records` Records page (leadership + supervisor own-shop).
 - `public/fonts/` — self-hosted General Sans woff2.
 - `lib/push.js` — Web Push flush + dead-subscription pruning. `PUSH_TYPES` decides what buzzes a phone.
-- `lib/sw/sw.js`, `lib/sw/sw-kill.js` — the service worker and its kill switch. Served by the `/sw.js` route in `server.js`, which must stay **before** `express.static`.
+- `lib/sw/sw.js`, `lib/sw/sw-kill.js` — the service worker and its kill switch. Served by the `/sw.js` route in `server.js`, which must stay **before** `express.static`. `sw.js` now has a `fetch` handler; `routeRequest()` is the whole routing policy and is unit-tested against the real file.
+- `public/offline.js` — offline identity + task cache (IndexedDB). Its decisions (`bootDecision`, `cacheUsable`, `relativeTime`) are pure functions so they can be tested without a browser; the storage wrapper below them resolves rather than rejects, so a browser with IndexedDB blocked degrades to the ordinary online app instead of breaking.
 - `tools/make-badge.py`, `tools/icons.md` — the notification badge (Android silhouettes it; an app icon becomes a white square) and how the app icons were made.
 - `schema.sql` — full data model, including `uta_cycles.status`, `uta_cycles_one_current`, `task_batches`, `tasks.batch_id`.
 - `seed.js` — initial DB setup + sample data (destructive).

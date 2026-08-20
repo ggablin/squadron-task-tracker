@@ -1,12 +1,18 @@
 # Mobile app (PWA) — handoff
 
-**Date:** 2026-08-19
+**Date:** 2026-08-19, updated 2026-08-20 (Phase 3)
 **Plan this follows:** [`2026-08-17-mobile-app-pwa-plan.md`](./2026-08-17-mobile-app-pwa-plan.md)
-**Master at handoff:** `bcb096c`
+**Master at handoff:** `198fd56`
 
-The tracker is now an installable phone app with real push notifications, live for
-the squadron. Phases 0, 1 and 2 of the plan are shipped. Phases 3 and 4 (offline)
-are not started and are deliberately gated on evidence.
+The tracker is now an installable phone app with real push notifications and
+offline reads, live for the squadron. Phases 0, 1, 2 and 3 of the plan are
+shipped. Phase 4 (the offline check-off queue) is not started and stays
+deliberately gated on evidence.
+
+> **Read §4 before touching the service worker.** It now has a `fetch` handler,
+> which makes it the one artifact here that a git revert cannot undo — it lives
+> on each member's phone. `SW_MODE=kill` is the only way to retire it, and as of
+> this writing **that switch has never been rehearsed on a real device.**
 
 ---
 
@@ -14,18 +20,21 @@ are not started and are deliberately gated on evidence.
 
 | | state |
 |---|---|
-| **Production** `108ces.up.railway.app` | Phases 0–2 live. Installable, push working. |
+| **Production** `108ces.up.railway.app` | Phases 0–3 live. Installable, push working, offline reads working. |
 | **Staging** `staging-tracker-production.up.railway.app` | Tracks `master`. Own database, own VAPID keys. |
-| **CI** | `.github/workflows/test.yml`, **315 tests** across 30 files, green. |
+| **CI** | `.github/workflows/test.yml`, **346 tests** across 33 files, green. |
 | **Deploy gate** | Branch protection requires the `test` check; Railway "Wait for CI" is on. A red suite now blocks the deploy, not just the merge. |
-| **Phase 3/4 (offline)** | Not started. See §5. |
+| **Phase 4 (offline check-off queue)** | Not started, gated. See §5. |
+| **Kill-switch rehearsal** | **Not done.** See §5 and §6. |
 
 ### What a member sees now
 
 They can add the tracker to their home screen and it opens like an app — no
 browser chrome, straight to their own task list. It follows their phone's
-light/dark setting. They stay signed in between drills. And if they turn on
-alerts, they are told when a task is assigned without opening the app.
+light/dark setting. They stay signed in between drills. If they turn on alerts,
+they are told when a task is assigned without opening the app. And with no signal
+at drill, the app still opens and shows their task list from cache, with a banner
+saying how old it is.
 
 Nothing changed for anyone who ignores all of that. Push is opt-in behind a tap.
 
@@ -62,6 +71,30 @@ a push-only service worker, and the alerts toggle behind the bell.
 
 ---
 
+### Phase 3 — offline reads (PRs #77, #78, #79)
+
+`init()` used to send **any** thrown fetch to `showLogin()`, which to a member
+standing in a metal building is indistinguishable from being signed out. And
+`loadTasks()`'s cold path had `try/finally` with no `catch`, so the skeleton
+stayed up for good.
+
+The worker gained a `fetch` handler with this routing table:
+
+| Request | Strategy |
+|---|---|
+| Navigation to `/` | network-first, 4s timeout, cached shell behind it |
+| `/api/*` | **never intercepted** |
+| Other navigations (`/build`, `/records`, —) | not intercepted |
+| fonts, icons, manifest, favicon | cache-first |
+| `design.css`, `ui.js`, `member-browser.js`, `offline.js` | stale-while-revalidate |
+| everything else | not intercepted |
+
+`public/offline.js` caches the identity and the member's own task list in
+IndexedDB. Scope is deliberately narrow — supervisor rollups, attendance, roster,
+`/build` and `/records` stay online-only.
+
+---
+
 ## 3. Decisions worth not re-litigating
 
 **Push shipped before the offline phases, and before the September drill.**
@@ -86,6 +119,20 @@ whoever signs in rather than notifying the member before them.
 **Digests are email-only.** `PUSH_TYPES` in `lib/push.js` excludes
 `completion_digest` deliberately — it is a nightly 21:00 supervisor summary and
 buzzing phones for it is not wanted. One array entry if that ever changes.
+
+**`/api/*` is never cached, and that is a safety property.** Not a performance
+choice. Caching a member's task data would let a shared phone serve it to whoever
+signs in next. For the same reason every cached record carries its owner's
+`memberId`, is checked at read time, and is wiped at logout — including when the
+logout request itself fails, which offline it always does.
+
+**Offline is scoped to the member's own task list, nothing else.** The shop and
+squadron views need a connection and now say so. Widening this means widening the
+shared-device blast radius, so it should not be done casually.
+
+**The offline banner is `position: fixed` on phones with JS-measured space
+reserved for it.** Both halves matter and both were learned the hard way — see
+§4.
 
 **The theme follows the phone, until the member overrides it.** Choosing the
 value the phone already uses *clears* the override and returns to automatic, so
@@ -134,6 +181,29 @@ absent *and* nothing but `connect.sid` set.
 **Never pipe a background test run through `tail`.** The exit code becomes
 `tail`'s, so a failing suite reports success.
 
+**`unregister()` does not terminate a worker that is still controlling the
+page.** Tearing down with `unregister()` + `caches.delete()` and then
+re-registering silently reuses the *old* worker: it reports `activated`
+immediately, never fires `install`, and the caches stay empty. This looks exactly
+like a broken precache and is not one. **Reload the page after unregistering** so
+the new worker installs against an uncontrolled client.
+
+**`initPush()` registers the service worker.** The name says push; it also does
+`navigator.serviceWorker.register('/sw.js')`, which is what precaches the shell.
+`init()` calls it. `doLogin()` did not — so a member who installed the app,
+signed in and closed it had a cached identity but no cached shell, and offline
+the browser could not load the page at all. Fixed in #79. If you add another
+path that reaches `showApp()`, it needs `initPush()` too.
+
+**`position: sticky` is inert in this shell.** `.main` is `overflow: hidden`, so
+a sticky child never pins — measured, behaves identically to normal flow. The
+`.pf-mobilebar` comment already documented this and it still got missed once.
+On phones the **page** scrolls; on desktop `.view` scrolls. So the offline banner
+is `fixed` on phones only, and `#app` reserves its height in `--offline-h`,
+measured from the banner's real `offsetHeight` rather than hardcoded — the text
+wraps to two lines on a narrow phone and the safe-area inset varies by device.
+A guessed constant is how the banner ended up covering the header.
+
 **Railway's builder has been unreliable.** During this work: one deploy failed
 with zero logs, one took 37 minutes, several sat queued for an hour. If a deploy
 stalls, check whether the *previous* one is still serving before assuming a code
@@ -147,8 +217,15 @@ problem.
 
 **Revise the comms.** [`COMMS-Sep2026-PhoneApp.md`](../../COMMS-Sep2026-PhoneApp.md)
 (project folder, not the repo) still describes notifications as "coming next
-month". Push shipped early, so it should tell members to turn alerts on at install
-time. That is a stronger message and saves a second round of comms.
+month". Push shipped early and offline reads shipped after that, so it should
+tell members to turn alerts on at install time and mention that the app now works
+without a signal at drill. That is a stronger message and saves a second round of
+comms. **Deferred as of 2026-08-20** — still unsent.
+
+Worth pairing with a second, different message: the install post only helps
+people who already use the tracker. Roughly half the squadron has never signed
+in, and they need their supervisor to walk them through a first login at drill,
+not an announcement.
 
 **Send it ~4 September**, a week before the **11–13 September** UTA — a 3-day
 drill, the best adoption moment available. Show MSgt McNaughton first; he
@@ -171,25 +248,41 @@ JPEG in an SVG wrapper (the current artwork). What is committed is a 1536px
 raster — sufficient, but a hard ceiling. The check is in `tools/icons.md`:
 `grep -c "<image\|base64" icon.svg` must be 0.
 
-### Phases 3 and 4 — offline, deliberately not started
+### Rehearse the kill switch — **outstanding, and now live**
 
-Plan §8 and §9. **Gated on evidence**: ship Phase 3 (offline reads) only after a
-drill shows members actually need it, and Phase 4 (the offline check-off queue)
-only if Phase 3 proves insufficient. Phase 4 is the most expensive phase for the
-narrowest gain — tapping a checkbox with no signal instead of twenty minutes
-later.
+Phase 3 shipped on 2026-08-20, so the caching worker is on production and
+installs on members' phones as they open the app. It is the one change here that
+a git revert cannot undo.
 
-**If Phase 3 does go ahead, two things are non-negotiable:**
+`SW_MODE=kill` is the entire recovery plan, and **it has never been exercised on
+a real device.** `test/sw-route-http.test.js` proves the route serves the right
+script; it cannot prove a phone actually drops the worker and its caches when
+told to.
 
-1. **Deploy right after a drill weekend, never before one.** A caching worker is
-   the one thing that is not cleanly revertible — it lives on members' phones.
-   Next windows: after 13 September, or after 18 October.
-2. **Rehearse the kill switch on staging first** with a caching worker actually
-   installed on a real device.
+Do it before a drill weekend, not during one:
 
-The plan also records an offline-boot gap the first draft missed: `init()` sends
-any thrown fetch to the login screen, so offline reads need a cached identity and
-an explicit offline branch, or a member with no signal simply sees a login page.
+1. Install the app on a phone and use it once so the worker is active.
+2. Set `SW_MODE=kill` on the **production** Railway service and let it redeploy.
+3. Open the app once. Confirm no service worker and no caches remain.
+4. Unset `SW_MODE`, redeploy, open again — the worker should reinstall cleanly.
+
+It was deployed against the plan's stated window (the plan wanted the deploy
+immediately after a drill; this went out roughly three weeks before the next
+one), which is a defensible call but leaves less soak than intended. That makes
+the rehearsal more valuable, not less.
+
+### Phase 4 — offline check-off queue, deliberately not started
+
+Plan §9, still **gated on evidence**: build it only if a drill shows that reading
+offline is not enough and members genuinely need to check tasks off with no
+signal. It is the most expensive phase for the narrowest gain — tapping a
+checkbox now instead of twenty minutes later — and it conflicts with the
+wipe-on-logout rule in ways §9.4–9.5 of the plan spells out.
+
+Note the evidence gate is still not really satisfiable: as of the 2026-08-19
+database backup, **37 of 73 active members had ever signed in**, with no logins
+after 12 August and one shop at zero. It is hard to conclude anything about what
+members need offline when half of them have not used the app at all.
 
 ---
 
