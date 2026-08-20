@@ -67,10 +67,10 @@ body{
    an emailed copy anyway. It sits in .no-print, like the print button, so it
    never reaches the PDF. */
 .toolbar button.back{
-  background:transparent;color:var(--cream);opacity:.85;
-  border:1px solid rgba(255,255,255,.3);padding:6px 14px;white-space:nowrap;
+  background:var(--cream);color:var(--text);font-weight:700;
+  border:0;padding:8px 16px;white-space:nowrap;
 }
-.toolbar button.back:hover{opacity:1;background:rgba(255,255,255,.12);}
+.toolbar button.back:hover{opacity:.9;}
 
 .deck{display:flex;flex-direction:column;align-items:center;gap:20px;padding:20px;}
 
@@ -256,6 +256,32 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .static-body li{margin-bottom:3px;}
 
 .empty{color:var(--t3-nav);font-size:11px;font-style:italic;padding:10px 0;}
+
+/* ── Phones ───────────────────────────────────────────────────────────────────
+   The deck is authored at 11in for print. Below that width the slides reflow
+   to the viewport instead of showing one corner of a landscape page. Screen
+   only — the @page and @media print rules below are untouched, so the PDF a
+   member is emailed is byte-identical. */
+@media screen and (max-width:1100px){
+  .deck{padding:12px;gap:14px;align-items:stretch;}
+  .slide{width:100%;height:auto;min-height:0;padding:18px 16px 14px;overflow:visible;}
+  .slide-body{overflow:visible;}
+  .slide-hd{flex-wrap:wrap;}
+  .slide-title{font-size:21px;}
+  .toolbar{position:static;flex-wrap:wrap;gap:8px 12px;}
+  .toolbar .hint{display:none;}
+  .cover{padding:34px 22px;}
+  .cover-title{font-size:44px;}
+  .cover-meta{position:static;margin-top:26px;flex-direction:column;align-items:flex-start;gap:10px;}
+  .cover-stats{flex-wrap:wrap;gap:18px;margin-top:24px;}
+  .two-col,.ug-cols,.med-grid,.tl-wrap{flex-direction:column;gap:14px;}
+  .tl-wrap{height:auto;}
+  .ws-wrap,.cbt-cols,.med-list{columns:1;}
+  .grid-3,.grid-4,.pt-grid{grid-template-columns:1fr 1fr;}
+  .org-col{width:calc(50% - 3px);}
+  .data-table,.static-body table{display:block;overflow-x:auto;}
+  .intro{max-width:none;}
+}
 
 /* ── Print ───────────────────────────────────────────────────────────────── */
 @page{size:11in 8.5in;margin:0;}
