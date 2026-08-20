@@ -711,18 +711,24 @@
       -webkit-tap-highlight-color: transparent; transition: color .15s;
     }
     .mob-btn.active { color: var(--text); font-weight: 700; }
-    /* The selected tab wears the same inverted pill as every other active
-       control in this app (.tl-seg-btn.active, .install-btn). Colour alone at
-       10px was invisible at arm's length. The pill span exists in BOTH states
-       with fixed geometry, so tapping changes only the fill — nothing shifts.
-       (.mob-btn padding dropped 6px→4px to absorb the pill's extra height, so
-       .pf-mobilebar's 72px offset above this nav still holds.) */
+    /* The selected tab wears the app's QUIET active idiom — the tinted pill of
+       .seg-btn.active — not the loud inverted one. First ship used the inverted
+       fill and it read as distracting in persistent chrome (member feedback,
+       2026-08-20): the nav is on screen every second, so it should recede while
+       the content tabs keep the loud treatment. Colour alone at 10px was the
+       original failure, so a surface still marks the selection; the bolder
+       icon stroke carries it where the tint is subtle. The pill span exists in
+       BOTH states with fixed geometry (border-box, so the hairline adds no
+       height), and .mob-btn padding stays 4px — .pf-mobilebar's 72px offset
+       above this nav still holds. */
     .mob-ic {
       display: grid; place-items: center;
       width: 46px; height: 26px; border-radius: 999px;
-      transition: background .15s;
+      border: 1px solid transparent;
+      transition: background .15s, border-color .15s;
     }
-    .mob-btn.active .mob-ic { background: var(--text); color: var(--bg); }
+    .mob-btn.active .mob-ic { background: var(--cream); border-color: var(--bm); }
+    .mob-btn.active .mob-ic svg { stroke-width: 2.1; }
     .mob-btn svg { width: 22px; height: 22px; }
     .mob-badge-wrap { position: relative; }
     .mob-badge {
