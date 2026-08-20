@@ -711,24 +711,27 @@
       -webkit-tap-highlight-color: transparent; transition: color .15s;
     }
     .mob-btn.active { color: var(--text); font-weight: 700; }
-    /* The selected tab wears the app's QUIET active idiom — the tinted pill of
-       .seg-btn.active — not the loud inverted one. First ship used the inverted
-       fill and it read as distracting in persistent chrome (member feedback,
-       2026-08-20): the nav is on screen every second, so it should recede while
-       the content tabs keep the loud treatment. Colour alone at 10px was the
-       original failure, so a surface still marks the selection; the bolder
-       icon stroke carries it where the tint is subtle. The pill span exists in
-       BOTH states with fixed geometry (border-box, so the hairline adds no
-       height), and .mob-btn padding stays 4px — .pf-mobilebar's 72px offset
-       above this nav still holds. */
+    /* Selected tab: ink and dot — no surface at all. Third pass on this state
+       (2026-08-20): the inverted pill read as distracting in persistent chrome,
+       and the tinted pill was the quieter middle. This is the calmest form that
+       still fixes the original failure (colour alone at 10px): the active icon
+       thickens 1.8→2.3 and a 4px dot sits under the label. The dot is
+       absolutely positioned inside the button's own padding, so it adds no
+       height — the nav still measures 69px inside .pf-mobilebar's 72px offset.
+       .mob-ic stays as a fixed-geometry icon box so states share layout and the
+       pill treatments remain one swap away if this one misses too. */
+    .mob-btn { position: relative; }
+    .mob-btn::after {
+      content: ''; position: absolute; left: 50%; bottom: 1px;
+      width: 4px; height: 4px; margin-left: -2px; border-radius: 50%;
+      background: transparent; transition: background .15s;
+    }
+    .mob-btn.active::after { background: var(--text); }
     .mob-ic {
       display: grid; place-items: center;
       width: 46px; height: 26px; border-radius: 999px;
-      border: 1px solid transparent;
-      transition: background .15s, border-color .15s;
     }
-    .mob-btn.active .mob-ic { background: var(--cream); border-color: var(--bm); }
-    .mob-btn.active .mob-ic svg { stroke-width: 2.1; }
+    .mob-btn.active .mob-ic svg { stroke-width: 2.3; }
     .mob-btn svg { width: 22px; height: 22px; }
     .mob-badge-wrap { position: relative; }
     .mob-badge {
