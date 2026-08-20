@@ -2135,6 +2135,20 @@
     }
     .offline-banner[hidden] { display: none; }
 
+    /* Phones only. Here the PAGE scrolls, so an in-flow banner scrolls away and
+       position:sticky is inert (.main is overflow:hidden — the same trap the
+       .pf-mobilebar note below documents). Fixed is the only thing that pins,
+       and fixed leaves no gap behind it, so #app reserves the exact height in
+       --offline-h, which syncOfflineOffset() keeps current as the text wraps.
+       Getting this wrong is what put the banner on top of the header. */
+    @media (max-width: 767px) {
+      .offline-banner {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+        padding-top: calc(env(safe-area-inset-top, 0px) + 9px);
+      }
+      #app { padding-top: var(--offline-h, 0px); }
+    }
+
     /* Install-the-app card. Sits above the Resources tabs rather than inside one,
        so it is visible whichever tab is active — burying it in a pane would hide
        the single thing that gets the app onto a member's home screen. */
@@ -4129,12 +4143,28 @@ function setOffline(on, since) {
   _offline = !!on;
   const el = document.getElementById('offline-banner');
   if (!el) return;
-  if (!_offline) { el.hidden = true; return; }
+  if (!_offline) { el.hidden = true; syncOfflineOffset(); return; }
   el.textContent = since
     ? 'Offline — showing your tasks from ' + relativeTime(since, Date.now())
     : 'Offline — no tasks saved on this device yet';
   el.hidden = false;
+  syncOfflineOffset();
 }
+
+// The banner is fixed on phones, so it occupies no space of its own. Measure it
+// and hand the height to CSS. Measured rather than hardcoded because the text
+// wraps to two lines on a narrow phone, and the safe-area inset varies by device
+// — a guessed constant is how the header gets covered again.
+function syncOfflineOffset() {
+  const el = document.getElementById('offline-banner');
+  const h = (el && !el.hidden && window.innerWidth <= 767) ? el.offsetHeight : 0;
+  document.documentElement.style.setProperty('--offline-h', h + 'px');
+}
+
+// Rotating the phone or crossing the breakpoint changes both the wrap and
+// whether the banner is fixed at all.
+window.addEventListener('resize', syncOfflineOffset);
+window.addEventListener('orientationchange', syncOfflineOffset);
 
 window.addEventListener('online', () => {
   setOffline(false);
