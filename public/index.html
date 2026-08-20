@@ -2168,6 +2168,10 @@
     .install-bd h3 { margin: 0 0 3px; font-size: 15px; font-weight: 650; color: var(--text); }
     .install-bd p  { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--t2); }
     .install-bd ol { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--t2); line-height: 1.65; }
+    /* .install-bd p is margin:0, so stacked paragraphs would run together. The
+       platform note also follows a button or a list, which p + p cannot reach. */
+    .install-bd p + p { margin-top: 8px; }
+    .install-bd .install-note { margin-top: 10px; }
     .install-btn {
       margin-top: 10px; min-height: 44px; padding: 0 18px;
       border: 1px solid var(--text); border-radius: var(--rs);
@@ -6085,12 +6089,16 @@ function syncInstallCard() {
       '<h3>Installed</h3>'
       + '<p>You are using the app from your home screen. If a screen ever gets '
       + 'stuck, reload it here — there is no address bar to refresh from.</p>'
+      + '<p class="install-note">Alerts for newly assigned tasks live under the bell '
+      + 'at the top of the app.</p>'
       + '<button class="install-btn secondary" onclick="location.reload()">Reload app</button>';
   } else if (deferredInstall) {
     body.innerHTML =
       '<h3>Add to your home screen</h3>'
       + '<p>Opens like a normal app, straight to your tasks — no browser, no typing the address.</p>'
-      + '<button class="install-btn" onclick="doInstall()">Install app</button>';
+      + '<button class="install-btn" onclick="doInstall()">Install app</button>'
+      + '<p class="install-note">Phone alerts work either way on Android — installing is '
+      + 'not required to turn them on. They are under the bell at the top.</p>';
   } else if (isIOS()) {
     body.innerHTML =
       '<h3>Add to your home screen</h3>'
@@ -6098,14 +6106,19 @@ function syncInstallCard() {
       + '<ol><li>Tap the Share button at the bottom of Safari</li>'
       + '<li>Choose <strong>Add to Home Screen</strong></li>'
       + '<li>Open the new icon and sign in once more — the app keeps its own '
-      + 'sign-in, separate from Safari</li></ol>';
+      + 'sign-in, separate from Safari</li>'
+      + '<li>Open the bell at the top and turn on <strong>Phone alerts</strong></li></ol>'
+      + '<p class="install-note">On iPhone that order is the only one that works: alerts come '
+      + 'from the home-screen app, never from Safari, and need iOS 16.4 or newer.</p>';
   } else {
     body.innerHTML =
       '<h3>Add to your home screen</h3>'
       + '<p>Open your browser’s menu and choose <strong>Install app</strong> or '
       + '<strong>Add to Home screen</strong>. If you do not see it yet, use the '
       + 'tracker for a moment and check again — browsers hold the option back '
-      + 'until you have actually used the page.</p>';
+      + 'until you have actually used the page.</p>'
+      + '<p class="install-note">Installing is not required for alerts — they are under '
+      + 'the bell at the top, and work from the browser too.</p>';
   }
   card.classList.add('show');
 }
@@ -6177,6 +6190,14 @@ function syncPushRow() {
   if (isIOS() && !isStandalone()) {
     row.innerHTML = '<b>Phone alerts</b><br>Add this app to your Home Screen first, '
       + 'then turn alerts on from here. Steps are under Resources.';
+    row.style.display = ''; return;
+  }
+  // Installed on iOS but PushManager still missing means the phone is below
+  // 16.4. Falling through would hide the row entirely, leaving a member who did
+  // everything they were told with nothing to show for it and no explanation.
+  if (isIOS() && isStandalone() && !('PushManager' in window)) {
+    row.innerHTML = '<b>Phone alerts</b><br>This iPhone needs iOS 16.4 or newer to '
+      + 'receive alerts. Everything else in the tracker works as normal.';
     row.style.display = ''; return;
   }
   if (!supported || !vapidKey) { row.style.display = 'none'; return; }
