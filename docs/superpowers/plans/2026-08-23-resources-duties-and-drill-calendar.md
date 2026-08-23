@@ -1296,7 +1296,9 @@ test('signed out: every duties route is 401', async () => {
   await seed();
   for (const [m, p] of [['GET', '/api/duties'], ['POST', '/api/duties'],
                         ['PATCH', '/api/duties/1'], ['DELETE', '/api/duties/1']]) {
-    assert.strictEqual((await api(m, p, null, {})).status, 401, `${m} ${p}`);
+    // fetch refuses a GET that carries a body, so only the writes get one.
+    const body = m === 'GET' ? undefined : {};
+    assert.strictEqual((await api(m, p, null, body)).status, 401, `${m} ${p}`);
   }
 });
 
@@ -1463,7 +1465,9 @@ test('signed out: the calendar and every drill route is 401', async () => {
   await seed();
   for (const [m, p] of [['GET', '/api/calendar'], ['POST', '/api/drill-dates'],
                         ['PATCH', '/api/drill-dates/1'], ['DELETE', '/api/drill-dates/1']]) {
-    assert.strictEqual((await api(m, p, null, {})).status, 401, `${m} ${p}`);
+    // fetch refuses a GET that carries a body, so only the writes get one.
+    const body = m === 'GET' ? undefined : {};
+    assert.strictEqual((await api(m, p, null, body)).status, 401, `${m} ${p}`);
   }
 });
 
@@ -2922,7 +2926,12 @@ Then run `grep -n "from-sample\|preview-server\|Org Chart\|Useful Links" MEMORY.
 - [ ] **Step 3: Run the whole suite**
 
 Run: `npm test`
-Expected: `# fail 0`. The count is 346 + 20 (drill-calendar) + 6 (duties) + 7 (drill-dates) + 6 (calendar-events) + 1 (newsletter) = **386**. Do not pipe through `tail`.
+Expected: `# fail 0`, **397 tests**. Derivation, measured rather than assumed: the branch
+baseline on `origin/master` at `e13f411` is **351** (the handoff doc's "346" predates
+`test/back-destinations.test.js`, added by PR #81). This branch adds 23 drill-calendar,
+7 duties-http, 8 drill-dates-http, 7 calendar-events-http and 1 newsletter = 46.
+A full run took ~13 minutes against the remote test Postgres — CI is faster.
+Do not pipe through `tail`.
 
 - [ ] **Step 4: Commit, push, open the PR**
 
