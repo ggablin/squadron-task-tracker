@@ -389,9 +389,12 @@ test('buildCalendar: drills and events interleave by date inside a month', () =>
   assert.strictEqual(apr.location, 'Dobbins ARB, GA');
   assert.strictEqual(apr.status, 'complete');
   assert.strictEqual(apr.past, true);
+  // January: two rotations on the 11th, one on the 25th, then the 31 Jan drill.
+  // The drill sorts LAST because it starts last — that is the point of
+  // interleaving, and it is why noUta cannot be inferred from position.
   const jan = months.find(m => m.month === 1);
-  assert.deepStrictEqual(jan.entries.map(e => e.kind), ['drill', 'event', 'event', 'event']);
-  assert.deepStrictEqual(jan.entries.slice(1, 3).map(e => e.title), ['RADR', 'Silver Flag'],
+  assert.deepStrictEqual(jan.entries.map(e => e.kind), ['event', 'event', 'event', 'drill']);
+  assert.deepStrictEqual(jan.entries.slice(0, 2).map(e => e.title), ['RADR', 'Silver Flag'],
     'same-day events sort by title');
 });
 
