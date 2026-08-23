@@ -54,3 +54,157 @@ test('the events seed is the MEETs/RADR partial, spanning two years', () => {
   assert.strictEqual(dft.location, 'Camp Murray, WA');
   assert.ok(dft.attendees.includes('MSgt White (possibly)'), 'the roster is verbatim');
 });
+
+const cal = require('../lib/drill-calendar');
+
+const drillRows = DRILLS.map((d, i) => ({ id: i + 1, start_date: d.start, end_date: d.end, note: d.note }));
+const eventRows = EVENTS.map((e, i) => ({
+  id: i + 1, title: e.title, location: e.location, start_date: e.start, end_date: e.end,
+  attendees: e.attendees, status: e.status, note: e.note,
+}));
+
+test('buildYear: ten drills plus one July gap, in date order, each drill once', () => {
+  const { year, entries } = cal.buildYear(drillRows, 2026, '2026-08-22');
+  assert.strictEqual(year, 2026);
+  assert.strictEqual(entries.length, 11);
+  assert.strictEqual(entries.filter(e => e.kind === 'drill').length, 10);
+  assert.deepStrictEqual(entries.find(e => e.kind === 'no_uta'), { kind: 'no_uta', month: 7, label: 'July' });
+  assert.deepStrictEqual(entries.map(e => e.label), [
+    '31 Jan–1 Feb', '6–8 Mar', '11–12 Apr', '1–3 May', '5–7 Jun', 'July',
+    '8–9 Aug', '11–13 Sep', '17–18 Oct', '14–15 Nov', '11–13 Dec',
+  ]);
+});
+
+test('buildYear: a drill spanning two months covers both, so neither is a gap', () => {
+  const { entries } = cal.buildYear(drillRows, 2026, '2026-01-01');
+  assert.ok(!entries.some(e => e.kind === 'no_uta' && (e.month === 1 || e.month === 2)));
+});
+
+test('buildYear: threeDay flips at three calendar days', () => {
+  const { entries } = cal.buildYear(drillRows, 2026, '2026-01-01');
+  const by = Object.fromEntries(entries.filter(e => e.kind === 'drill').map(e => [e.label, e.threeDay]));
+  assert.strictEqual(by['31 Jan–1 Feb'], false);
+  assert.strictEqual(by['8–9 Aug'], false);
+  assert.strictEqual(by['6–8 Mar'], true);
+  assert.strictEqual(by['11–13 Sep'], true);
+});
+
+test('buildYear: past and next are relative to the reference date, and only one entry is next', () => {
+  const drills = cal.buildYear(drillRows, 2026, '2026-08-22').entries.filter(e => e.kind === 'drill');
+  assert.deepStrictEqual(drills.map(d => d.past),
+    [true, true, true, true, true, true, false, false, false, false]);
+  assert.strictEqual(drills.filter(d => d.next).length, 1);
+  assert.strictEqual(drills.find(d => d.next).label, '11–13 Sep');
+});
+
+test('buildYear: a reference date inside a drill makes that drill next, not past', () => {
+  const { entries } = cal.buildYear(drillRows, 2026, '2026-09-12');
+  const sep = entries.find(e => e.label === '11–13 Sep');
+  assert.strictEqual(sep.past, false);
+  assert.strictEqual(sep.next, true);
+  assert.strictEqual(entries.find(e => e.label === '8–9 Aug').past, true);
+});
+
+test('buildYear: Date inputs are accepted (pg returns a bare DATE column as Date)', () => {
+  const dated = drillRows.map(r => ({
+    ...r, start_date: new Date(r.start_date + 'T00:00:00Z'), end_date: new Date(r.end_date + 'T00:00:00Z'),
+  }));
+  const { entries } = cal.buildYear(dated, 2026, new Date('2026-08-22T15:00:00Z'));
+  assert.strictEqual(entries.find(e => e.next).label, '11–13 Sep');
+  assert.strictEqual(entries.find(e => e.next).start_date, '2026-09-11');
+});
+
+test('buildYear: other years are ignored; an empty year has no drills', () => {
+  const mixed = [...drillRows, { id: 99, start_date: '2027-01-09', end_date: '2027-01-10', note: null }];
+  assert.strictEqual(cal.buildYear(mixed, 2026, '2026-01-01').entries.filter(e => e.kind === 'drill').length, 10);
+  assert.strictEqual(cal.buildYear(mixed, 2027, '2026-01-01').entries.filter(e => e.kind === 'drill').length, 1);
+  assert.strictEqual(cal.buildYear([], 2026, '2026-01-01').entries.filter(e => e.kind === 'drill').length, 0);
+});
+
+test('buildCalendar: twelve month groups, noUta on the month rather than as a row', () => {
+  const { year, months } = cal.buildCalendar(drillRows, eventRows, 2026, '2026-08-22');
+  assert.strictEqual(year, 2026);
+  assert.strictEqual(months.length, 12);
+  assert.deepStrictEqual(months.map(m => m.month), [1,2,3,4,5,6,7,8,9,10,11,12]);
+  assert.strictEqual(months[0].label, 'January');
+  // Only July has no drill. February is covered by the 31 Jan–1 Feb drill.
+  assert.deepStrictEqual(months.filter(m => m.noUta).map(m => m.month), [7]);
+  assert.ok(!months.some(m => m.entries.some(e => e.kind === 'no_uta')), 'no_uta is never an entry here');
+});
+
+test('buildCalendar: drills and events interleave by date inside a month', () => {
+  const { months } = cal.buildCalendar(drillRows, eventRows, 2026, '2026-08-22');
+  const april = months.find(m => m.month === 4);
+  assert.deepStrictEqual(april.entries.map(e => [e.kind, e.label]),
+    [['drill', '11–12 Apr'], ['event', '12–18 Apr']]);
+  const apr = april.entries[1];
+  assert.strictEqual(apr.title, 'RADR');
+  assert.strictEqual(apr.location, 'Dobbins ARB, GA');
+  assert.strictEqual(apr.status, 'complete');
+  assert.strictEqual(apr.past, true);
+  const jan = months.find(m => m.month === 1);
+  assert.deepStrictEqual(jan.entries.map(e => e.kind), ['drill', 'event', 'event', 'event']);
+  assert.deepStrictEqual(jan.entries.slice(1, 3).map(e => e.title), ['RADR', 'Silver Flag'],
+    'same-day events sort by title');
+});
+
+test('buildCalendar: an event is listed once, in the month it starts', () => {
+  const { months } = cal.buildCalendar([], eventRows, 2026, '2026-08-22');
+  const seen = months.flatMap(m => m.entries).filter(e => e.title === 'FY26 DFT');
+  assert.strictEqual(seen.length, 1);
+  assert.strictEqual(months.find(m => m.entries.includes(seen[0])).month, 6, 'June, where it starts');
+});
+
+test('buildCalendar: next marks a drill only, and events never carry it', () => {
+  const { months } = cal.buildCalendar(drillRows, eventRows, 2026, '2026-08-22');
+  const all = months.flatMap(m => m.entries);
+  assert.strictEqual(all.filter(e => e.next).length, 1);
+  assert.strictEqual(all.find(e => e.next).kind, 'drill');
+  assert.ok(all.filter(e => e.kind === 'event').every(e => e.next === undefined));
+});
+
+test('buildCalendar: a year with only events still returns twelve months, all noUta', () => {
+  const { months } = cal.buildCalendar([], eventRows, 2025, '2026-08-22');
+  assert.strictEqual(months.length, 12);
+  assert.ok(months.every(m => m.noUta));
+  assert.strictEqual(months.find(m => m.month === 12).entries.length, 1);
+  assert.strictEqual(months.flatMap(m => m.entries).length, 1, 'only the Dec 2025 rotation');
+});
+
+test('label: same month, across months, single day', () => {
+  assert.strictEqual(cal.label('2026-09-11', '2026-09-13'), '11–13 Sep');
+  assert.strictEqual(cal.label('2026-01-31', '2026-02-01'), '31 Jan–1 Feb');
+  assert.strictEqual(cal.label('2026-08-08', '2026-08-08'), '8 Aug');
+});
+
+test('years: distinct and ascending across every list passed', () => {
+  assert.deepStrictEqual(cal.years(drillRows, eventRows), [2025, 2026]);
+  assert.deepStrictEqual(cal.years([{ start_date: '2027-01-09' }, { start_date: new Date('2026-09-11T00:00:00Z') }]),
+    [2026, 2027]);
+  assert.deepStrictEqual(cal.years([]), []);
+});
+
+test('validateDrill: accepts a real drill and normalises the note', () => {
+  assert.deepStrictEqual(cal.validateDrill({ start_date: '2026-09-11', end_date: '2026-09-13', note: '  ' }),
+    { ok: true, value: { start_date: '2026-09-11', end_date: '2026-09-13', note: null } });
+  assert.strictEqual(cal.validateDrill({ start_date: '2026-08-08', end_date: '2026-08-08', note: ' one day ' }).value.note,
+    'one day');
+});
+
+test('validateDrill: rejects malformed, impossible, reversed and over-long drills', () => {
+  const bad = (body) => { const r = cal.validateDrill(body); assert.strictEqual(r.ok, false, JSON.stringify(body)); return r.error; };
+  assert.match(bad({ start_date: '9/11/2026', end_date: '2026-09-13' }), /start_date/);
+  assert.match(bad({ start_date: '2026-02-30', end_date: '2026-03-01' }), /start_date/);
+  assert.match(bad({ start_date: '2026-09-11' }), /end_date/);
+  assert.match(bad({ start_date: '2026-09-13', end_date: '2026-09-11' }), /before/);
+  assert.match(bad({ start_date: '2026-09-01', end_date: '2026-09-08' }), /seven days/);
+  assert.match(bad({ start_date: '2026-09-11', end_date: '2026-09-13', note: 'x'.repeat(81) }), /80/);
+});
+
+test('overlaps: shared days overlap, adjacent days do not', () => {
+  const a = { start_date: '2026-09-11', end_date: '2026-09-13' };
+  assert.strictEqual(cal.overlaps(a, { start_date: '2026-09-13', end_date: '2026-09-14' }), true);
+  assert.strictEqual(cal.overlaps(a, { start_date: '2026-09-01', end_date: '2026-09-11' }), true);
+  assert.strictEqual(cal.overlaps(a, { start_date: '2026-09-14', end_date: '2026-09-15' }), false);
+  assert.strictEqual(cal.overlaps(a, { start_date: '2026-09-09', end_date: '2026-09-10' }), false);
+});
