@@ -880,6 +880,52 @@ app.delete('/api/documents/:id', requireAuth, requireRosterAdmin, requireOnboard
   }
 });
 
+// ── Additional duties (Resources → People) ───────────────────────────────────
+// Everyone reads; the two roster admins write — the same gate as Forms.
+app.get('/api/duties', requireAuth, async (req, res) => {
+  try {
+    res.json({ duties: await duties.list(pool) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+function dutyError(err, res) {
+  if (err && err.code === 'DUPLICATE') return res.status(409).json({ error: err.message });
+  console.error(err);
+  return res.status(500).json({ error: 'Server error' });
+}
+
+app.post('/api/duties', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const v = duties.validate(req.body || {}, { partial: false });
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    res.status(201).json(await duties.create(pool, v.value, req.session.memberId));
+  } catch (err) { dutyError(err, res); }
+});
+
+app.patch('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid duty id' });
+  const v = duties.validate(req.body || {}, { partial: true });
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    const row = await duties.update(pool, id, v.value, req.session.memberId);
+    if (!row) return res.status(404).json({ error: 'That duty no longer exists' });
+    res.json(row);
+  } catch (err) { dutyError(err, res); }
+});
+
+app.delete('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid duty id' });
+  try {
+    if (!await duties.remove(pool, id)) return res.status(404).json({ error: 'That duty no longer exists' });
+    res.status(204).end();
+  } catch (err) { dutyError(err, res); }
+});
+
 // ── Member task history (Records) ────────────────────────────────────────────
 // Leadership can view any member's cross-cycle history; a supervisor is limited
 // to members in their own shop (checked via getMemberShopId, same own-shop

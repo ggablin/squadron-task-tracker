@@ -103,3 +103,80 @@ test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind
   assert.strictEqual(
     Number((await pool.query('SELECT COUNT(*) FROM additional_duties')).rows[0].count), 52);
 });
+
+test('signed out: every duties route is 401', async () => {
+  await seed();
+  for (const [m, p] of [['GET', '/api/duties'], ['POST', '/api/duties'],
+                        ['PATCH', '/api/duties/1'], ['DELETE', '/api/duties/1']]) {
+    const body = m === 'GET' ? undefined : {};
+    assert.strictEqual((await api(m, p, null, body)).status, 401, `${m} ${p}`);
+  }
+});
+
+test('403 matrix: member, supervisor and leadership-without-the-capability cannot write; all can read', async () => {
+  await seed();
+  for (const slug of ['memtest', 'suptest', 'leadtest']) {
+    const cookie = await login(slug);
+    assert.strictEqual((await api('GET', '/api/duties', cookie)).status, 200, `${slug} can read`);
+    for (const [m, p] of [['POST', '/api/duties'], ['PATCH', '/api/duties/1'], ['DELETE', '/api/duties/1']]) {
+      assert.strictEqual((await api(m, p, cookie, { duty: 'X' })).status, 403, `${slug} ${m} ${p}`);
+    }
+  }
+});
+
+test('admin CRUD round-trip, ordered case-insensitively, with updated_by stamped', async () => {
+  const { adminId } = await seed();
+  const admin = await login('admintest');
+
+  let res = await api('POST', '/api/duties', admin,
+    { duty: 'Lodging Monitor', primary_owner: ' Glikin ', alternate_owner: '' });
+  assert.strictEqual(res.status, 201);
+  const created = await res.json();
+  assert.deepStrictEqual(created,
+    { id: created.id, duty: 'Lodging Monitor', primary_owner: 'Glikin', alternate_owner: null });
+
+  assert.strictEqual((await api('POST', '/api/duties', admin, { duty: 'adutm' })).status, 201);
+
+  const { duties: listed } = await (await api('GET', '/api/duties', await login('memtest'))).json();
+  assert.deepStrictEqual(listed.map(d => d.duty), ['adutm', 'Lodging Monitor'], 'lower(duty) ordering');
+
+  res = await api('PATCH', `/api/duties/${created.id}`, admin, { primary_owner: '' });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual((await res.json()).primary_owner, null, 'blank clears the owner');
+  const { rows: [row] } = await pool.query('SELECT updated_by_id FROM additional_duties WHERE id = $1', [created.id]);
+  assert.strictEqual(row.updated_by_id, adminId);
+
+  assert.strictEqual((await api('DELETE', `/api/duties/${created.id}`, admin)).status, 204);
+  assert.strictEqual((await (await api('GET', '/api/duties', admin)).json()).duties.length, 1);
+  assert.strictEqual((await api('PATCH', `/api/duties/${created.id}`, admin, { duty: 'Gone' })).status, 404);
+  assert.strictEqual((await api('DELETE', `/api/duties/${created.id}`, admin)).status, 404);
+  assert.strictEqual((await api('DELETE', '/api/duties/abc', admin)).status, 400);
+});
+
+test('400s: empty duty, 121-character duty, 201-character owner, PATCH with nothing to update', async () => {
+  await seed();
+  const admin = await login('admintest');
+  const bad = async (m, p, body) => {
+    const r = await api(m, p, admin, body);
+    assert.strictEqual(r.status, 400, JSON.stringify(body));
+    return (await r.json()).error;
+  };
+  assert.match(await bad('POST', '/api/duties', { duty: '   ' }), /required/);
+  assert.match(await bad('POST', '/api/duties', { duty: 'x'.repeat(121) }), /120/);
+  assert.match(await bad('POST', '/api/duties', { duty: 'ok', primary_owner: 'x'.repeat(201) }), /200/);
+  const { id } = await (await api('POST', '/api/duties', admin, { duty: 'ok' })).json();
+  assert.match(await bad('PATCH', `/api/duties/${id}`, {}), /Nothing to update/);
+});
+
+test('409: a case-insensitive duplicate, on create and on rename', async () => {
+  await seed();
+  const admin = await login('admintest');
+  assert.strictEqual((await api('POST', '/api/duties', admin, { duty: 'ADUTM' })).status, 201);
+  const dup = await api('POST', '/api/duties', admin, { duty: 'adutm' });
+  assert.strictEqual(dup.status, 409);
+  assert.match((await dup.json()).error, /already exists/);
+  const { id } = await (await api('POST', '/api/duties', admin, { duty: 'ITEC' })).json();
+  assert.strictEqual((await api('PATCH', `/api/duties/${id}`, admin, { duty: 'Adutm' })).status, 409);
+  assert.strictEqual((await api('PATCH', `/api/duties/${id}`, admin, { duty: 'ITEC' })).status, 200,
+    'renaming to itself is fine');
+});
