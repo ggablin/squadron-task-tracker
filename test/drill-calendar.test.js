@@ -211,3 +211,34 @@ test('overlaps: shared days overlap, adjacent days do not', () => {
   assert.strictEqual(cal.overlaps(a, { start_date: '2026-09-14', end_date: '2026-09-15' }), false);
   assert.strictEqual(cal.overlaps(a, { start_date: '2026-09-09', end_date: '2026-09-10' }), false);
 });
+
+test('a drill straddling New Year covers January, but is listed only under the year it starts', () => {
+  const straddle = [{ id: 1, start_date: '2026-12-30', end_date: '2027-01-02', note: null }];
+
+  const y2027 = cal.buildYear(straddle, 2027, '2026-06-01');
+  assert.ok(!y2027.entries.some(e => e.kind === 'no_uta' && e.month === 1),
+    'January 2027 has drill days in it, so it is not a No-UTA month');
+  assert.strictEqual(y2027.entries.filter(e => e.kind === 'drill').length, 0,
+    'but the drill itself is not listed under 2027 — it starts in 2026');
+
+  const y2026 = cal.buildYear(straddle, 2026, '2026-06-01');
+  assert.strictEqual(y2026.entries.filter(e => e.kind === 'drill').length, 1, 'listed once, under 2026');
+  assert.ok(!y2026.entries.some(e => e.kind === 'no_uta' && e.month === 12));
+
+  const c2027 = cal.buildCalendar(straddle, [], 2027, '2026-06-01');
+  assert.strictEqual(c2027.months.find(m => m.month === 1).noUta, false, 'January covered');
+  assert.strictEqual(c2027.months.find(m => m.month === 2).noUta, true, 'February still a gap');
+  assert.strictEqual(c2027.months.flatMap(m => m.entries).length, 0, 'and still listed nowhere in 2027');
+});
+
+test('validateDrill accepts exactly seven days and rejects eight', () => {
+  assert.strictEqual(cal.validateDrill({ start_date: '2026-09-07', end_date: '2026-09-13' }).ok, true);
+  assert.strictEqual(cal.validateDrill({ start_date: '2026-09-07', end_date: '2026-09-14' }).ok, false);
+});
+
+test('past is false on the day an entry ends, for events as well as drills', () => {
+  const ev = [{ id: 1, title: 'RADR', start_date: '2026-05-03', end_date: '2026-05-09', status: 'scheduled' }];
+  const at = (ref) => cal.buildCalendar([], ev, 2026, ref).months.find(m => m.month === 5).entries[0];
+  assert.strictEqual(at('2026-05-09').past, false, 'still running on its last day');
+  assert.strictEqual(at('2026-05-10').past, true);
+});
