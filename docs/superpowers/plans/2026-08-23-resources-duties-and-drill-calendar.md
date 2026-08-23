@@ -1,25 +1,34 @@
-# Resources: Additional Duties + Drill Calendar — Implementation Plan
+# Resources: Additional Duties, Calendar, and a tab restructure — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn two hand-edited newsletter partials — the Additional Duties list and the calendar-year drill schedule — into tables that every member reads in Resources, roster admins edit in the browser, and the newsletter renders from.
+**Goal:** Restructure the Resources tab to five subject-shaped tabs, and fill two of them from three new tables: the Additional Duties list under People, and the year's drill weekends plus TDY/training rotations under a new Calendar.
 
-**Architecture:** Two new Postgres tables with twinned migrations (`schema.sql` + the `server.js` boot block) and seed-on-create from two `data/` files; two small `lib/` modules (`duties.js` for CRUD + validation, `drill-calendar.js` for the pure year derivation, validation and CRUD); eight thin routes in `server.js` copying the documents-route pattern; two self-contained front-end modules (`public/duties.js`, `public/drill-dates.js`) lazily initialised from `switchResPane`; two newsletter slides that replace static partials. Spec: `docs/superpowers/specs/2026-08-22-resources-duties-and-drill-calendar-design.md`.
+**Architecture:** Three Postgres tables with twinned migrations (`schema.sql` + the `server.js` boot block) and seed-on-create from three `data/` files. Three `lib/` modules: `duties.js` and `calendar-events.js` (validation + CRUD), and `drill-calendar.js`, whose pure half derives the year and is shared with the newsletter. Eleven thin routes in `server.js` copying the documents-route pattern. Two self-contained front-end modules (`public/duties.js`, `public/calendar.js`) lazily initialised from `switchResPane`. Two newsletter slides replace static partials.
 
-**Tech Stack:** Node 24 / Express / `pg` / Postgres; vanilla JS single-page app (`public/index.html`); `node:test` + `node:assert` with a throwaway Postgres (`.env.test` → `TEST_DATABASE_URL`); no build step.
+**Spec:** `docs/superpowers/specs/2026-08-22-resources-duties-and-drill-calendar-design.md` (rev. 2). Read §2 before starting: the codebase's design record is specific and this plan depends on it.
+
+**Tech Stack:** Node 24 / Express / `pg` / Postgres; vanilla JS single-page app (`public/index.html`); `node:test` + `node:assert` against a throwaway Postgres (`.env.test` → `TEST_DATABASE_URL`); no build step.
 
 ## Global Constraints
 
 - Branch `claude/resources-duties-calendar`, based on `origin/master` at `e13f411`. One PR at the end.
-- Every `schema.sql` DDL change has a twin the boot block in `server.js` runs (here: the lib modules' `ensureTable`).
+- Every `schema.sql` DDL change has a twin the boot block in `server.js` runs (here: each lib's `ensureTable`).
 - Write routes use exactly `requireAuth, requireRosterAdmin, requireOnboarded`; reads use `requireAuth` only.
-- Errors are `{ error: '<message>' }`. Dates travel as `YYYY-MM-DD` strings both ways (`to_char` out, regex in).
-- `DELETE` returns **204**; `POST` returns **201** with the row; duplicates/overlaps return **409**.
-- Front-end modules expose exactly one global each (`dutiesInit`, `drillDatesInit`) and take `canEdit` as an argument.
-- The newsletter must stay self-contained: no `src`/`href` outside `data:` URIs (enforced by `test/newsletter-http.test.js`).
-- The deck stays at 23 slides; Additional Duties is slide 9, RSD Schedule is slide 23.
-- Run tests with `node --env-file=.env.test --test <file>` (single file) or `npm test` (all, serialised). Never pipe a test run through `tail` — the exit code becomes `tail`'s.
-- Commit after every task. Commit messages: a plain-English title line, a body explaining why, and the trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+- Errors are `{ error: '<message>' }`. Dates travel as `YYYY-MM-DD` both ways (`to_char` out, regex in).
+- `DELETE` returns **204**; `POST` returns **201** with the row; duplicate duty / overlapping drill returns **409**.
+- **Design standards this codebase documents and this plan must not regress** (spec §2, Appendix A):
+  - `--t3` is strokes and icons **only**; it fails AA as text. Use `--t3-nav-text` for any muted text.
+  - Status chips use the measured pairs: `--ok-bg`/`--ok`, `--wrn-bg`/`--warn`, `--urg-bg`/`--urgent`. Never a solid fill, never an invented pairing.
+  - **No side-stripe accents.** No `border-left`, `border-right`, or `inset` box-shadow used as a coloured edge. The codebase is currently clean of them.
+  - Interactive targets are **44px** minimum.
+  - Toggles are `role="group"` + `aria-pressed` on real `<button>`s, never a fake tablist.
+  - Card titles are real `<h2 class="sec-title">`, not styled divs.
+  - Em dashes in copy are an accepted deviation here; do not "fix" them.
+- Front-end modules expose exactly one global each (`dutiesInit`, `calendarInit`) and take `canEdit` as an argument.
+- The newsletter must stay self-contained: no `src`/`href` outside `data:` URIs. The deck stays at 23 slides.
+- Run tests with `node --env-file=.env.test --test <file>`, or `npm test` for all. **Never pipe a test run through `tail`** — the exit code becomes `tail`'s.
+- Commit after every task: plain-English title, a body saying why, and the trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
 
 ---
 
@@ -27,22 +36,19 @@
 
 | File | Responsibility |
 |---|---|
-| `data/additional-duties.js` (new) | The 52 seed rows, `{ duty, primary, alternate }` |
-| `data/drill-dates.js` (new) | The ten CY-2026 seed rows, `{ start, end, note }` |
-| `lib/drill-calendar.js` (new) | Pure: `isoDate`, `label`, `years`, `buildYear`, `validateDrill`, `overlaps`. DB: `DDL`, `ensureTable`, `listAll`, `get`, `findOverlap`, `create`, `update`, `remove` |
+| `data/additional-duties.js`, `data/drill-dates.js`, `data/calendar-events.js` (new) | Seed rows, transcribed from the three partials |
+| `lib/drill-calendar.js` (new) | Pure: `isoDate`, `label`, `years`, `buildYear`, `buildCalendar`, `validateDrill`, `overlaps`. DB: `DDL`, `ensureTable`, `listAll`, `get`, `findOverlap`, `create`, `update`, `remove` |
 | `lib/duties.js` (new) | `DDL`, `ensureTable`, `list`, `validate`, `create`, `update`, `remove` |
-| `schema.sql` (modify, append) | The two `CREATE TABLE`s for tests/seed.js |
-| `server.js` (modify) | `require`s near line 10; `ensureTable` calls at the end of the boot IIFE (~line 303); eight routes after the documents routes (~line 868) |
-| `public/duties.js` (new) | People → Additional duties view, filter, admin modal |
-| `public/drill-dates.js` (new) | Useful Links → RSD Schedule card, year chips, admin modal |
-| `public/index.html` (modify) | Script tags (line 64), CSS (after line 2298), People pane markup (3561–3570), Useful Links card (3478), `switchResPane` + `setPeopleView` (6971), tab label (3020), stale comment (1900) |
-| `newsletter/from-db.js` (modify) | `data.duties`, `data.calendar` |
-| `newsletter/slides.js` (modify) | `additionalDuties(d)`, `rsdSchedule(d)` |
-| `newsletter/theme.js` (modify) | `.duties-cols`, `.duties-table`, `.rsd-list` |
-| `newsletter/render.js` (modify) | Swap two `staticSlide` entries for the live ones |
-| `newsletter/static/additional-duties.html`, `newsletter/static/rsd-schedule.html`, `newsletter/from-sample.js`, `newsletter/preview-server.js` (delete) | Partials replaced; sample path dead since 2026-08-17 |
+| `lib/calendar-events.js` (new) | Same shape as `duties.js`, no uniqueness |
+| `schema.sql` (modify, append) | Three `CREATE TABLE`s for tests and `seed.js` |
+| `server.js` (modify) | Requires near line 10; three `ensureTable` calls at the end of the boot IIFE (~line 303); eleven routes after the documents routes (~line 868) |
+| `public/duties.js` (new) | People → Additional duties: list, filter, admin modal |
+| `public/calendar.js` (new) | Calendar tab: year stream, two admin modals |
+| `public/index.html` (modify) | Script tags (line 64), CSS (after line 2298), tab strip (3014), calculators wrapper (3034/3242), People pane (3561), Calendar pane (new), `switchResPane` + two view functions (6971), stale comment (1900) |
+| `newsletter/from-db.js`, `slides.js`, `theme.js`, `render.js`, `shape.js` (modify) | Slides 9 and 23 go live |
+| `newsletter/static/additional-duties.html`, `static/rsd-schedule.html`, `from-sample.js`, `preview-server.js` (delete) | Replaced; sample path dead since 2026-08-17 |
 | `test/drill-calendar.test.js` (new) | Pure unit tests |
-| `test/duties-http.test.js`, `test/drill-dates-http.test.js` (new) | HTTP + seed-on-create |
+| `test/duties-http.test.js`, `test/drill-dates-http.test.js`, `test/calendar-events-http.test.js` (new) | HTTP + seed-on-create |
 | `test/newsletter-http.test.js` (modify) | Live-slide assertions |
 | `MEMORY.md` (modify) | §5 feature entry, §12 key files |
 
@@ -51,12 +57,11 @@
 ### Task 1: Seed data files
 
 **Files:**
-- Create: `data/additional-duties.js`
-- Create: `data/drill-dates.js`
-- Test: `test/drill-calendar.test.js` (first two tests; the file grows in Task 2)
+- Create: `data/additional-duties.js`, `data/drill-dates.js`, `data/calendar-events.js`
+- Test: `test/drill-calendar.test.js` (first three tests; the file grows in Task 2)
 
 **Interfaces:**
-- Produces: `require('../data/additional-duties')` → `Array<{ duty: string, primary: string|null, alternate: string|null }>` (52 rows). `require('../data/drill-dates')` → `Array<{ start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', note: string|null }>` (10 rows).
+- Produces: `require('../data/additional-duties')` → `Array<{ duty: string, primary: string|null, alternate: string|null }>` (52). `require('../data/drill-dates')` → `Array<{ start, end, note }>` (10, ISO strings). `require('../data/calendar-events')` → `Array<{ title, location, start, end, attendees, status, note }>` (10).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -69,6 +74,7 @@ const assert = require('node:assert');
 
 const DUTIES = require('../data/additional-duties');
 const DRILLS = require('../data/drill-dates');
+const EVENTS = require('../data/calendar-events');
 
 test('the duties seed is the newsletter partial, with TBD and dashes normalised to null', () => {
   assert.strictEqual(DUTIES.length, 52);
@@ -80,8 +86,7 @@ test('the duties seed is the newsletter partial, with TBD and dashes normalised 
       assert.notStrictEqual(d[k], '—', `${d.duty}.${k} should be null, not a dash`);
     }
   }
-  const names = DUTIES.map(d => d.duty.toLowerCase());
-  assert.strictEqual(new Set(names).size, 52, 'duty names are unique (case-insensitive)');
+  assert.strictEqual(new Set(DUTIES.map(d => d.duty.toLowerCase())).size, 52, 'names unique, case-insensitively');
   assert.deepStrictEqual(DUTIES.find(d => d.duty === 'Records Management / FARM'),
     { duty: 'Records Management / FARM', primary: null, alternate: null });
   assert.deepStrictEqual(DUTIES.find(d => d.duty === 'ADUTM'),
@@ -101,6 +106,24 @@ test('the drill seed is the ten CY-2026 drills', () => {
   assert.deepStrictEqual(DRILLS[0], { start: '2026-01-31', end: '2026-02-01', note: 'Jan & Feb combined' });
   assert.ok(!DRILLS.some(d => d.start.startsWith('2026-07')), 'July has no drill');
 });
+
+test('the events seed is the MEETs/RADR partial, spanning two years', () => {
+  assert.strictEqual(EVENTS.length, 10);
+  for (const e of EVENTS) {
+    assert.ok(e.title && e.title.length <= 120, `title: ${JSON.stringify(e)}`);
+    assert.match(e.start, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(e.end >= e.start, `${e.title} ends on or after it starts`);
+    assert.ok(['scheduled', 'complete', 'cancelled'].includes(e.status), `${e.title} status`);
+    assert.ok(e.attendees === null || e.attendees.length <= 600, `${e.title} attendees fit`);
+    assert.ok(e.location === null || e.location.length <= 120, `${e.title} location fits`);
+  }
+  assert.deepStrictEqual([...new Set(EVENTS.map(e => e.start.slice(0, 4)))].sort(), ['2025', '2026']);
+  assert.strictEqual(EVENTS.filter(e => e.status === 'complete').length, 5);
+  assert.strictEqual(EVENTS.filter(e => e.status === 'cancelled').length, 1);
+  const dft = EVENTS.find(e => e.title === 'FY26 DFT');
+  assert.strictEqual(dft.location, 'Camp Murray, WA');
+  assert.ok(dft.attendees.includes('MSgt White (possibly)'), 'the roster is verbatim');
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -115,8 +138,8 @@ Expected: FAIL — `Cannot find module '../data/additional-duties'`
 // verbatim from the August 2026 newsletter slide (formerly
 // newsletter/static/additional-duties.html). Loaded into additional_duties the
 // first time the boot migration creates that table (lib/duties.js); after that
-// the table is edited in the app under Resources → People, and this file is
-// only a record of where the data started. A null owner means "needs owner".
+// the table is edited in the app under Resources → People, and this file is only
+// a record of where the data started. A null owner means "needs owner".
 module.exports = [
   { duty: "Add'l Duty Program Responsibilities", primary: 'Maramba / Banks', alternate: 'Monico (Top Cover)' },
   { duty: 'ADUTM', primary: 'McNaughton', alternate: null },
@@ -179,8 +202,8 @@ module.exports = [
 // CY-2026 RSD (drill) dates, from the newsletter's RSD Schedule slide (formerly
 // newsletter/static/rsd-schedule.html). Loaded into drill_dates the first time
 // the boot migration creates that table (lib/drill-calendar.js); later years are
-// entered in the app under Resources → Useful Links. July has no entry on
-// purpose — months without a drill are derived, never typed.
+// entered in the app under Resources → Calendar. July has no entry on purpose —
+// months without a drill are derived, never typed.
 module.exports = [
   { start: '2026-01-31', end: '2026-02-01', note: 'Jan & Feb combined' },
   { start: '2026-03-06', end: '2026-03-08', note: null },
@@ -195,21 +218,62 @@ module.exports = [
 ];
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 5: Create `data/calendar-events.js`**
+
+```js
+// Squadron calendar events — TDY and training rotations. Transcribed from the
+// newsletter's MEETs / RADR / Silver Flag slide (newsletter/static/meets-radr.html),
+// which stays hand-edited for now: this table feeds the app's Calendar tab only.
+// Loaded into calendar_events the first time the boot migration creates that
+// table (lib/calendar-events.js).
+//
+// The title carries the kind — the squadron writes RADR, Silver Flag, REOTS —
+// and attendees are free text for the same reason duty owners are: the roster
+// includes ranks, initials and "(possibly)".
+module.exports = [
+  { title: 'HIGH POWER GEN', location: 'New London, NC', start: '2025-12-07', end: '2025-12-12',
+    attendees: 'A1C Veal / A1C Whittingham', status: 'complete', note: null },
+  { title: 'RADR', location: 'New London, NC', start: '2026-01-11', end: '2026-01-17',
+    attendees: 'SrA Hill', status: 'complete', note: null },
+  { title: 'Silver Flag', location: 'Tyndall AFB, FL', start: '2026-01-11', end: '2026-01-17',
+    attendees: 'TSgt Grossmick / TSgt Price / TSgt Ebbert', status: 'complete', note: null },
+  { title: 'RADR', location: 'Tyndall AFB, FL', start: '2026-01-25', end: '2026-01-31',
+    attendees: 'SSgt Uzoma / SSgt Huertas / SrA Torres / SrA Mattson', status: 'cancelled', note: null },
+  { title: 'REOTS', location: 'FIG, PA', start: '2026-02-01', end: '2026-02-07',
+    attendees: 'A1C Padilla', status: 'complete', note: null },
+  { title: 'RADR', location: 'Dobbins ARB, GA', start: '2026-04-12', end: '2026-04-18',
+    attendees: 'SrA Fowler', status: 'complete', note: null },
+  { title: 'RADR', location: 'Fargo, ND', start: '2026-05-03', end: '2026-05-09',
+    attendees: 'MSgt Brown', status: 'scheduled', note: null },
+  { title: 'RADR', location: 'Tyndall AFB, FL', start: '2026-05-17', end: '2026-05-23',
+    attendees: 'MSgt Fernandez G.', status: 'scheduled', note: null },
+  { title: 'RADR', location: 'Ft Smith ARB, AR', start: '2026-06-07', end: '2026-06-13',
+    attendees: 'A1C Whittingham', status: 'scheduled', note: null },
+  { title: 'FY26 DFT', location: 'Camp Murray, WA', start: '2026-06-15', end: '2026-06-29',
+    attendees: 'Lt Col Gorey, Maj Ye, Lt Select Maramba, Lt Select Banks, CMSgt Romer, SMSgt King, '
+      + 'SMSgt Gablin, MSgt McNaughton, MSgt Fernandez G., MSgt Sousa, MSgt McCullough, '
+      + 'MSgt White (possibly), MSgt Beljour-Sommer, MSgt Tarasewicz, TSgt Beltran, SSgt Uzoma, '
+      + 'SSgt Hankinson, SrA Palomino, SrA Hill, SrA Torres, SrA Fowler, A1C Glenn, A1C Whittingham',
+    status: 'scheduled', note: null },
+];
+```
+
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `node --env-file=.env.test --test test/drill-calendar.test.js`
-Expected: `# pass 2`, `# fail 0`
+Expected: `# pass 3`, `# fail 0`
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add data/additional-duties.js data/drill-dates.js test/drill-calendar.test.js
-git commit -m "Seed data: the Additional Duties list and the CY-2026 drill dates
+git add data/additional-duties.js data/drill-dates.js data/calendar-events.js test/drill-calendar.test.js
+git commit -m "Seed data: the duties list, the drill dates, and the TDY roster
 
-Transcribed verbatim from the two newsletter partials they will replace,
-with the partial's TBD / dash vacancy markers normalised to null so the
-app can derive 'needs owner' instead of string-matching. July has no
-drill row: months without a UTA are derived, never typed.
+Transcribed verbatim from the three newsletter partials they back, with
+the duties partial's TBD / dash vacancy markers normalised to null so the
+app can derive 'needs owner' instead of string-matching, and the MEETs
+slide's COMPLETE / CANCELLED tags mapped to a status. July has no drill
+row: months without a UTA are derived, never typed.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
@@ -226,11 +290,12 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Produces:
   - `isoDate(v: Date|string) → 'YYYY-MM-DD'`
   - `label(start, end) → '11–13 Sep' | '31 Jan–1 Feb' | '8 Aug'`
-  - `years(rows) → number[]` ascending, distinct years of `start_date`
-  - `buildYear(rows, year, referenceDate) → { year, entries }` where a drill entry is `{ kind:'drill', id, start_date, end_date, note, label, threeDay, past, next }` and a gap is `{ kind:'no_uta', month, label }`
+  - `years(...rowLists) → number[]` ascending, distinct years of `start_date` across every list passed
+  - `buildYear(drills, year, referenceDate) → { year, entries }`; a drill entry is `{ kind:'drill', id, start_date, end_date, note, label, threeDay, past, next }`, a gap is `{ kind:'no_uta', month, label }`
+  - `buildCalendar(drills, events, year, referenceDate) → { year, months }`; a month is `{ month, label, noUta, entries }`; an event entry is `{ kind:'event', id, start_date, end_date, label, title, location, attendees, status, note, past }`
   - `validateDrill({ start_date, end_date, note }) → { ok:true, value } | { ok:false, error }`
-  - `overlaps(a, b) → boolean` on `{ start_date, end_date }`
-- `rows` may carry `start_date`/`end_date` as strings or `Date`s (pg returns `Date` for `DATE` columns unless `to_char` is used).
+  - `overlaps(a, b) → boolean`
+- Rows may carry dates as strings or `Date`s (pg returns `Date` for a bare `DATE` column).
 
 - [ ] **Step 1: Append the failing tests**
 
@@ -239,29 +304,31 @@ Append to `test/drill-calendar.test.js`:
 ```js
 const cal = require('../lib/drill-calendar');
 
-const rows2026 = DRILLS.map((d, i) => ({ id: i + 1, start_date: d.start, end_date: d.end, note: d.note }));
+const drillRows = DRILLS.map((d, i) => ({ id: i + 1, start_date: d.start, end_date: d.end, note: d.note }));
+const eventRows = EVENTS.map((e, i) => ({
+  id: i + 1, title: e.title, location: e.location, start_date: e.start, end_date: e.end,
+  attendees: e.attendees, status: e.status, note: e.note,
+}));
 
 test('buildYear: ten drills plus one July gap, in date order, each drill once', () => {
-  const { year, entries } = cal.buildYear(rows2026, 2026, '2026-08-22');
+  const { year, entries } = cal.buildYear(drillRows, 2026, '2026-08-22');
   assert.strictEqual(year, 2026);
   assert.strictEqual(entries.length, 11);
   assert.strictEqual(entries.filter(e => e.kind === 'drill').length, 10);
-  const gap = entries.find(e => e.kind === 'no_uta');
-  assert.deepStrictEqual(gap, { kind: 'no_uta', month: 7, label: 'July' });
-  assert.strictEqual(entries.indexOf(gap), 5, 'July sits between June and August');
+  assert.deepStrictEqual(entries.find(e => e.kind === 'no_uta'), { kind: 'no_uta', month: 7, label: 'July' });
   assert.deepStrictEqual(entries.map(e => e.label), [
     '31 Jan–1 Feb', '6–8 Mar', '11–12 Apr', '1–3 May', '5–7 Jun', 'July',
     '8–9 Aug', '11–13 Sep', '17–18 Oct', '14–15 Nov', '11–13 Dec',
   ]);
 });
 
-test('buildYear: a drill that spans two months covers both, so neither is a gap', () => {
-  const { entries } = cal.buildYear(rows2026, 2026, '2026-01-01');
+test('buildYear: a drill spanning two months covers both, so neither is a gap', () => {
+  const { entries } = cal.buildYear(drillRows, 2026, '2026-01-01');
   assert.ok(!entries.some(e => e.kind === 'no_uta' && (e.month === 1 || e.month === 2)));
 });
 
 test('buildYear: threeDay flips at three calendar days', () => {
-  const { entries } = cal.buildYear(rows2026, 2026, '2026-01-01');
+  const { entries } = cal.buildYear(drillRows, 2026, '2026-01-01');
   const by = Object.fromEntries(entries.filter(e => e.kind === 'drill').map(e => [e.label, e.threeDay]));
   assert.strictEqual(by['31 Jan–1 Feb'], false);
   assert.strictEqual(by['8–9 Aug'], false);
@@ -270,33 +337,85 @@ test('buildYear: threeDay flips at three calendar days', () => {
 });
 
 test('buildYear: past and next are relative to the reference date, and only one entry is next', () => {
-  const { entries } = cal.buildYear(rows2026, 2026, '2026-08-22');
-  const drills = entries.filter(e => e.kind === 'drill');
-  assert.deepStrictEqual(drills.map(d => d.past), [true, true, true, true, true, true, false, false, false, false]);
+  const drills = cal.buildYear(drillRows, 2026, '2026-08-22').entries.filter(e => e.kind === 'drill');
+  assert.deepStrictEqual(drills.map(d => d.past),
+    [true, true, true, true, true, true, false, false, false, false]);
   assert.strictEqual(drills.filter(d => d.next).length, 1);
   assert.strictEqual(drills.find(d => d.next).label, '11–13 Sep');
 });
 
 test('buildYear: a reference date inside a drill makes that drill next, not past', () => {
-  const { entries } = cal.buildYear(rows2026, 2026, '2026-09-12');
+  const { entries } = cal.buildYear(drillRows, 2026, '2026-09-12');
   const sep = entries.find(e => e.label === '11–13 Sep');
   assert.strictEqual(sep.past, false);
   assert.strictEqual(sep.next, true);
   assert.strictEqual(entries.find(e => e.label === '8–9 Aug').past, true);
 });
 
-test('buildYear: a Date reference and Date row columns are accepted (pg returns DATE as Date)', () => {
-  const dated = rows2026.map(r => ({ ...r, start_date: new Date(r.start_date + 'T00:00:00Z'), end_date: new Date(r.end_date + 'T00:00:00Z') }));
+test('buildYear: Date inputs are accepted (pg returns a bare DATE column as Date)', () => {
+  const dated = drillRows.map(r => ({
+    ...r, start_date: new Date(r.start_date + 'T00:00:00Z'), end_date: new Date(r.end_date + 'T00:00:00Z'),
+  }));
   const { entries } = cal.buildYear(dated, 2026, new Date('2026-08-22T15:00:00Z'));
   assert.strictEqual(entries.find(e => e.next).label, '11–13 Sep');
   assert.strictEqual(entries.find(e => e.next).start_date, '2026-09-11');
 });
 
-test('buildYear: rows from other years are ignored; an empty year has no drills', () => {
-  const mixed = [...rows2026, { id: 99, start_date: '2027-01-09', end_date: '2027-01-10', note: null }];
+test('buildYear: other years are ignored; an empty year has no drills', () => {
+  const mixed = [...drillRows, { id: 99, start_date: '2027-01-09', end_date: '2027-01-10', note: null }];
   assert.strictEqual(cal.buildYear(mixed, 2026, '2026-01-01').entries.filter(e => e.kind === 'drill').length, 10);
   assert.strictEqual(cal.buildYear(mixed, 2027, '2026-01-01').entries.filter(e => e.kind === 'drill').length, 1);
   assert.strictEqual(cal.buildYear([], 2026, '2026-01-01').entries.filter(e => e.kind === 'drill').length, 0);
+});
+
+test('buildCalendar: twelve month groups, noUta on the month rather than as a row', () => {
+  const { year, months } = cal.buildCalendar(drillRows, eventRows, 2026, '2026-08-22');
+  assert.strictEqual(year, 2026);
+  assert.strictEqual(months.length, 12);
+  assert.deepStrictEqual(months.map(m => m.month), [1,2,3,4,5,6,7,8,9,10,11,12]);
+  assert.strictEqual(months[0].label, 'January');
+  // Only July has no drill. February is covered by the 31 Jan–1 Feb drill.
+  assert.deepStrictEqual(months.filter(m => m.noUta).map(m => m.month), [7]);
+  assert.ok(!months.some(m => m.entries.some(e => e.kind === 'no_uta')), 'no_uta is never an entry here');
+});
+
+test('buildCalendar: drills and events interleave by date inside a month', () => {
+  const { months } = cal.buildCalendar(drillRows, eventRows, 2026, '2026-08-22');
+  const april = months.find(m => m.month === 4);
+  assert.deepStrictEqual(april.entries.map(e => [e.kind, e.label]),
+    [['drill', '11–12 Apr'], ['event', '12–18 Apr']]);
+  const apr = april.entries[1];
+  assert.strictEqual(apr.title, 'RADR');
+  assert.strictEqual(apr.location, 'Dobbins ARB, GA');
+  assert.strictEqual(apr.status, 'complete');
+  assert.strictEqual(apr.past, true);
+  const jan = months.find(m => m.month === 1);
+  assert.deepStrictEqual(jan.entries.map(e => e.kind), ['drill', 'event', 'event', 'event']);
+  assert.deepStrictEqual(jan.entries.slice(1, 3).map(e => e.title), ['RADR', 'Silver Flag'],
+    'same-day events sort by title');
+});
+
+test('buildCalendar: an event is listed once, in the month it starts', () => {
+  const { months } = cal.buildCalendar([], eventRows, 2026, '2026-08-22');
+  const seen = months.flatMap(m => m.entries).filter(e => e.title === 'FY26 DFT');
+  assert.strictEqual(seen.length, 1);
+  assert.strictEqual(months.find(m => m.entries.includes(seen[0])).month, 6, 'June, where it starts');
+});
+
+test('buildCalendar: next marks a drill only, and events never carry it', () => {
+  const { months } = cal.buildCalendar(drillRows, eventRows, 2026, '2026-08-22');
+  const all = months.flatMap(m => m.entries);
+  assert.strictEqual(all.filter(e => e.next).length, 1);
+  assert.strictEqual(all.find(e => e.next).kind, 'drill');
+  assert.ok(all.filter(e => e.kind === 'event').every(e => e.next === undefined));
+});
+
+test('buildCalendar: a year with only events still returns twelve months, all noUta', () => {
+  const { months } = cal.buildCalendar([], eventRows, 2025, '2026-08-22');
+  assert.strictEqual(months.length, 12);
+  assert.ok(months.every(m => m.noUta));
+  assert.strictEqual(months.find(m => m.month === 12).entries.length, 1);
+  assert.strictEqual(months.flatMap(m => m.entries).length, 1, 'only the Dec 2025 rotation');
 });
 
 test('label: same month, across months, single day', () => {
@@ -305,17 +424,18 @@ test('label: same month, across months, single day', () => {
   assert.strictEqual(cal.label('2026-08-08', '2026-08-08'), '8 Aug');
 });
 
-test('years: distinct, ascending', () => {
-  assert.deepStrictEqual(cal.years([
-    { start_date: '2027-01-09' }, { start_date: '2026-03-06' }, { start_date: new Date('2026-09-11T00:00:00Z') },
-  ]), [2026, 2027]);
+test('years: distinct and ascending across every list passed', () => {
+  assert.deepStrictEqual(cal.years(drillRows, eventRows), [2025, 2026]);
+  assert.deepStrictEqual(cal.years([{ start_date: '2027-01-09' }, { start_date: new Date('2026-09-11T00:00:00Z') }]),
+    [2026, 2027]);
   assert.deepStrictEqual(cal.years([]), []);
 });
 
 test('validateDrill: accepts a real drill and normalises the note', () => {
   assert.deepStrictEqual(cal.validateDrill({ start_date: '2026-09-11', end_date: '2026-09-13', note: '  ' }),
     { ok: true, value: { start_date: '2026-09-11', end_date: '2026-09-13', note: null } });
-  assert.deepStrictEqual(cal.validateDrill({ start_date: '2026-08-08', end_date: '2026-08-08', note: ' one day ' }).value.note, 'one day');
+  assert.strictEqual(cal.validateDrill({ start_date: '2026-08-08', end_date: '2026-08-08', note: ' one day ' }).value.note,
+    'one day');
 });
 
 test('validateDrill: rejects malformed, impossible, reversed and over-long drills', () => {
@@ -345,16 +465,22 @@ Expected: FAIL — `Cannot find module '../lib/drill-calendar'`
 - [ ] **Step 3: Create `lib/drill-calendar.js` (pure half)**
 
 ```js
-// The calendar year's drill dates — derivation, validation and storage.
+// The squadron calendar — derivation, validation and storage.
 //
-// The pure half (isoDate … overlaps) is shared by GET /api/drill-dates and the
+// The pure half (isoDate … overlaps) is shared by GET /api/calendar and the
 // newsletter's RSD Schedule slide, so there is exactly one implementation of
 // "which months have no UTA", "is this a 3-day drill" and "which drill is next".
 // Nothing is typed that can be derived: the app stores two dates and a note.
 //
-// Dates are handled as 'YYYY-MM-DD' strings throughout. ISO date strings compare
-// correctly as plain strings, and a string never picks up a timezone the way a
-// Date does — the one place a Date is accepted (isoDate) converts it at UTC.
+// Two views over the same data:
+//   buildYear     — drills only, flat, with no_uta entries. What slide 23 prints.
+//   buildCalendar — drills and events merged into twelve month groups. The app's
+//                   Calendar tab. noUta is a property of the month here, because
+//                   a month can have no drill and still hold a training rotation.
+//
+// Dates are 'YYYY-MM-DD' strings throughout. ISO strings compare correctly as
+// plain strings and never pick up a timezone the way a Date does; the one place
+// a Date is accepted (isoDate) converts it at UTC.
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -369,8 +495,8 @@ function isoDate(v) {
   return String(v == null ? '' : v).slice(0, 10);
 }
 
-// 'YYYY-MM-DD' → Date at UTC midnight, or null when it is not a real calendar date
-// ('2026-02-30' parses in JS as 2 March; the round-trip check rejects it).
+// 'YYYY-MM-DD' → Date at UTC midnight, or null when it is not a real calendar
+// date ('2026-02-30' parses in JS as 2 March; the round-trip check rejects it).
 function parseIso(s) {
   if (typeof s !== 'string' || !ISO_DATE_RE.test(s)) return null;
   const d = new Date(s + 'T00:00:00Z');
@@ -388,39 +514,82 @@ function label(start, end) {
   return `${a.getUTCDate()} ${MON[a.getUTCMonth()]}–${b.getUTCDate()} ${MON[b.getUTCMonth()]}`;
 }
 
-function years(rows) {
-  return [...new Set(rows.map(r => Number(isoDate(r.start_date).slice(0, 4))))].sort((x, y) => x - y);
+// Distinct start years across any number of row lists, ascending.
+function years(...lists) {
+  const set = new Set();
+  for (const rows of lists) for (const r of rows || []) set.add(Number(isoDate(r.start_date).slice(0, 4)));
+  return [...set].sort((a, b) => a - b);
 }
 
-function buildYear(rows, year, referenceDate) {
-  const y = Number(year);
-  const ref = isoDate(referenceDate);
-  const drills = rows
+// Drills of `year`, in date order, each with its label, 3-day tag and past/next.
+function drillEntries(drills, year, ref) {
+  const rows = (drills || [])
     .map(r => ({ id: r.id, start_date: isoDate(r.start_date), end_date: isoDate(r.end_date), note: r.note || null }))
-    .filter(r => r.start_date.slice(0, 4) === String(y))
+    .filter(r => r.start_date.slice(0, 4) === String(year))
     .sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
-
-  const entries = [];
   let nextSeen = false;
-  for (const d of drills) {
+  return rows.map(d => {
     const past = d.end_date < ref;
     const next = !past && !nextSeen;
     if (next) nextSeen = true;
-    entries.push({ kind: 'drill', ...d, label: label(d.start_date, d.end_date),
-                   threeDay: dayCount(d.start_date, d.end_date) >= 3, past, next, _at: d.start_date });
-  }
+    return { kind: 'drill', ...d, label: label(d.start_date, d.end_date),
+             threeDay: dayCount(d.start_date, d.end_date) >= 3, past, next };
+  });
+}
+
+// Months of `year` no drill touches. A 31 Jan–1 Feb drill covers both.
+function uncoveredMonths(drillList, year) {
+  const out = [];
   for (let m = 1; m <= 12; m++) {
-    const first = `${y}-${String(m).padStart(2, '0')}-01`;
-    const last = isoDate(new Date(Date.UTC(y, m, 0)));   // day 0 of next month = last day of this one
-    const covered = drills.some(d => d.start_date <= last && d.end_date >= first);
-    if (!covered) entries.push({ kind: 'no_uta', month: m, label: MONTH[m - 1], _at: first });
+    const first = `${year}-${String(m).padStart(2, '0')}-01`;
+    const last = isoDate(new Date(Date.UTC(year, m, 0)));  // day 0 of next month = last of this
+    if (!drillList.some(d => d.start_date <= last && d.end_date >= first)) out.push(m);
   }
-  entries.sort((a, b) => (a._at < b._at ? -1 : 1));
+  return out;
+}
+
+function buildYear(drills, year, referenceDate) {
+  const y = Number(year);
+  const list = drillEntries(drills, y, isoDate(referenceDate));
+  const entries = [
+    ...list.map(d => ({ ...d, _at: d.start_date })),
+    ...uncoveredMonths(list, y).map(m => ({
+      kind: 'no_uta', month: m, label: MONTH[m - 1], _at: `${y}-${String(m).padStart(2, '0')}-01`,
+    })),
+  ].sort((a, b) => (a._at < b._at ? -1 : 1));
   for (const e of entries) delete e._at;
   return { year: y, entries };
 }
 
-// Request-body validation for POST/PATCH. Returns { ok, value } or { ok, error }.
+function buildCalendar(drills, events, year, referenceDate) {
+  const y = Number(year);
+  const ref = isoDate(referenceDate);
+  const list = drillEntries(drills, y, ref);
+  const evts = (events || [])
+    .map(e => {
+      const start_date = isoDate(e.start_date), end_date = isoDate(e.end_date);
+      return { kind: 'event', id: e.id, start_date, end_date, label: label(start_date, end_date),
+               title: e.title, location: e.location || null, attendees: e.attendees || null,
+               status: e.status || 'scheduled', note: e.note || null, past: end_date < ref };
+    })
+    // An event belongs to the month it STARTS, so a fortnight-long DFT is listed once.
+    .filter(e => e.start_date.slice(0, 4) === String(y));
+
+  const gaps = new Set(uncoveredMonths(list, y));
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const mm = String(m).padStart(2, '0');
+    const inMonth = (e) => e.start_date.slice(5, 7) === mm;
+    const entries = [...list.filter(inMonth), ...evts.filter(inMonth)]
+      .sort((a, b) => (a.start_date !== b.start_date
+        ? (a.start_date < b.start_date ? -1 : 1)
+        : String(a.title || '').localeCompare(String(b.title || ''))));
+    months.push({ month: m, label: MONTH[m - 1], noUta: gaps.has(m), entries });
+  }
+  return { year: y, months };
+}
+
+// Request-body validation for the drill routes. { ok, value } or { ok, error }.
 function validateDrill(body) {
   const start = body.start_date, end = body.end_date;
   if (!parseIso(start)) return { ok: false, error: 'start_date must be a real YYYY-MM-DD date' };
@@ -434,58 +603,54 @@ function validateDrill(body) {
 }
 
 // Two drills overlap when they share at least one day. Adjacent days do not.
-const overlaps = (a, b) => isoDate(a.start_date) <= isoDate(b.end_date) && isoDate(b.start_date) <= isoDate(a.end_date);
+const overlaps = (a, b) =>
+  isoDate(a.start_date) <= isoDate(b.end_date) && isoDate(b.start_date) <= isoDate(a.end_date);
 
-module.exports = { isoDate, label, years, buildYear, validateDrill, overlaps };
+module.exports = { isoDate, label, years, buildYear, buildCalendar, validateDrill, overlaps };
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `node --env-file=.env.test --test test/drill-calendar.test.js`
-Expected: `# pass 14`, `# fail 0`
+Expected: `# pass 20`, `# fail 0`
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add lib/drill-calendar.js test/drill-calendar.test.js
-git commit -m "Drill calendar: derive the year's schedule from dates alone
+git commit -m "Calendar derivation: the year from dates alone, two views
 
-buildYear turns a list of drills into the year as the RSD slide shows it:
-each drill once, a 'No UTA' entry for every month no drill touches, the
-3-day tag from the day count, and past/next relative to a reference date
-so the API can use today while the newsletter uses the cycle's start.
+buildYear is the flat drill list the newsletter prints — each drill once,
+a No UTA entry per untouched month, the 3-day tag from the day count, and
+past/next against a reference date so the API can use today while the deck
+uses the cycle's start. buildCalendar merges drills and events into twelve
+month groups for the app, where noUta belongs to the month rather than
+being a row, because a month with no drill can still hold a rotation.
 Pure functions, tested without a database.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
 ---
-### Task 3: Tables, `lib/duties.js`, the DB half of `lib/drill-calendar.js`, seed-on-create
+### Task 3: Three tables, three libs, seed-on-create
 
 **Files:**
 - Modify: `schema.sql` (append at the end, after `idx_notifications_unpushed`)
-- Create: `lib/duties.js`
+- Create: `lib/duties.js`, `lib/calendar-events.js`
 - Modify: `lib/drill-calendar.js` (append the DB half)
-- Modify: `server.js` — `require`s after line 10; `ensureTable` calls before the boot IIFE's `catch` (line ~303)
-- Test: `test/duties-http.test.js` (new), `test/drill-dates-http.test.js` (new) — seed-on-create tests only; Tasks 4 and 5 add the route tests
+- Modify: `server.js` — requires after line 10; three `ensureTable` calls before the boot IIFE's `catch` (~line 303)
+- Test: `test/duties-http.test.js`, `test/drill-dates-http.test.js`, `test/calendar-events-http.test.js` (new; seed-on-create tests only — the route tests come in Tasks 4–6)
 
 **Interfaces:**
-- Consumes: `require('../data/additional-duties')`, `require('../data/drill-dates')` (Task 1); `isoDate`, `overlaps` (Task 2).
-- Produces (`lib/duties.js`):
-  - `DDL: string`
-  - `ensureTable(db, defaults = DEFAULTS) → Promise<{ created: boolean, seeded?: number }>`
-  - `list(db) → Promise<Row[]>` where `Row = { id, duty, primary_owner, alternate_owner }` ordered by `lower(duty)`
-  - `validate(body, { partial }) → { ok: true, value: { duty?, primary_owner?, alternate_owner? } } | { ok: false, error }`
-  - `create(db, value, byId) → Promise<Row>`; throws `err.code === 'DUPLICATE'` with a user-facing `message`
-  - `update(db, id, value, byId) → Promise<Row|null>` (null = not found); same `DUPLICATE` throw
-  - `remove(db, id) → Promise<boolean>`
-- Produces (`lib/drill-calendar.js`, DB half):
-  - `DDL: string`
-  - `ensureTable(db, defaults = DEFAULTS) → Promise<{ created, seeded? }>`
-  - `listAll(db) → Promise<Drill[]>` where `Drill = { id, start_date: 'YYYY-MM-DD', end_date, note }`, ordered by `start_date`
-  - `get(db, id) → Promise<Drill|null>`
-  - `findOverlap(db, { start_date, end_date }, excludeId) → Promise<Drill|null>`
-  - `create(db, value, byId) → Promise<Drill>`; `update(db, id, value, byId) → Promise<Drill|null>`; `remove(db, id) → Promise<boolean>`
+- Consumes: the three `data/` modules (Task 1); `isoDate` (Task 2).
+- Produces, `lib/duties.js`:
+  - `DDL: string`; `ensureTable(db, defaults?) → Promise<{ created, seeded? }>`
+  - `list(db) → Promise<Duty[]>`, `Duty = { id, duty, primary_owner, alternate_owner }`, ordered by `lower(duty)`
+  - `validate(body, { partial }) → { ok, value } | { ok: false, error }`
+  - `create(db, value, byId) → Promise<Duty>` — throws `err.code === 'DUPLICATE'`
+  - `update(db, id, value, byId) → Promise<Duty|null>` — same throw; `remove(db, id) → Promise<boolean>`
+- Produces, `lib/calendar-events.js`: identical shape, `Event = { id, title, location, start_date, end_date, attendees, status, note }`, ordered by `start_date, title`; `listAll(db)`; no `DUPLICATE`.
+- Produces, `lib/drill-calendar.js` (DB half): `DDL`, `ensureTable`, `listAll(db) → Drill[]` (`{ id, start_date, end_date, note }`, ordered by `start_date`), `get`, `findOverlap(db, value, excludeId)`, `create`, `update`, `remove`.
 
 - [ ] **Step 1: Write the failing seed-on-create tests**
 
@@ -493,9 +658,9 @@ Create `test/duties-http.test.js`:
 
 ```js
 // Additional duties: read by every signed-in member, written only by roster
-// admins (the Forms gate). Also covers seed-on-create — the table is loaded
-// from data/additional-duties.js only in the boot that creates it, so rows an
-// admin deletes never come back.
+// admins (the Forms gate). Also covers seed-on-create — the table is loaded from
+// data/additional-duties.js only in the boot that creates it, so rows an admin
+// deletes never come back.
 //
 // DATABASE_URL must point at the same throwaway Postgres as TEST_DATABASE_URL
 // before requiring server.js, since the app builds its pool at module-load time.
@@ -542,7 +707,7 @@ async function login(slug) {
 }
 
 // Four accounts: the roster admin, a leadership member WITHOUT the capability
-// (the twenty-one-versus-two distinction), a supervisor and a member.
+// (the twenty-one-versus-two distinction), a supervisor and a plain member.
 // must_change_password=false so requireOnboarded never confounds a 403.
 async function seed() {
   await resetDb();
@@ -567,8 +732,7 @@ const api = (method, path, cookie, body) => fetch(`${baseUrl}${path}`, {
 
 test('seed-on-create: a fresh table gets the 52 duties exactly once; deleted rows stay deleted', async () => {
   await pool.query('DROP TABLE IF EXISTS additional_duties');
-  const first = await duties.ensureTable(pool, DEFAULTS);
-  assert.deepStrictEqual(first, { created: true, seeded: 52 });
+  assert.deepStrictEqual(await duties.ensureTable(pool, DEFAULTS), { created: true, seeded: 52 });
   const count = async () => Number((await pool.query('SELECT COUNT(*) FROM additional_duties')).rows[0].count);
   assert.strictEqual(await count(), 52);
 
@@ -578,18 +742,19 @@ test('seed-on-create: a fresh table gets the 52 duties exactly once; deleted row
   await pool.query(`DELETE FROM additional_duties WHERE duty = 'ADUTM'`);
   assert.deepStrictEqual(await duties.ensureTable(pool, DEFAULTS), { created: false });
   assert.strictEqual(await count(), 51, 'a deleted row never comes back');
-  const { rows } = await pool.query(`SELECT primary_owner, alternate_owner FROM additional_duties WHERE duty = 'Records Management / FARM'`);
+
+  const { rows } = await pool.query(
+    `SELECT primary_owner, alternate_owner FROM additional_duties WHERE duty = 'Records Management / FARM'`);
   assert.deepStrictEqual(rows[0], { primary_owner: null, alternate_owner: null });
 });
 ```
 
-Create `test/drill-dates-http.test.js` with the same preamble (copy everything above from the first line down to and including the `api` helper, replacing the header comment with the one below and the `duties`/`DEFAULTS` requires with `const cal = require('../lib/drill-calendar'); const DEFAULTS = require('../data/drill-dates');`), then this test:
+Create `test/drill-dates-http.test.js` and `test/calendar-events-http.test.js`. **Copy the whole preamble above verbatim** — from the first `process.env` line through the `api` helper — changing only the header comment and the two feature requires:
 
-```js
-// Drill dates: the calendar year's RSD schedule. Read by every signed-in member,
-// written only by roster admins. Also covers seed-on-create — loaded from
-// data/drill-dates.js only in the boot that creates the table.
-```
+- `drill-dates-http.test.js`: header comment `// The calendar: drill dates and the merged year view. Read by every signed-in\n// member, written only by roster admins. Also covers drill seed-on-create.`; requires `const cal = require('../lib/drill-calendar');` and `const DEFAULTS = require('../data/drill-dates');`
+- `calendar-events-http.test.js`: header comment `// Calendar events — TDY and training rotations. Read through /api/calendar,\n// written only by roster admins. Also covers event seed-on-create.`; requires `const events = require('../lib/calendar-events');` and `const DEFAULTS = require('../data/calendar-events');`
+
+Then append to `test/drill-dates-http.test.js`:
 
 ```js
 test('seed-on-create: a fresh table gets the ten 2026 drills exactly once; deleted rows stay deleted', async () => {
@@ -608,27 +773,43 @@ test('seed-on-create: a fresh table gets the ten 2026 drills exactly once; delet
 });
 ```
 
+And to `test/calendar-events-http.test.js`:
+
+```js
+test('seed-on-create: a fresh table gets the ten rotations exactly once; deleted rows stay deleted', async () => {
+  await pool.query('DROP TABLE IF EXISTS calendar_events');
+  assert.deepStrictEqual(await events.ensureTable(pool, DEFAULTS), { created: true, seeded: 10 });
+  const count = async () => Number((await pool.query('SELECT COUNT(*) FROM calendar_events')).rows[0].count);
+  assert.strictEqual(await count(), 10);
+  assert.deepStrictEqual(await events.ensureTable(pool, DEFAULTS), { created: false });
+  assert.strictEqual(await count(), 10);
+  await pool.query(`DELETE FROM calendar_events WHERE title = 'REOTS'`);
+  assert.deepStrictEqual(await events.ensureTable(pool, DEFAULTS), { created: false });
+  assert.strictEqual(await count(), 9, 'a deleted row never comes back');
+  const all = await events.listAll(pool);
+  assert.strictEqual(all[0].start_date, '2025-12-07', 'ordered by date, as YYYY-MM-DD strings');
+  assert.strictEqual(all[0].status, 'complete');
+  const dft = all.find(e => e.title === 'FY26 DFT');
+  assert.ok(dft.attendees.includes('A1C Whittingham'), 'the 23-name roster survives the round trip');
+});
+```
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `node --env-file=.env.test --test test/duties-http.test.js`
 Expected: FAIL — `Cannot find module '../lib/duties'`
 
-Run: `node --env-file=.env.test --test test/drill-dates-http.test.js`
-Expected: FAIL — `cal.ensureTable is not a function`
-
-- [ ] **Step 3: Append the tables to `schema.sql`**
-
-Append at the very end of `schema.sql`:
+- [ ] **Step 3: Append the three tables to `schema.sql`**
 
 ```sql
 -- ── Resources reference tables ─────────────────────────────────────────────
--- Additional duties ("who do I see about X") and the calendar year's drill
--- dates. Every member reads them, roster admins edit them, the newsletter
--- renders them. These CREATEs are the twins of the DDL in lib/duties.js and
--- lib/drill-calendar.js, which the server.js boot block runs — with one
--- difference: the boot block also seeds the initial rows the first time it
--- creates each table. This copy creates them empty, which is what the tests
--- and seed.js want.
+-- Additional duties ("who do I see about X"), the calendar year's drill dates,
+-- and the TDY / training rotations. Every member reads them, roster admins edit
+-- them, and the newsletter renders the first two. These CREATEs are the twins of
+-- the DDL in lib/duties.js, lib/drill-calendar.js and lib/calendar-events.js,
+-- which the server.js boot block runs — with one difference: the boot block also
+-- seeds the initial rows the first time it creates each table. This copy creates
+-- them empty, which is what the tests and seed.js want.
 CREATE TABLE IF NOT EXISTS additional_duties (
   id              SERIAL PRIMARY KEY,
   duty            VARCHAR(120) NOT NULL,
@@ -649,6 +830,24 @@ CREATE TABLE IF NOT EXISTS drill_dates (
   updated_at    TIMESTAMP DEFAULT NOW(),
   CHECK (end_date >= start_date AND end_date - start_date < 7)
 );
+
+-- Events legitimately overlap each other and drills, and a DFT runs a fortnight,
+-- so there is no overlap check, no uniqueness and no 7-day cap here.
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id            SERIAL PRIMARY KEY,
+  title         VARCHAR(120) NOT NULL,
+  location      VARCHAR(120),
+  start_date    DATE NOT NULL,
+  end_date      DATE NOT NULL,
+  attendees     VARCHAR(600),
+  status        VARCHAR(20) NOT NULL DEFAULT 'scheduled'
+                  CHECK (status IN ('scheduled','complete','cancelled')),
+  note          VARCHAR(200),
+  updated_by_id INTEGER REFERENCES members(id),
+  updated_at    TIMESTAMP DEFAULT NOW(),
+  CHECK (end_date >= start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events (start_date);
 ```
 
 - [ ] **Step 4: Create `lib/duties.js`**
@@ -678,9 +877,9 @@ const DDL = `
 const COLS = 'id, duty, primary_owner, alternate_owner';
 
 // Seed-on-create. The boot block calls this on every start; it only does
-// anything in the boot that finds the table absent. A database that already
-// has the table — including one where an admin has since deleted rows — is
-// left exactly as it is.
+// anything in the boot that finds the table absent. A database that already has
+// the table — including one where an admin has since deleted rows — is left
+// exactly as it is.
 async function ensureTable(db, defaults = DEFAULTS) {
   const { rows } = await db.query(`SELECT to_regclass('public.additional_duties') AS t`);
   if (rows[0].t) return { created: false };
@@ -698,13 +897,14 @@ async function list(db) {
   return rows;
 }
 
+// Returns undefined when the value is too long, so the caller can 400 on it.
 const clean = (v, max) => {
   const s = String(v == null ? '' : v).trim();
   return s.length > max ? undefined : (s || null);
 };
 
-// partial=false: a create — duty is required. partial=true: a PATCH — only the
-// keys present are validated, and at least one must be.
+// partial=false: a create, duty required. partial=true: a PATCH, only the keys
+// present are validated and at least one must be.
 function validate(body, { partial }) {
   const value = {};
   if ('duty' in body || !partial) {
@@ -716,7 +916,9 @@ function validate(body, { partial }) {
   for (const k of ['primary_owner', 'alternate_owner']) {
     if (!(k in body)) continue;
     const v = clean(body[k], 200);
-    if (v === undefined) return { ok: false, error: `${k === 'primary_owner' ? 'Primary' : 'Alternate'} must be 200 characters or fewer` };
+    if (v === undefined) {
+      return { ok: false, error: `${k === 'primary_owner' ? 'Primary' : 'Alternate'} must be 200 characters or fewer` };
+    }
     value[k] = v;
   }
   if (partial && !Object.keys(value).length) return { ok: false, error: 'Nothing to update' };
@@ -762,9 +964,124 @@ async function remove(db, id) {
 module.exports = { DDL, ensureTable, list, validate, create, update, remove };
 ```
 
-- [ ] **Step 5: Append the DB half to `lib/drill-calendar.js`**
+- [ ] **Step 5: Create `lib/calendar-events.js`**
 
-Replace the final `module.exports` line of `lib/drill-calendar.js` with:
+```js
+// Squadron calendar events — the TDY and training rotations (RADR, Silver Flag,
+// REOTS, DFT) that the newsletter's MEETs/RADR slide has always listed by hand.
+//
+// The title carries the kind: the squadron writes 'RADR' and 'Silver Flag', and
+// a kind enum on top would only constrain them. Attendees are free text for the
+// same reason duty owners are — the roster is written with ranks, initials and
+// the occasional "(possibly)". Squadron-wide only; no shop or member scoping.
+
+const DEFAULTS = require('../data/calendar-events');
+
+const STATUSES = ['scheduled', 'complete', 'cancelled'];
+
+const DDL = `
+  CREATE TABLE IF NOT EXISTS calendar_events (
+    id            SERIAL PRIMARY KEY,
+    title         VARCHAR(120) NOT NULL,
+    location      VARCHAR(120),
+    start_date    DATE NOT NULL,
+    end_date      DATE NOT NULL,
+    attendees     VARCHAR(600),
+    status        VARCHAR(20) NOT NULL DEFAULT 'scheduled'
+                    CHECK (status IN ('scheduled','complete','cancelled')),
+    note          VARCHAR(200),
+    updated_by_id INTEGER REFERENCES members(id),
+    updated_at    TIMESTAMP DEFAULT NOW(),
+    CHECK (end_date >= start_date)
+  );
+  CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events (start_date);
+`;
+
+const COLS = `id, title, location, to_char(start_date, 'YYYY-MM-DD') AS start_date,
+              to_char(end_date, 'YYYY-MM-DD') AS end_date, attendees, status, note`;
+
+// Seed-on-create; see lib/duties.js for the contract.
+async function ensureTable(db, defaults = DEFAULTS) {
+  const { rows } = await db.query(`SELECT to_regclass('public.calendar_events') AS t`);
+  if (rows[0].t) return { created: false };
+  await db.query(DDL);
+  for (const e of defaults) {
+    await db.query(
+      `INSERT INTO calendar_events (title, location, start_date, end_date, attendees, status, note)
+       VALUES ($1, $2, $3::date, $4::date, $5, $6, $7)`,
+      [e.title, e.location, e.start, e.end, e.attendees, e.status, e.note]);
+  }
+  return { created: true, seeded: defaults.length };
+}
+
+async function listAll(db) {
+  const { rows } = await db.query(`SELECT ${COLS} FROM calendar_events ORDER BY start_date, title`);
+  return rows;
+}
+
+async function get(db, id) {
+  const { rows } = await db.query(`SELECT ${COLS} FROM calendar_events WHERE id = $1`, [id]);
+  return rows[0] || null;
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const realDate = (s) => typeof s === 'string' && ISO_DATE_RE.test(s)
+  && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s;
+
+const clean = (v, max) => {
+  const s = String(v == null ? '' : v).trim();
+  return s.length > max ? undefined : (s || null);
+};
+
+// Always validates a whole row: the PATCH route merges the body over the stored
+// row first, so a one-field edit is checked against the dates it will have.
+function validate(body) {
+  const title = String(body.title == null ? '' : body.title).trim();
+  if (!title) return { ok: false, error: 'A title is required' };
+  if (title.length > 120) return { ok: false, error: 'The title must be 120 characters or fewer' };
+  if (!realDate(body.start_date)) return { ok: false, error: 'start_date must be a real YYYY-MM-DD date' };
+  if (!realDate(body.end_date)) return { ok: false, error: 'end_date must be a real YYYY-MM-DD date' };
+  if (body.end_date < body.start_date) return { ok: false, error: 'An event cannot end before it starts' };
+  const status = body.status == null || body.status === '' ? 'scheduled' : String(body.status);
+  if (!STATUSES.includes(status)) return { ok: false, error: `status must be one of ${STATUSES.join(', ')}` };
+  const location = clean(body.location, 120);
+  if (location === undefined) return { ok: false, error: 'The location must be 120 characters or fewer' };
+  const attendees = clean(body.attendees, 600);
+  if (attendees === undefined) return { ok: false, error: 'The attendee list must be 600 characters or fewer' };
+  const note = clean(body.note, 200);
+  if (note === undefined) return { ok: false, error: 'The note must be 200 characters or fewer' };
+  return { ok: true, value: { title, location, start_date: body.start_date, end_date: body.end_date,
+                              attendees, status, note } };
+}
+
+async function create(db, v, byId) {
+  const { rows } = await db.query(
+    `INSERT INTO calendar_events (title, location, start_date, end_date, attendees, status, note, updated_by_id)
+     VALUES ($1, $2, $3::date, $4::date, $5, $6, $7, $8) RETURNING ${COLS}`,
+    [v.title, v.location, v.start_date, v.end_date, v.attendees, v.status, v.note, byId]);
+  return rows[0];
+}
+
+async function update(db, id, v, byId) {
+  const { rows } = await db.query(
+    `UPDATE calendar_events SET title = $2, location = $3, start_date = $4::date, end_date = $5::date,
+            attendees = $6, status = $7, note = $8, updated_by_id = $9, updated_at = NOW()
+      WHERE id = $1 RETURNING ${COLS}`,
+    [id, v.title, v.location, v.start_date, v.end_date, v.attendees, v.status, v.note, byId]);
+  return rows[0] || null;
+}
+
+async function remove(db, id) {
+  const { rowCount } = await db.query(`DELETE FROM calendar_events WHERE id = $1`, [id]);
+  return rowCount > 0;
+}
+
+module.exports = { STATUSES, DDL, ensureTable, listAll, get, validate, create, update, remove };
+```
+
+- [ ] **Step 6: Append the DB half to `lib/drill-calendar.js`**
+
+Replace the file's final `module.exports = { … };` line with:
 
 ```js
 // ── Storage ─────────────────────────────────────────────────────────────────
@@ -783,8 +1100,8 @@ const DDL = `
   );
 `;
 
-// to_char so dates leave the database as the same 'YYYY-MM-DD' strings the
-// API accepts — a bare DATE column would come back as a Date at UTC midnight.
+// to_char so dates leave the database as the same 'YYYY-MM-DD' strings the API
+// accepts — a bare DATE column would come back as a Date at UTC midnight.
 const COLS = `id, to_char(start_date, 'YYYY-MM-DD') AS start_date,
               to_char(end_date, 'YYYY-MM-DD') AS end_date, note`;
 
@@ -810,8 +1127,8 @@ async function get(db, id) {
   return rows[0] || null;
 }
 
-// The drill, if any, that shares a day with the candidate. excludeId lets a
-// PATCH ignore the row being edited.
+// The drill, if any, sharing a day with the candidate. excludeId lets a PATCH
+// ignore the row being edited.
 async function findOverlap(db, { start_date, end_date }, excludeId = null) {
   const { rows } = await db.query(
     `SELECT ${COLS} FROM drill_dates
@@ -844,56 +1161,60 @@ async function remove(db, id) {
 }
 
 module.exports = {
-  isoDate, label, years, buildYear, validateDrill, overlaps,
+  isoDate, label, years, buildYear, buildCalendar, validateDrill, overlaps,
   DDL, ensureTable, listAll, get, findOverlap, create, update, remove,
 };
 ```
 
-- [ ] **Step 6: Wire `ensureTable` into the boot block in `server.js`**
+- [ ] **Step 7: Wire the three `ensureTable` calls into the boot block**
 
 After line 10 (`const { acquireMigrationLock } = require('./lib/db');`) add:
 
 ```js
 const duties = require('./lib/duties');
 const drillCal = require('./lib/drill-calendar');
+const calEvents = require('./lib/calendar-events');
 ```
 
-In the boot IIFE, immediately before the line `  } catch (e) {` / `console.error('Migration warning:', e.message);` (after the `last_login_at` recovery query, around line 303), add:
+In the boot IIFE, immediately before `  } catch (e) {` (after the `last_login_at` recovery query, ~line 303), add:
 
 ```js
-    // Resources reference tables (additional duties, drill dates). Each lib
-    // creates its table and seeds it from data/ in the one boot that finds it
-    // absent; every later boot is a no-op, so rows an admin deletes stay gone.
-    // schema.sql carries the twin CREATEs, empty, for the tests and seed.js.
-    for (const [name, mod] of [['additional_duties', duties], ['drill_dates', drillCal]]) {
+    // Resources reference tables (duties, drill dates, calendar events). Each
+    // lib creates its table and seeds it from data/ in the one boot that finds
+    // it absent; every later boot is a no-op, so rows an admin deletes stay
+    // gone. schema.sql carries the twin CREATEs, empty, for tests and seed.js.
+    for (const [name, mod] of [['additional_duties', duties], ['drill_dates', drillCal],
+                               ['calendar_events', calEvents]]) {
       const r = await mod.ensureTable(pool);
       if (r.created) console.log(`Created ${name} and seeded ${r.seeded} rows`);
     }
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [ ] **Step 8: Run the tests to verify they pass**
 
-Run: `node --env-file=.env.test --test test/duties-http.test.js`
-Expected: `# pass 1`, `# fail 0`
-
-Run: `node --env-file=.env.test --test test/drill-dates-http.test.js`
-Expected: `# pass 1`, `# fail 0`
-
-Run: `node --env-file=.env.test --test test/drill-calendar.test.js`
-Expected: `# pass 14` (the pure tests still pass with the DB half appended — the module must not open a connection at require time)
-
-- [ ] **Step 8: Commit**
+Run each, expecting `# pass 1`, `# fail 0`:
 
 ```bash
-git add schema.sql lib/duties.js lib/drill-calendar.js server.js test/duties-http.test.js test/drill-dates-http.test.js
-git commit -m "Two reference tables, seeded once in the boot that creates them
+node --env-file=.env.test --test test/duties-http.test.js
+node --env-file=.env.test --test test/drill-dates-http.test.js
+node --env-file=.env.test --test test/calendar-events-http.test.js
+```
 
-additional_duties and drill_dates, twinned in schema.sql and the boot
-block as every table here is. The boot-side DDL lives in the lib modules
-so the same function can seed the initial rows from data/ — but only in
-the boot that finds the table absent. Production and staging both lack
-the tables, so the first deploy loads the 52 duties and ten drills with
-no script to run, and a row an admin later deletes never returns.
+Run: `node --env-file=.env.test --test test/drill-calendar.test.js`
+Expected: still `# pass 20` — the DB half must not open a connection at require time.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add schema.sql lib/duties.js lib/calendar-events.js lib/drill-calendar.js server.js test/duties-http.test.js test/drill-dates-http.test.js test/calendar-events-http.test.js
+git commit -m "Three reference tables, seeded once in the boot that creates them
+
+additional_duties, drill_dates and calendar_events, twinned in schema.sql
+and the boot block as every table here is. The boot-side DDL lives in the
+lib modules so the same function can seed the initial rows from data/ —
+but only in the boot that finds the table absent. Production and staging
+lack all three, so the first deploy loads them with no script to run, and
+a row an admin later deletes never returns.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
@@ -903,21 +1224,20 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 4: `/api/duties` routes
 
 **Files:**
-- Modify: `server.js` — insert the routes after the documents `DELETE` route (after line 868, before the `// ── Member task history (Records)` comment)
+- Modify: `server.js` — insert after the documents `DELETE` route (line ~868, before `// ── Member task history (Records)`)
 - Test: `test/duties-http.test.js` (append)
 
 **Interfaces:**
-- Consumes: `duties.list/validate/create/update/remove` (Task 3); `requireAuth`, `requireRosterAdmin`, `requireOnboarded`, `reqId` (existing).
-- Produces: `GET /api/duties → { duties: Row[] }`; `POST /api/duties → 201 Row`; `PATCH /api/duties/:id → 200 Row`; `DELETE /api/duties/:id → 204`.
+- Consumes: `duties.*` (Task 3); `requireAuth`, `requireRosterAdmin`, `requireOnboarded`, `reqId` (existing).
+- Produces: `GET /api/duties → { duties }`; `POST → 201`; `PATCH /:id → 200`; `DELETE /:id → 204`.
 
 - [ ] **Step 1: Append the failing route tests**
-
-Append to `test/duties-http.test.js`:
 
 ```js
 test('signed out: every duties route is 401', async () => {
   await seed();
-  for (const [m, p] of [['GET', '/api/duties'], ['POST', '/api/duties'], ['PATCH', '/api/duties/1'], ['DELETE', '/api/duties/1']]) {
+  for (const [m, p] of [['GET', '/api/duties'], ['POST', '/api/duties'],
+                        ['PATCH', '/api/duties/1'], ['DELETE', '/api/duties/1']]) {
     assert.strictEqual((await api(m, p, null, {})).status, 401, `${m} ${p}`);
   }
 });
@@ -937,16 +1257,16 @@ test('admin CRUD round-trip, ordered case-insensitively, with updated_by stamped
   const { adminId } = await seed();
   const admin = await login('admintest');
 
-  let res = await api('POST', '/api/duties', admin, { duty: 'Lodging Monitor', primary_owner: ' Glikin ', alternate_owner: '' });
+  let res = await api('POST', '/api/duties', admin,
+    { duty: 'Lodging Monitor', primary_owner: ' Glikin ', alternate_owner: '' });
   assert.strictEqual(res.status, 201);
   const created = await res.json();
-  assert.deepStrictEqual(created, { id: created.id, duty: 'Lodging Monitor', primary_owner: 'Glikin', alternate_owner: null });
+  assert.deepStrictEqual(created,
+    { id: created.id, duty: 'Lodging Monitor', primary_owner: 'Glikin', alternate_owner: null });
 
-  res = await api('POST', '/api/duties', admin, { duty: 'adutm' });
-  assert.strictEqual(res.status, 201);
+  assert.strictEqual((await api('POST', '/api/duties', admin, { duty: 'adutm' })).status, 201);
 
-  res = await api('GET', '/api/duties', await login('memtest'));
-  const { duties: listed } = await res.json();
+  const { duties: listed } = await (await api('GET', '/api/duties', await login('memtest'))).json();
   assert.deepStrictEqual(listed.map(d => d.duty), ['adutm', 'Lodging Monitor'], 'lower(duty) ordering');
 
   res = await api('PATCH', `/api/duties/${created.id}`, admin, { primary_owner: '' });
@@ -955,19 +1275,21 @@ test('admin CRUD round-trip, ordered case-insensitively, with updated_by stamped
   const { rows: [row] } = await pool.query('SELECT updated_by_id FROM additional_duties WHERE id = $1', [created.id]);
   assert.strictEqual(row.updated_by_id, adminId);
 
-  res = await api('DELETE', `/api/duties/${created.id}`, admin);
-  assert.strictEqual(res.status, 204);
+  assert.strictEqual((await api('DELETE', `/api/duties/${created.id}`, admin)).status, 204);
   assert.strictEqual((await (await api('GET', '/api/duties', admin)).json()).duties.length, 1);
-
   assert.strictEqual((await api('PATCH', `/api/duties/${created.id}`, admin, { duty: 'Gone' })).status, 404);
   assert.strictEqual((await api('DELETE', `/api/duties/${created.id}`, admin)).status, 404);
-  assert.strictEqual((await api('DELETE', `/api/duties/abc`, admin)).status, 400);
+  assert.strictEqual((await api('DELETE', '/api/duties/abc', admin)).status, 400);
 });
 
 test('400s: empty duty, 121-character duty, 201-character owner, PATCH with nothing to update', async () => {
   await seed();
   const admin = await login('admintest');
-  const bad = async (m, p, body) => { const r = await api(m, p, admin, body); assert.strictEqual(r.status, 400, JSON.stringify(body)); return (await r.json()).error; };
+  const bad = async (m, p, body) => {
+    const r = await api(m, p, admin, body);
+    assert.strictEqual(r.status, 400, JSON.stringify(body));
+    return (await r.json()).error;
+  };
   assert.match(await bad('POST', '/api/duties', { duty: '   ' }), /required/);
   assert.match(await bad('POST', '/api/duties', { duty: 'x'.repeat(121) }), /120/);
   assert.match(await bad('POST', '/api/duties', { duty: 'ok', primary_owner: 'x'.repeat(201) }), /200/);
@@ -984,18 +1306,17 @@ test('409: a case-insensitive duplicate, on create and on rename', async () => {
   assert.match((await dup.json()).error, /already exists/);
   const { id } = await (await api('POST', '/api/duties', admin, { duty: 'ITEC' })).json();
   assert.strictEqual((await api('PATCH', `/api/duties/${id}`, admin, { duty: 'Adutm' })).status, 409);
-  assert.strictEqual((await api('PATCH', `/api/duties/${id}`, admin, { duty: 'ITEC' })).status, 200, 'renaming to itself is fine');
+  assert.strictEqual((await api('PATCH', `/api/duties/${id}`, admin, { duty: 'ITEC' })).status, 200,
+    'renaming to itself is fine');
 });
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `node --env-file=.env.test --test test/duties-http.test.js`
-Expected: FAIL — the 401 test passes (the `/api/*` JSON 404 handler answers 404, not 401 — so expect `401 !== 404` failures) and the rest fail with 404s.
+Expected: FAIL — the routes do not exist, so the `/api/*` JSON handler answers **404** where 401/403/200 is asserted.
 
 - [ ] **Step 3: Add the routes to `server.js`**
-
-Insert after the documents `DELETE` route's closing `});` (line 868), before `// ── Member task history (Records)`:
 
 ```js
 // ── Additional duties (Resources → People) ───────────────────────────────────
@@ -1057,33 +1378,33 @@ git add server.js test/duties-http.test.js
 git commit -m "Additional duties API: read by everyone, written by roster admins
 
 Four thin routes over lib/duties.js, gated exactly as the Forms routes
-are. A case-insensitive duplicate and a rename onto another duty both
-409 through the functional index, so 'ADUTM' and 'Adutm' cannot coexist.
+are. A case-insensitive duplicate and a rename onto another duty both 409
+through the functional index, so 'ADUTM' and 'Adutm' cannot coexist.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
 ---
-### Task 5: `/api/drill-dates` routes
+
+### Task 5: `GET /api/calendar` and the drill-date writes
 
 **Files:**
-- Modify: `server.js` — insert directly after the `/api/duties` routes from Task 4
+- Modify: `server.js` — insert directly after the `/api/duties` routes
 - Test: `test/drill-dates-http.test.js` (append)
 
 **Interfaces:**
-- Consumes: `drillCal.listAll/get/findOverlap/create/update/remove/validateDrill/buildYear/years` (Tasks 2–3).
-- Produces: `GET /api/drill-dates?year= → { year, years, entries }`; `POST → 201 Drill`; `PATCH /:id → 200 Drill`; `DELETE /:id → 204`.
+- Consumes: `drillCal.*`, `calEvents.listAll` (Tasks 2–3).
+- Produces: `GET /api/calendar?year= → { year, years, months }`; `POST /api/drill-dates → 201`; `PATCH /:id → 200`; `DELETE /:id → 204`.
 
 - [ ] **Step 1: Append the failing route tests**
-
-Append to `test/drill-dates-http.test.js`:
 
 ```js
 const SEP = { start_date: '2026-09-11', end_date: '2026-09-13', note: null };
 
-test('signed out: every drill-dates route is 401', async () => {
+test('signed out: the calendar and every drill route is 401', async () => {
   await seed();
-  for (const [m, p] of [['GET', '/api/drill-dates'], ['POST', '/api/drill-dates'], ['PATCH', '/api/drill-dates/1'], ['DELETE', '/api/drill-dates/1']]) {
+  for (const [m, p] of [['GET', '/api/calendar'], ['POST', '/api/drill-dates'],
+                        ['PATCH', '/api/drill-dates/1'], ['DELETE', '/api/drill-dates/1']]) {
     assert.strictEqual((await api(m, p, null, {})).status, 401, `${m} ${p}`);
   }
 });
@@ -1092,64 +1413,78 @@ test('403 matrix: member, supervisor and leadership-without-the-capability canno
   await seed();
   for (const slug of ['memtest', 'suptest', 'leadtest']) {
     const cookie = await login(slug);
-    assert.strictEqual((await api('GET', '/api/drill-dates', cookie)).status, 200, `${slug} can read`);
-    for (const [m, p] of [['POST', '/api/drill-dates'], ['PATCH', '/api/drill-dates/1'], ['DELETE', '/api/drill-dates/1']]) {
+    assert.strictEqual((await api('GET', '/api/calendar', cookie)).status, 200, `${slug} can read`);
+    for (const [m, p] of [['POST', '/api/drill-dates'], ['PATCH', '/api/drill-dates/1'],
+                          ['DELETE', '/api/drill-dates/1']]) {
       assert.strictEqual((await api(m, p, cookie, SEP)).status, 403, `${slug} ${m} ${p}`);
     }
   }
 });
 
-test('GET: the requested year as entries, every year with rows, and an empty year as entries: []', async () => {
+test('GET /api/calendar: twelve months, drills and events together, years across both tables', async () => {
   await seed();
   const admin = await login('admintest');
-  for (const d of [SEP, { start_date: '2026-08-08', end_date: '2026-08-09', note: null },
-                   { start_date: '2027-01-09', end_date: '2027-01-10', note: 'First of the year' }]) {
+  for (const d of [SEP, { start_date: '2026-08-08', end_date: '2026-08-09', note: null }]) {
     assert.strictEqual((await api('POST', '/api/drill-dates', admin, d)).status, 201);
   }
+  await pool.query(
+    `INSERT INTO calendar_events (title, location, start_date, end_date, attendees, status)
+     VALUES ('RADR','Fargo, ND',DATE '2026-09-20',DATE '2026-09-26','MSgt Brown','scheduled'),
+            ('Silver Flag','Tyndall AFB, FL',DATE '2025-11-03',DATE '2025-11-09','TSgt Price','complete')`);
+
   const member = await login('memtest');
-  let body = await (await api('GET', '/api/drill-dates?year=2026', member)).json();
+  let body = await (await api('GET', '/api/calendar?year=2026', member)).json();
   assert.strictEqual(body.year, 2026);
-  assert.deepStrictEqual(body.years, [2026, 2027]);
-  assert.deepStrictEqual(body.entries.filter(e => e.kind === 'drill').map(e => e.label), ['8–9 Aug', '11–13 Sep']);
-  assert.strictEqual(body.entries.filter(e => e.kind === 'no_uta').length, 10);
+  assert.deepStrictEqual(body.years, [2025, 2026], 'years spans drills and events');
+  assert.strictEqual(body.months.length, 12);
+  const sep = body.months.find(m => m.month === 9);
+  assert.strictEqual(sep.noUta, false);
+  assert.deepStrictEqual(sep.entries.map(e => [e.kind, e.label]),
+    [['drill', '11–13 Sep'], ['event', '20–26 Sep']]);
+  assert.strictEqual(body.months.find(m => m.month === 7).noUta, true);
+  assert.strictEqual(body.months.filter(m => m.noUta).length, 10, 'only Aug and Sep have drills');
 
-  body = await (await api('GET', '/api/drill-dates?year=2027', member)).json();
-  assert.strictEqual(body.entries.find(e => e.kind === 'drill').note, 'First of the year');
-
-  body = await (await api('GET', '/api/drill-dates?year=2031', member)).json();
-  assert.deepStrictEqual(body, { year: 2031, years: [2026, 2027], entries: [] });
+  body = await (await api('GET', '/api/calendar?year=2025', member)).json();
+  assert.strictEqual(body.months.flatMap(m => m.entries).length, 1);
+  assert.ok(body.months.every(m => m.noUta), '2025 has events but no drills');
 
   for (const bad of ['abc', '99', '1999', '2101']) {
-    assert.strictEqual((await api('GET', `/api/drill-dates?year=${bad}`, member)).status, 400, `year=${bad}`);
+    assert.strictEqual((await api('GET', `/api/calendar?year=${bad}`, member)).status, 400, `year=${bad}`);
   }
-  const dflt = await (await api('GET', '/api/drill-dates', member)).json();
+  const dflt = await (await api('GET', '/api/calendar', member)).json();
   assert.strictEqual(dflt.year, new Date().getUTCFullYear(), 'defaults to the current year');
 });
 
-test('admin CRUD round-trip with updated_by stamped; 404 on unknown ids', async () => {
+test('admin drill CRUD round-trip with updated_by stamped; 404 on unknown ids', async () => {
   const { adminId } = await seed();
   const admin = await login('admintest');
   let res = await api('POST', '/api/drill-dates', admin, { ...SEP, note: '  3-day  ' });
   assert.strictEqual(res.status, 201);
   const created = await res.json();
-  assert.deepStrictEqual(created, { id: created.id, start_date: '2026-09-11', end_date: '2026-09-13', note: '3-day' });
+  assert.deepStrictEqual(created,
+    { id: created.id, start_date: '2026-09-11', end_date: '2026-09-13', note: '3-day' });
 
   res = await api('PATCH', `/api/drill-dates/${created.id}`, admin, { end_date: '2026-09-12', note: '' });
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { id: created.id, start_date: '2026-09-11', end_date: '2026-09-12', note: null });
+  assert.deepStrictEqual(await res.json(),
+    { id: created.id, start_date: '2026-09-11', end_date: '2026-09-12', note: null });
   const { rows: [row] } = await pool.query('SELECT updated_by_id FROM drill_dates WHERE id = $1', [created.id]);
   assert.strictEqual(row.updated_by_id, adminId);
 
   assert.strictEqual((await api('DELETE', `/api/drill-dates/${created.id}`, admin)).status, 204);
   assert.strictEqual((await api('PATCH', `/api/drill-dates/${created.id}`, admin, { note: 'x' })).status, 404);
   assert.strictEqual((await api('DELETE', `/api/drill-dates/${created.id}`, admin)).status, 404);
-  assert.strictEqual((await api('DELETE', `/api/drill-dates/abc`, admin)).status, 400);
+  assert.strictEqual((await api('DELETE', '/api/drill-dates/abc', admin)).status, 400);
 });
 
 test('400s: malformed date, end before start, an eight-day span, an 81-character note', async () => {
   await seed();
   const admin = await login('admintest');
-  const bad = async (body) => { const r = await api('POST', '/api/drill-dates', admin, body); assert.strictEqual(r.status, 400, JSON.stringify(body)); return (await r.json()).error; };
+  const bad = async (body) => {
+    const r = await api('POST', '/api/drill-dates', admin, body);
+    assert.strictEqual(r.status, 400, JSON.stringify(body));
+    return (await r.json()).error;
+  };
   assert.match(await bad({ start_date: '9/11/2026', end_date: '2026-09-13' }), /start_date/);
   assert.match(await bad({ start_date: '2026-09-13', end_date: '2026-09-11' }), /before/);
   assert.match(await bad({ start_date: '2026-09-01', end_date: '2026-09-08' }), /seven days/);
@@ -1160,32 +1495,36 @@ test('409: overlapping another drill, on create and on edit; a PATCH never confl
   await seed();
   const admin = await login('admintest');
   const { id } = await (await api('POST', '/api/drill-dates', admin, SEP)).json();
-  const { id: oct } = await (await api('POST', '/api/drill-dates', admin, { start_date: '2026-10-17', end_date: '2026-10-18', note: null })).json();
+  const { id: oct } = await (await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-10-17', end_date: '2026-10-18', note: null })).json();
 
-  const dup = await api('POST', '/api/drill-dates', admin, { start_date: '2026-09-13', end_date: '2026-09-14', note: null });
+  const dup = await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-09-13', end_date: '2026-09-14', note: null });
   assert.strictEqual(dup.status, 409);
   assert.match((await dup.json()).error, /overlap/i);
-  assert.strictEqual((await api('POST', '/api/drill-dates', admin, { start_date: '2026-09-14', end_date: '2026-09-15', note: null })).status, 201, 'adjacent is fine');
+  assert.strictEqual((await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-09-14', end_date: '2026-09-15', note: null })).status, 201, 'adjacent is fine');
 
-  assert.strictEqual((await api('PATCH', `/api/drill-dates/${oct}`, admin, { start_date: '2026-09-12' })).status, 409, 'editing onto another drill');
-  assert.strictEqual((await api('PATCH', `/api/drill-dates/${id}`, admin, { end_date: '2026-09-12' })).status, 200, 'shrinking within itself');
+  assert.strictEqual((await api('PATCH', `/api/drill-dates/${oct}`, admin,
+    { start_date: '2026-09-12', end_date: '2026-09-13' })).status, 409, 'editing onto another drill');
+  assert.strictEqual((await api('PATCH', `/api/drill-dates/${id}`, admin,
+    { end_date: '2026-09-12' })).status, 200, 'shrinking within itself');
 });
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `node --env-file=.env.test --test test/drill-dates-http.test.js`
-Expected: FAIL — route tests answer 404 from the `/api/*` handler
+Expected: FAIL — route tests answer 404 from the `/api/*` handler.
 
 - [ ] **Step 3: Add the routes to `server.js`**
 
-Insert directly after the `/api/duties` DELETE route:
-
 ```js
-// ── Drill dates (Resources → Useful Links) ───────────────────────────────────
-// The calendar year's RSD schedule. The year derivation (gaps, 3-day tag,
-// past/next) is lib/drill-calendar.js, shared with the newsletter slide.
-app.get('/api/drill-dates', requireAuth, async (req, res) => {
+// ── The calendar (Resources → Calendar) ──────────────────────────────────────
+// One read endpoint for the whole year: merging two tables and regrouping them
+// by month in the browser would duplicate buildCalendar in a second language.
+// The derivation lives in lib/drill-calendar.js, shared with the newsletter.
+app.get('/api/calendar', requireAuth, async (req, res) => {
   let year = new Date().getUTCFullYear();
   if (req.query.year !== undefined) {
     const y = String(req.query.year);
@@ -1195,12 +1534,9 @@ app.get('/api/drill-dates', requireAuth, async (req, res) => {
     year = Number(y);
   }
   try {
-    const rows = await drillCal.listAll(pool);
-    // A year with no drills answers entries: [] — twelve "No UTA" lines would
-    // read as a schedule nobody entered.
-    const hasRows = rows.some(r => r.start_date.slice(0, 4) === String(year));
-    const entries = hasRows ? drillCal.buildYear(rows, year, new Date()).entries : [];
-    res.json({ year, years: drillCal.years(rows), entries });
+    const [drills, events] = await Promise.all([drillCal.listAll(pool), calEvents.listAll(pool)]);
+    const { months } = drillCal.buildCalendar(drills, events, year, new Date());
+    res.json({ year, years: drillCal.years(drills, events), months });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -1212,7 +1548,10 @@ app.post('/api/drill-dates', requireAuth, requireRosterAdmin, requireOnboarded, 
   if (!v.ok) return res.status(400).json({ error: v.error });
   try {
     const clash = await drillCal.findOverlap(pool, v.value, null);
-    if (clash) return res.status(409).json({ error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    if (clash) {
+      return res.status(409).json({
+        error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    }
     res.status(201).json(await drillCal.create(pool, v.value, req.session.memberId));
   } catch (err) {
     console.error(err);
@@ -1226,8 +1565,8 @@ app.patch('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboar
   try {
     const existing = await drillCal.get(pool, id);
     if (!existing) return res.status(404).json({ error: 'That drill no longer exists' });
-    // Validate the merged row, so a one-field PATCH is checked against the
-    // dates it will actually have.
+    // Validate the merged row, so a one-field PATCH is checked against the dates
+    // it will actually have.
     const body = req.body || {};
     const v = drillCal.validateDrill({
       start_date: 'start_date' in body ? body.start_date : existing.start_date,
@@ -1236,7 +1575,10 @@ app.patch('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboar
     });
     if (!v.ok) return res.status(400).json({ error: v.error });
     const clash = await drillCal.findOverlap(pool, v.value, id);
-    if (clash) return res.status(409).json({ error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    if (clash) {
+      return res.status(409).json({
+        error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    }
     const row = await drillCal.update(pool, id, v.value, req.session.memberId);
     if (!row) return res.status(404).json({ error: 'That drill no longer exists' });
     res.json(row);
@@ -1268,29 +1610,410 @@ Expected: `# pass 7`, `# fail 0`
 
 ```bash
 git add server.js test/drill-dates-http.test.js
-git commit -m "Drill dates API: the year as the RSD slide reads it
+git commit -m "Calendar API: one read for the year, and the drill writes
 
-GET returns the requested year already derived — gaps, 3-day tags,
-past/next against today — plus every year that has rows, so the card
-can offer next year the moment it is entered. Writes validate the
-merged row and refuse any overlap with another drill, naming it.
+GET /api/calendar returns the year already derived — twelve month groups,
+drills and events interleaved, No-UTA on the month, past/next against
+today — plus every year either table has rows in, so the year picker can
+offer next year the moment it is entered. Drill writes validate the merged
+row and refuse any overlap with another drill, naming it.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 6: People pane — Additional duties view (`public/duties.js`)
+### Task 6: `/api/calendar-events` routes
+
+**Files:**
+- Modify: `server.js` — insert directly after the drill-date routes
+- Test: `test/calendar-events-http.test.js` (append)
+
+**Interfaces:**
+- Consumes: `calEvents.*` (Task 3).
+- Produces: `POST /api/calendar-events → 201`; `PATCH /:id → 200`; `DELETE /:id → 204`.
+
+- [ ] **Step 1: Append the failing route tests**
+
+```js
+const RADR = { title: 'RADR', location: 'Fargo, ND', start_date: '2026-05-03',
+               end_date: '2026-05-09', attendees: 'MSgt Brown', status: 'scheduled', note: null };
+
+test('signed out: every event route is 401', async () => {
+  await seed();
+  for (const [m, p] of [['POST', '/api/calendar-events'], ['PATCH', '/api/calendar-events/1'],
+                        ['DELETE', '/api/calendar-events/1']]) {
+    assert.strictEqual((await api(m, p, null, {})).status, 401, `${m} ${p}`);
+  }
+});
+
+test('403 matrix: member, supervisor and leadership-without-the-capability cannot write', async () => {
+  await seed();
+  for (const slug of ['memtest', 'suptest', 'leadtest']) {
+    const cookie = await login(slug);
+    for (const [m, p] of [['POST', '/api/calendar-events'], ['PATCH', '/api/calendar-events/1'],
+                          ['DELETE', '/api/calendar-events/1']]) {
+      assert.strictEqual((await api(m, p, cookie, RADR)).status, 403, `${slug} ${m} ${p}`);
+    }
+  }
+});
+
+test('admin CRUD round-trip; status defaults to scheduled; updated_by stamped', async () => {
+  const { adminId } = await seed();
+  const admin = await login('admintest');
+
+  let res = await api('POST', '/api/calendar-events', admin,
+    { title: '  RADR  ', location: 'Fargo, ND', start_date: '2026-05-03', end_date: '2026-05-09',
+      attendees: ' MSgt Brown ', note: '' });
+  assert.strictEqual(res.status, 201);
+  const created = await res.json();
+  assert.deepStrictEqual(created, { id: created.id, title: 'RADR', location: 'Fargo, ND',
+    start_date: '2026-05-03', end_date: '2026-05-09', attendees: 'MSgt Brown',
+    status: 'scheduled', note: null });
+
+  // A one-field PATCH keeps everything else, because the route merges over the row.
+  res = await api('PATCH', `/api/calendar-events/${created.id}`, admin, { status: 'complete' });
+  assert.strictEqual(res.status, 200);
+  const patched = await res.json();
+  assert.strictEqual(patched.status, 'complete');
+  assert.strictEqual(patched.title, 'RADR');
+  assert.strictEqual(patched.attendees, 'MSgt Brown');
+  const { rows: [row] } = await pool.query('SELECT updated_by_id FROM calendar_events WHERE id = $1', [created.id]);
+  assert.strictEqual(row.updated_by_id, adminId);
+
+  // Events may overlap each other and a drill, unlike drills.
+  assert.strictEqual((await api('POST', '/api/calendar-events', admin, RADR)).status, 201);
+  assert.strictEqual((await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-05-01', end_date: '2026-05-03', note: null })).status, 201);
+
+  assert.strictEqual((await api('DELETE', `/api/calendar-events/${created.id}`, admin)).status, 204);
+  assert.strictEqual((await api('PATCH', `/api/calendar-events/${created.id}`, admin, { status: 'complete' })).status, 404);
+  assert.strictEqual((await api('DELETE', `/api/calendar-events/${created.id}`, admin)).status, 404);
+  assert.strictEqual((await api('DELETE', '/api/calendar-events/abc', admin)).status, 400);
+});
+
+test('400s: missing title, bad status, end before start, over-long attendees', async () => {
+  await seed();
+  const admin = await login('admintest');
+  const bad = async (body) => {
+    const r = await api('POST', '/api/calendar-events', admin, body);
+    assert.strictEqual(r.status, 400, JSON.stringify(body).slice(0, 80));
+    return (await r.json()).error;
+  };
+  assert.match(await bad({ ...RADR, title: '  ' }), /title is required/);
+  assert.match(await bad({ ...RADR, title: 'x'.repeat(121) }), /120/);
+  assert.match(await bad({ ...RADR, status: 'pending' }), /status must be one of/);
+  assert.match(await bad({ ...RADR, start_date: '2026-13-01' }), /start_date/);
+  assert.match(await bad({ ...RADR, end_date: '2026-05-01' }), /before/);
+  assert.match(await bad({ ...RADR, attendees: 'x'.repeat(601) }), /600/);
+  assert.match(await bad({ ...RADR, note: 'x'.repeat(201) }), /200/);
+});
+
+test('a fortnight-long event is accepted — the seven-day cap is a drill rule', async () => {
+  await seed();
+  const admin = await login('admintest');
+  const res = await api('POST', '/api/calendar-events', admin,
+    { ...RADR, title: 'FY26 DFT', start_date: '2026-06-15', end_date: '2026-06-29' });
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual((await res.json()).end_date, '2026-06-29');
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `node --env-file=.env.test --test test/calendar-events-http.test.js`
+Expected: FAIL — 404s from the `/api/*` handler.
+
+- [ ] **Step 3: Add the routes to `server.js`**
+
+```js
+// Calendar events — TDY and training rotations. No overlap rule: two rotations
+// in the same week, and a rotation across a drill, are both normal.
+app.post('/api/calendar-events', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const v = calEvents.validate(req.body || {});
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    res.status(201).json(await calEvents.create(pool, v.value, req.session.memberId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/calendar-events/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    const existing = await calEvents.get(pool, id);
+    if (!existing) return res.status(404).json({ error: 'That event no longer exists' });
+    // Merge over the stored row so a one-field PATCH validates as a whole event.
+    const v = calEvents.validate({ ...existing, ...(req.body || {}) });
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const row = await calEvents.update(pool, id, v.value, req.session.memberId);
+    if (!row) return res.status(404).json({ error: 'That event no longer exists' });
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/calendar-events/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    if (!await calEvents.remove(pool, id)) return res.status(404).json({ error: 'That event no longer exists' });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `node --env-file=.env.test --test test/calendar-events-http.test.js`
+Expected: `# pass 6`, `# fail 0`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add server.js test/calendar-events-http.test.js
+git commit -m "Calendar events API: the TDY and training rotations
+
+Three write routes over lib/calendar-events.js. Deliberately looser than
+the drill rules: events overlap each other and drills, and a DFT runs a
+fortnight, so there is no uniqueness, no overlap check and no seven-day
+cap. A PATCH merges over the stored row before validating, so editing one
+field checks the whole event.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+---
+### Task 7: The Resources tab restructure
+
+**Files:**
+- Modify: `public/index.html` — tab strip, calculator wrapper, Links label, People toggle, an empty Calendar pane, `switchResPane`, `switchView`, the stale comment, and the new CSS
+
+**Interfaces:**
+- Produces: pane `#res-pane-calc` wrapping `#res-pane-pfra` and `#res-pane-promo`; pane `#res-pane-calendar` with mount `#cal-host`; `#duties-view` with mount `#duties-host` inside the People pane; globals `setCalcView(mode)` and `setPeopleView(mode)`; `switchResPane` calls `window.dutiesInit` and `window.calendarInit` when they exist (Tasks 8 and 9 define them).
+
+This task ships the container only: the Calendar pane and the duties view mount empty. A reviewer can accept or reject the restructure — five tabs, both calculators still working, Links renamed — independently of what fills them.
+
+**No automated harness exists for `public/`.** Verification is the browser, via `preview-run.cjs` (`.claude/launch.json`, name `preview`, port 3100), which runs against the staging database with cron off.
+
+- [ ] **Step 1: Rewrite the tab strip**
+
+Replace the five buttons inside `<div class="res-tabs" role="tablist">`:
+
+```html
+        <button class="res-tab active" data-rt="calc" onclick="switchResPane('calc')">Calculators</button>
+        <button class="res-tab" data-rt="forms" onclick="switchResPane('forms')">Forms</button>
+        <button class="res-tab" data-rt="links" onclick="switchResPane('links')">Links</button>
+        <button class="res-tab" data-rt="orgchart" onclick="switchResPane('orgchart')">People</button>
+        <button class="res-tab" data-rt="calendar" onclick="switchResPane('calendar')">Calendar</button>
+```
+
+- [ ] **Step 2: Wrap the two calculators**
+
+Find the opening tag `<div id="res-pane-pfra" class="res-pane active">` and the opening tag `<div id="res-pane-promo" class="res-pane">`. They are adjacent panes: pfra runs to just before promo, and promo runs to just before `<div id="res-pane-links"`. Work from those anchors, not line numbers — earlier tasks may have shifted them.
+
+1. **Immediately before** `<div id="res-pane-pfra"`, insert:
+
+```html
+      <!-- ── Calculators: the two score tools behind one tab ──────────────
+           PT and Promotion are the same kind of thing — enter numbers, read a
+           score — so they share a tab and free a slot for Calendar. The inner
+           panes keep their ids (roughly 700 lines of calculator CSS and JS key
+           off them) and only swap .res-pane for .calc-view, so switchResPane's
+           querySelectorAll('.res-pane') no longer reaches them. -->
+      <div id="res-pane-calc" class="res-pane active">
+        <div class="seg-toggle calc-toggle" role="group" aria-label="Calculator">
+          <button class="seg-btn active" id="calc-vt-pfra" aria-pressed="true" onclick="setCalcView('pfra')">Fitness</button>
+          <button class="seg-btn" id="calc-vt-promo" aria-pressed="false" onclick="setCalcView('promo')">Promotion</button>
+        </div>
+```
+
+2. Change `<div id="res-pane-pfra" class="res-pane active">` to `<div id="res-pane-pfra" class="calc-view active">`.
+3. Change `<div id="res-pane-promo" class="res-pane">` to `<div id="res-pane-promo" class="calc-view">`.
+4. **Immediately after** the promo pane's closing `</div>` (the last one before `<div id="res-pane-links"`), insert `      </div><!-- /#res-pane-calc -->`.
+
+Verify the nesting before moving on:
+
+```bash
+node -e "const h=require('fs').readFileSync('public/index.html','utf8');for(const id of ['res-pane-calc','res-pane-pfra','res-pane-promo']){console.log(id, h.includes('id=\"'+id+'\"'));}console.log('calc-view count', (h.match(/class=\"calc-view/g)||[]).length);"
+```
+Expected: three `true`, and `calc-view count 2`.
+
+- [ ] **Step 3: Add the People toggle and the duties mount**
+
+Replace the whole `#res-pane-orgchart` pane with:
+
+```html
+      <div id="res-pane-orgchart" class="res-pane">
+        <!-- People: the chain of command (who is above me) and the additional
+             duties list (who do I see about X). A toggle rather than a sixth
+             tab — the strip is already at five — and rather than stacking,
+             because four flights of chips would bury the list. -->
+        <div class="seg-toggle people-toggle" role="group" aria-label="People view">
+          <button class="seg-btn active" id="people-vt-chain" aria-pressed="true" onclick="setPeopleView('chain')">Chain of command</button>
+          <button class="seg-btn" id="people-vt-duties" aria-pressed="false" onclick="setPeopleView('duties')">Additional duties</button>
+        </div>
+        <div id="sq-orgchart">
+          <div class="sec-hd" style="padding:0 0 12px">
+            <h2 class="sec-title">Chain of Command</h2>
+            <div class="sec-sub">108th Civil Engineer Squadron</div>
+          </div>
+          <div id="org-staff-banner"></div>
+          <div id="org-flights"></div>
+        </div>
+        <div id="duties-view" hidden>
+          <div class="sec-hd" style="padding:0 0 12px">
+            <h2 class="sec-title">Additional Duties</h2>
+            <div class="sec-sub">Who to see about what</div>
+          </div>
+          <div id="duties-host"></div>
+        </div>
+      </div><!-- /#res-pane-orgchart -->
+```
+
+- [ ] **Step 4: Add the Calendar pane**
+
+Immediately after the `#res-pane-orgchart` pane's closing comment, insert:
+
+```html
+      <!-- ── Calendar: the year's drills and rotations (public/calendar.js) ── -->
+      <div id="res-pane-calendar" class="res-pane">
+        <div class="sec-hd" style="padding:0 0 12px">
+          <h2 class="sec-title">Calendar</h2>
+          <div class="sec-sub" id="cal-sub">Drill weekends and training</div>
+        </div>
+        <div id="cal-host"></div>
+      </div><!-- /#res-pane-calendar -->
+```
+
+- [ ] **Step 5: Add the CSS**
+
+After the `.drill-scope-note { … }` rule, insert:
+
+```css
+    /* ── Resources: calculators and People behind toggles ────────────────── */
+    .calc-toggle, .people-toggle { margin-bottom: 14px; }
+    /* Not .res-pane: switchResPane toggles every .res-pane by id, and these two
+       are switched by setCalcView instead. */
+    .calc-view { display: none; }
+    .calc-view.active { display: block; }
+```
+
+- [ ] **Step 6: Fix the stale comment**
+
+Replace the two comment lines above the `@media (max-width: 480px)` rule that reads "Four tabs now share the resources tab bar…" with:
+
+```js
+    /* Five tabs share the resources tab bar. The set was renamed and
+       re-cut in Aug 2026 (Calculators · Forms · Links · People · Calendar),
+       which took the strip from 48 characters of label to 35 — but the
+       narrow-phone rule still earns its place at 375px. */
+```
+
+- [ ] **Step 7: Rewrite `switchResPane` and add the two view functions**
+
+Replace the comment line above `switchResPane` and the function body with:
+
+```js
+/* ── Resources sub-tabs (Calculators | Forms | Links | People | Calendar) ── */
+function switchResPane(name) {
+  document.querySelectorAll('.res-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.rt === name));
+  document.querySelectorAll('.res-pane').forEach(p =>
+    p.classList.toggle('active', p.id === 'res-pane-' + name));
+  if (name === 'calc') setCalcView(document.getElementById('calc-vt-promo')?.classList.contains('active') ? 'promo' : 'pfra');
+  if (name === 'orgchart') loadOrgChart();
+  if (name === 'forms') loadDocuments();
+  if (name === 'calendar' && window.calendarInit) window.calendarInit({ canEdit: !!currentMember?.can_manage_roster });
+}
+
+/* Resources → Calculators. Each calculator still builds its gauge and control
+   rows on first open only; nothing initialises until it is actually shown. */
+function setCalcView(mode) {
+  const promo = mode === 'promo';
+  document.getElementById('calc-vt-pfra').classList.toggle('active', !promo);
+  document.getElementById('calc-vt-pfra').setAttribute('aria-pressed', String(!promo));
+  document.getElementById('calc-vt-promo').classList.toggle('active', promo);
+  document.getElementById('calc-vt-promo').setAttribute('aria-pressed', String(promo));
+  document.getElementById('res-pane-pfra').classList.toggle('active', !promo);
+  document.getElementById('res-pane-promo').classList.toggle('active', promo);
+  if (promo) { if (window.pmInit) window.pmInit(); }
+  else if (window.pfInit) window.pfInit();
+}
+
+/* Resources → People: chain of command | additional duties. */
+function setPeopleView(mode) {
+  const dut = mode === 'duties';
+  document.getElementById('people-vt-chain').classList.toggle('active', !dut);
+  document.getElementById('people-vt-chain').setAttribute('aria-pressed', String(!dut));
+  document.getElementById('people-vt-duties').classList.toggle('active', dut);
+  document.getElementById('people-vt-duties').setAttribute('aria-pressed', String(dut));
+  document.getElementById('sq-orgchart').hidden = dut;
+  document.getElementById('duties-view').hidden = !dut;
+  if (dut && window.dutiesInit) window.dutiesInit({ canEdit: !!currentMember?.can_manage_roster });
+}
+```
+
+- [ ] **Step 8: Point `switchView` at the new default pane**
+
+In `switchView`, change `if (name === 'resources') { switchResPane('pfra'); syncInstallCard(); }` to:
+
+```js
+  if (name === 'resources') { switchResPane('calc'); syncInstallCard(); }
+```
+
+- [ ] **Step 9: Verify in the browser**
+
+Start the preview (http://localhost:3100), sign in as `gablin` / `preview123`, open Resources:
+
+- Five tabs read **Calculators · Forms · Links · People · Calendar**, all on one line at 375px (DevTools device mode) and at 320px without wrapping.
+- Calculators opens by default on **Fitness**, and the PT calculator renders exactly as before — gauge, control rows, results.
+- **Promotion** shows the promotion calculator, fully working. Switching back and forth several times leaves both intact.
+- Leaving Resources and returning lands on Calculators → Fitness.
+- **Forms** and **Links** are unchanged (Links keeps all five link cards).
+- **People** shows the toggle, defaults to Chain of command with the org chart unchanged, and **Additional duties** shows the heading over an empty area (Task 8 fills it).
+- **Calendar** shows its heading over an empty area (Task 9 fills it).
+- No console errors on any tab. Dark mode renders all five tabs legibly.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add public/index.html
+git commit -m "Resources: five subject-shaped tabs instead of five task-shaped ones
+
+PT and Promotion are the same kind of thing, so they share a Calculators
+tab behind a toggle — which frees the slot Calendar takes rather than
+spending one. Org Chart becomes People and gains a toggle for the duties
+list; Useful Links becomes Links now that nothing but links is in it. The
+strip goes from 48 characters of label to 35, which the 375px rule has
+wanted for a while.
+
+The two calculators keep their element ids and only swap .res-pane for
+.calc-view, so none of their ~700 lines had to be touched. Calendar and
+the duties view mount empty here and are filled next.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 8: The Additional Duties view (`public/duties.js`)
 
 **Files:**
 - Create: `public/duties.js`
-- Modify: `public/index.html` — script tag after line 64; CSS after the `.drill-scope-note` rule (line 2298); tab label (line 3020); People pane markup (lines 3561–3570); `switchResPane` comment + `setPeopleView` (line 6971); stale comment (line 1900)
+- Modify: `public/index.html` — script tag after `offline.js`; CSS after the `.calc-view.active` rule
 
 **Interfaces:**
-- Consumes: `GET/POST/PATCH/DELETE /api/duties` (Task 4); page globals `openModal(id)`, `closeModal(id)`, `showToast(msg, type)`, `uiConfirm(opts)`, `currentMember`.
-- Produces: `window.dutiesInit({ canEdit })` — idempotent; first call renders the shell and fetches, later calls re-render with the new `canEdit`. `setPeopleView('chain'|'duties')` in `index.html`.
-
-No automated harness exists for `public/` (nothing but the pure modules is unit-tested), so this task's verification is the browser. Start the preview with `preview-run.cjs` (`.claude/launch.json`, name `preview`, port 3100) — it runs against the staging database with cron off.
+- Consumes: `/api/duties` (Task 4); the mount `#duties-host` and `setPeopleView` (Task 7); page globals `openModal`, `closeModal`, `showToast`, `uiConfirm`.
+- Produces: `window.dutiesInit({ canEdit })` — idempotent; first call renders the shell and fetches, later calls re-render if `canEdit` changed.
 
 - [ ] **Step 1: Create `public/duties.js`**
 
@@ -1298,12 +2021,14 @@ No automated harness exists for `public/` (nothing but the pure modules is unit-
 // public/duties.js — Resources → People → Additional duties.
 //
 // One global, dutiesInit({ canEdit }), called from setPeopleView() the first
-// time the member flips the toggle. Everyone gets the list and the filter;
-// roster admins (canEdit) also get Add and a pencil per row. The API enforces
-// the same rule — the flag here only keeps controls out of everyone else's way.
+// time a member flips the toggle. Everyone gets the list and the filter; roster
+// admins also get Add and a pencil per row. The API enforces the same rule — the
+// flag here only keeps controls out of everyone else's way.
 //
-// Uses the page's openModal/closeModal (focus trap, role=dialog), showToast
-// (which stays quiet offline) and uiConfirm. The modal is injected once.
+// Rows are a divider list on the .member-row metrics rather than 52 bordered
+// cards: half the scroll height, consistent with the calendar beside it, and
+// clear of the identical-card-grid ban. Uses the page's openModal/closeModal
+// (focus trap, role=dialog), showToast (quiet offline) and uiConfirm.
 (function () {
   let all = [];
   let canEdit = false;
@@ -1319,7 +2044,7 @@ No automated harness exists for `public/` (nothing but the pure modules is unit-
 
   function shell() {
     $('duties-host').innerHTML = `
-      ${canEdit ? '<div class="duty-admin"><button class="add-btn" id="duty-add">+ Add duty</button></div>' : ''}
+      ${canEdit ? '<div class="duty-admin"><button class="add-btn" type="button" id="duty-add">+ Add duty</button></div>' : ''}
       <div class="search-wrap duties-search">
         <input class="search-input" id="duty-q" type="search" placeholder="Search duties and names" autocomplete="off" aria-label="Filter duties">
         <div class="search-count" id="duty-count"></div>
@@ -1342,7 +2067,7 @@ No automated harness exists for `public/` (nothing but the pure modules is unit-
       renderList();
     } catch (e) {
       console.error('duties', e);
-      $('duty-list').innerHTML = '<div class="tl-empty">Could not load the duties list. It needs a connection.</div>';
+      $('duty-list').innerHTML = '<div class="res-offline">The duties list needs a connection. Try again once you have signal.</div>';
       $('duty-count').textContent = '';
     }
   }
@@ -1350,20 +2075,26 @@ No automated harness exists for `public/` (nothing but the pure modules is unit-
   function renderList() {
     const q = ($('duty-q').value || '').trim().toLowerCase();
     const rows = q
-      ? all.filter(d => [d.duty, d.primary_owner, d.alternate_owner].some(v => (v || '').toLowerCase().includes(q)))
+      ? all.filter(d => [d.duty, d.primary_owner, d.alternate_owner]
+          .some(v => (v || '').toLowerCase().includes(q)))
       : all;
     $('duty-count').textContent = q ? `${rows.length} of ${all.length} match` : `${all.length} duties`;
     if (!all.length) {
-      $('duty-list').innerHTML = `<div class="tl-empty">${canEdit ? 'No duties yet — add the first one above.' : 'No duties have been posted yet.'}</div>`;
+      $('duty-list').innerHTML = `<div class="res-empty">${canEdit
+        ? 'No duties yet — add the first one above.'
+        : 'No duties have been posted yet.'}</div>`;
       return;
     }
-    if (!rows.length) { $('duty-list').innerHTML = '<div class="tl-empty">Nothing matches.</div>'; return; }
+    if (!rows.length) {
+      $('duty-list').innerHTML = '<div class="res-empty">Nothing matches that search.</div>';
+      return;
+    }
     $('duty-list').innerHTML = rows.map(d => `
       <div class="duty-row${d.primary_owner ? '' : ' needs-owner'}">
         <div class="duty-body">
-          <div class="duty-name">${esc(d.duty)}${d.primary_owner ? '' : ' <span class="duty-tag">Needs owner</span>'}</div>
-          <div class="duty-owners"><span class="duty-k">Primary</span> — ${esc(d.primary_owner || '—')}</div>
-          <div class="duty-owners"><span class="duty-k">Alternate</span> — ${esc(d.alternate_owner || '—')}</div>
+          <div class="duty-name">${esc(d.duty)}${d.primary_owner ? ''
+            : ' <span class="duty-tag">Needs owner</span>'}</div>
+          <div class="duty-owners">Primary: ${esc(d.primary_owner || '—')} · Alt: ${esc(d.alternate_owner || '—')}</div>
         </div>
         ${canEdit ? `<button class="duty-edit" type="button" aria-label="Edit ${esc(d.duty)}" data-id="${d.id}">${PENCIL}</button>` : ''}
       </div>`).join('');
@@ -1431,7 +2162,8 @@ No automated harness exists for `public/` (nothing but the pure modules is unit-
       toast(editingId ? 'Duty updated' : 'Duty added', 'success');
       await load();
     } catch (e) {
-      toast(e.message || 'Could not save', 'error');   // 400/409: modal stays open
+      // 400 and 409 leave the modal open so the value can be corrected.
+      toast(e.message || 'Could not save', 'error');
       if (/no longer exists/.test(e.message || '')) { closeModal('duty-modal'); await load(); }
     }
     btn.disabled = false;
@@ -1440,10 +2172,14 @@ No automated harness exists for `public/` (nothing but the pure modules is unit-
   async function remove() {
     const d = all.find(x => x.id === editingId);
     if (!d) return;
-    if (!await uiConfirm({ title: `Delete "${d.duty}"?`, message: 'It disappears from the list and the newsletter.', confirmLabel: 'Delete', danger: true })) return;
+    if (!await uiConfirm({ title: `Delete "${d.duty}"?`,
+      message: 'It disappears from the list and from the newsletter.',
+      confirmLabel: 'Delete', danger: true })) return;
     try {
       const res = await fetch(`/api/duties/${editingId}`, { method: 'DELETE' });
-      if (!res.ok && res.status !== 404) throw new Error((await res.json().catch(() => ({}))).error || 'Could not delete');
+      if (!res.ok && res.status !== 404) {
+        throw new Error((await res.json().catch(() => ({}))).error || 'Could not delete');
+      }
       closeModal('duty-modal');
       toast('Duty deleted', 'success');
       await load();
@@ -1459,35 +2195,42 @@ No automated harness exists for `public/` (nothing but the pure modules is unit-
 })();
 ```
 
-- [ ] **Step 2: Load the script and add the CSS in `index.html`**
+- [ ] **Step 2: Load the script and add the CSS**
 
-After line 64 (`<script src="/offline.js" defer></script>`) add:
+After `<script src="/offline.js" defer></script>` add:
 
 ```html
   <script src="/duties.js" defer></script>
 ```
 
-After the `.drill-scope-note { … }` rule (line 2298), add:
+After the `.calc-view.active` rule, insert:
 
 ```css
+    /* Shared empty / offline notes for the Resources data views. --t3-nav-text,
+       never --t3: design.css marks --t3 strokes-and-icons only, and it is the
+       documented cause of the contrast failures already logged in Resources. */
+    .res-empty, .res-offline { color: var(--t3-nav-text); font-size: 13px; padding: 18px 2px; line-height: 1.5; }
+
     /* ── People → Additional duties (public/duties.js) ───────────────────── */
-    .people-toggle { margin-bottom: 14px; }
     .duties-search.search-wrap { padding: 4px 0 10px; border-bottom: 0; }
     .duty-admin { margin-bottom: 10px; }
-    .duty-list { display: flex; flex-direction: column; gap: 8px; }
+    /* Mirrors .member-row's metrics (design.css) rather than reusing the class,
+       which carries its own hover, .sel and dark-mode rules for a button row. */
     .duty-row {
-      display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px;
-      background: var(--bg); border: 2px solid var(--border); border-radius: var(--rs);
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 12px; border-bottom: 1px solid var(--border);
     }
-    .duty-row.needs-owner { background: var(--wrn-bg); border-color: var(--warn); }
+    .duty-row:last-child { border-bottom: 0; }
+    .duty-row.needs-owner { background: var(--wrn-bg); }
     .duty-body { flex: 1; min-width: 0; }
-    .duty-name { font-weight: 600; font-size: 14px; }
-    .duty-owners { font-size: 12.5px; color: var(--t2); margin-top: 3px; overflow-wrap: anywhere; }
-    .duty-k { color: var(--t3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+    .duty-name { font-weight: 600; font-size: 13.5px; }
+    .duty-owners { font-size: 12.5px; color: var(--t2); margin-top: 2px; overflow-wrap: anywhere; }
     .duty-tag {
       display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 6px;
-      background: var(--warn); color: var(--bg); font-size: 10.5px; font-weight: 700; vertical-align: middle;
+      background: var(--wrn-bg); color: var(--warn); font-size: 10.5px; font-weight: 700;
+      vertical-align: middle; white-space: nowrap;
     }
+    .duty-row.needs-owner .duty-tag { background: var(--bg); }
     .duty-edit {
       border: 0; background: none; color: var(--t2); cursor: pointer; padding: 8px;
       min-width: 44px; min-height: 44px; border-radius: 8px; flex: none;
@@ -1496,130 +2239,68 @@ After the `.drill-scope-note { … }` rule (line 2298), add:
     .duty-edit svg { width: 16px; height: 16px; }
 ```
 
-- [ ] **Step 3: Rename the tab, add the toggle, and fix the stale comment**
+- [ ] **Step 3: Verify in the browser**
 
-Line 3020 — change the label only:
+Preview at http://localhost:3100 → Resources → People → **Additional duties**, as `gablin` / `preview123`:
 
-```html
-        <button class="res-tab" data-rt="orgchart" onclick="switchResPane('orgchart')">People</button>
-```
+- 52 rows alphabetically, two lines each, `52 duties` beneath the search box. Rows are divider-separated with no per-row border.
+- **Records Management / FARM** sits on the warn tint with a **Needs owner** chip and reads `Primary: — · Alt: —`.
+- Typing `dts` leaves the three DTS rows and the count reads `3 of 52 match`; `gablin` finds his four; `zzz` shows "Nothing matches that search."
+- **+ Add duty**: a blank name toasts "A duty name is required" with the modal open; `ADUTM` toasts the 409; a real duty saves and re-sorts into place.
+- The pencil opens the row pre-filled; **Delete duty** confirms, then removes it.
+- Every pencil measures 44×44 (DevTools → inspect → box model).
+- As `becerra` / `becerra`: list and filter, no Add button, no pencils.
+- Dark mode: the warn tint and the chip stay legible; check the `Primary:` line against the background with DevTools' contrast readout (≥4.5:1).
+- 375px: rows wrap the owners line rather than overflowing; no horizontal scroll.
 
-Replace the pane (lines 3561–3570) with:
+Delete any test rows you added on staging.
 
-```html
-      <div id="res-pane-orgchart" class="res-pane">
-        <!-- People: the chain of command (who is above me) and the additional
-             duties list (who do I see about X). A toggle rather than a sixth
-             tab — the strip is already at five — and rather than stacking,
-             because four flights of chips would bury the list. -->
-        <div class="seg-toggle people-toggle" role="group" aria-label="People view">
-          <button class="seg-btn active" id="people-vt-chain" aria-pressed="true" onclick="setPeopleView('chain')">Chain of command</button>
-          <button class="seg-btn" id="people-vt-duties" aria-pressed="false" onclick="setPeopleView('duties')">Additional duties</button>
-        </div>
-        <div id="sq-orgchart">
-          <div class="sec-hd" style="padding:0 0 12px">
-            <h2 class="sec-title">Chain of Command</h2>
-            <div class="sec-sub">108th Civil Engineer Squadron</div>
-          </div>
-          <div id="org-staff-banner"></div>
-          <div id="org-flights"></div>
-        </div>
-        <div id="duties-view" hidden>
-          <div class="sec-hd" style="padding:0 0 12px">
-            <h2 class="sec-title">Additional Duties</h2>
-            <div class="sec-sub">Who to see about what</div>
-          </div>
-          <div id="duties-host"></div>
-        </div>
-      </div><!-- /#res-pane-orgchart -->
-```
-
-Line 1900–1901 comment — replace the two comment lines with:
-
-```js
-    /* Five tabs share the resources tab bar — give the labels a little
-       more room on narrow phones so "PT Calculator" doesn't wrap. */
-```
-
-- [ ] **Step 4: Wire `setPeopleView` next to `switchResPane`**
-
-Replace the comment on line 6970 and add the function after `switchResPane`:
-
-```js
-/* ── Resources sub-tabs (PT Calculator | Promotion | Forms | Useful Links | People) ── */
-```
-
-```js
-/* ── Resources → People: chain of command | additional duties ── */
-function setPeopleView(mode) {
-  const duties = mode === 'duties';
-  document.getElementById('people-vt-chain').classList.toggle('active', !duties);
-  document.getElementById('people-vt-chain').setAttribute('aria-pressed', String(!duties));
-  document.getElementById('people-vt-duties').classList.toggle('active', duties);
-  document.getElementById('people-vt-duties').setAttribute('aria-pressed', String(duties));
-  document.getElementById('sq-orgchart').hidden = duties;
-  document.getElementById('duties-view').hidden = !duties;
-  if (duties && window.dutiesInit) window.dutiesInit({ canEdit: !!currentMember?.can_manage_roster });
-}
-```
-
-- [ ] **Step 5: Verify in the browser**
-
-Start the preview (`preview-run.cjs` → http://localhost:3100). Sign in as `gablin` / `preview123` (a roster admin on staging), open Resources → **People**:
-
-- The toggle shows; **Chain of command** is the default and the org chart is unchanged.
-- **Additional duties** shows the 52 seeded rows alphabetically, "52 duties", the **Records Management / FARM** row in the warn style with **Needs owner**.
-- Typing `dts` in the filter leaves the three DTS rows and the count reads "3 of 52 match"; typing `gablin` finds his duties.
-- **+ Add duty** opens the modal; saving a blank name shows the "required" toast with the modal still open; saving `ADUTM` shows the 409 toast; saving a real duty adds it and re-sorts.
-- The pencil opens the row pre-filled; **Delete duty** asks for confirmation, then removes it.
-- Sign in as `becerra` / `becerra` (plain member): the list and filter appear, no Add button, no pencils.
-- Dark mode (theme toggle) and 375px width (DevTools device mode): the five tab labels fit on one line; rows wrap cleanly.
-- Resources → any other tab → back to People: the duties toggle state resets to Chain of command (not persisted, by design).
-
-Then undo the test rows you added on staging (delete them through the UI).
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add public/duties.js public/index.html
-git commit -m "People tab: the additional-duties list, with a filter and admin editing
+git commit -m "People: the additional-duties list, filterable, admin-editable
 
-The Org Chart tab becomes People and gains a two-way toggle: the chain
-of command (who is above me) and the additional duties (who do I see
-about X). Everyone can filter by duty or name; the two roster admins add,
-edit and delete through a modal. A duty with no primary owner wears the
-warn style and a Needs owner tag, so a vacancy is visible without anyone
-typing TBD. Lives in public/duties.js so index.html does not grow.
+52 duties as a divider list on the .member-row metrics — the app's list
+idiom, about half the height of bordered cards, and consistent with the
+calendar beside it. Everyone filters by duty or by name; the two roster
+admins add, edit and delete through the standard modal. A duty with no
+primary owner takes the warn tint and a Needs owner chip in the app's
+measured --wrn-bg/--warn pairing, so a vacancy is visible without anyone
+typing TBD. Muted text is --t3-nav-text, never --t3.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
 ---
-### Task 7: Useful Links — RSD Schedule card (`public/drill-dates.js`)
+
+### Task 9: The Calendar view (`public/calendar.js`)
 
 **Files:**
-- Create: `public/drill-dates.js`
-- Modify: `public/index.html` — script tag after the `duties.js` tag; CSS after the `.duty-edit svg` rule; card markup at the top of `#res-pane-links` (line 3478); `switchResPane` (line 6971)
+- Create: `public/calendar.js`
+- Modify: `public/index.html` — script tag after `duties.js`; CSS after the `.duty-edit svg` rule
 
 **Interfaces:**
-- Consumes: `GET/POST/PATCH/DELETE /api/drill-dates` (Task 5); page globals `openModal`, `closeModal`, `showToast`, `uiConfirm`, `currentMember`.
-- Produces: `window.drillDatesInit({ canEdit })` — idempotent, same contract as `dutiesInit`.
+- Consumes: `GET /api/calendar` (Task 5), `/api/drill-dates` (Task 5), `/api/calendar-events` (Task 6); the mount `#cal-host`, `#cal-sub` and `switchResPane` (Task 7).
+- Produces: `window.calendarInit({ canEdit })` — idempotent, same contract as `dutiesInit`.
 
-- [ ] **Step 1: Create `public/drill-dates.js`**
+- [ ] **Step 1: Create `public/calendar.js`**
 
 ```js
-// public/drill-dates.js — Resources → Useful Links → RSD Schedule.
+// public/calendar.js — Resources → Calendar.
 //
-// One global, drillDatesInit({ canEdit }), called from switchResPane('links').
-// The API returns the year already derived (lib/drill-calendar.js): each drill
-// with its label, 3-day tag and past/next flags, plus a 'No UTA' entry for
-// every month without one. This file only renders. Roster admins (canEdit)
-// get Add and a pencil per drill; the API enforces the same rule.
+// One global, calendarInit({ canEdit }), called from switchResPane('calendar').
+// The API returns the year already derived (lib/drill-calendar.js): twelve month
+// groups, drills and events interleaved, noUta on the month, past/next against
+// today. This file only renders — no date logic in the browser.
+//
+// Roster admins get Add drill, Add event, and a pencil per row; the API enforces
+// the same rule.
 (function () {
-  let data = null;          // { year, years, entries }
+  let data = null;          // { year, years, months }
   let canEdit = false;
   let shellReady = false;
-  let editingId = null;
+  let editing = null;       // { kind: 'drill'|'event', id } | null
 
   const esc = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1627,139 +2308,217 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
   const $ = (id) => document.getElementById(id);
 
   const PENCIL = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.5l2 2L5 13H3v-2z"/><path d="M10 4l2 2"/></svg>';
+  const STATUS_LABEL = { complete: 'Complete', cancelled: 'Cancelled' };
 
   function shell() {
-    const host = $('drill-card');
-    host.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
-    host.addEventListener('click', (e) => {
-      const year = e.target.closest('.drill-year');
-      if (year) { load(Number(year.dataset.year)); return; }
-      if (e.target.closest('#drill-add')) { openEditor(null); return; }
-      const edit = e.target.closest('.drill-edit');
-      if (edit) openEditor(Number(edit.dataset.id));
+    $('cal-host').innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+    $('cal-host').addEventListener('click', (e) => {
+      const y = e.target.closest('.cal-year');
+      if (y) { load(Number(y.dataset.year)); return; }
+      if (e.target.closest('#cal-add-drill')) { openEditor('drill', null); return; }
+      if (e.target.closest('#cal-add-event')) { openEditor('event', null); return; }
+      const edit = e.target.closest('.cal-edit');
+      if (edit) openEditor(edit.dataset.kind, Number(edit.dataset.id));
     });
     shellReady = true;
   }
 
   async function load(year) {
     try {
-      const res = await fetch('/api/drill-dates' + (year ? `?year=${year}` : ''));
+      const res = await fetch('/api/calendar' + (year ? `?year=${year}` : ''));
       if (!res.ok) throw new Error('request failed');
       data = await res.json();
       render();
     } catch (e) {
-      console.error('drill-dates', e);
-      $('drill-card').innerHTML = '<div class="tl-empty">Could not load the drill schedule. It needs a connection.</div>';
+      console.error('calendar', e);
+      $('cal-host').innerHTML = '<div class="res-offline">The calendar needs a connection. Try again once you have signal.</div>';
     }
   }
 
-  function row(e) {
-    if (e.kind === 'no_uta') {
-      return `<div class="drill-row no-uta"><span class="drill-label">No UTA</span><span class="drill-note">${esc(e.label)}</span></div>`;
-    }
-    return `<div class="drill-row${e.past ? ' past' : ''}${e.next ? ' next' : ''}">
-      <span class="drill-label">${esc(e.label)}${e.threeDay ? ' <span class="drill-meta">· 3-day</span>' : ''}</span>
-      ${e.note ? `<span class="drill-note">${esc(e.note)}</span>` : ''}
-      ${e.next ? '<span class="drill-tag">Next</span>' : ''}
-      ${canEdit ? `<button class="drill-edit" type="button" aria-label="Edit the ${esc(e.label)} drill" data-id="${e.id}">${PENCIL}</button>` : ''}
+  function drillRow(e) {
+    return `<div class="cal-row${e.past ? ' past' : ''}">
+      <span class="cal-when">${esc(e.label)}</span>
+      <span class="cal-what"><span class="cal-kind">UTA</span>${e.threeDay ? ' <span class="cal-meta">· 3-day</span>' : ''}${
+        e.note ? ` <span class="cal-meta">· ${esc(e.note)}</span>` : ''}</span>
+      ${e.next ? '<span class="cal-chip chip-next">Next</span>' : ''}
+      ${canEdit ? `<button class="cal-edit" type="button" aria-label="Edit the ${esc(e.label)} drill" data-kind="drill" data-id="${e.id}">${PENCIL}</button>` : ''}
+    </div>`;
+  }
+
+  function eventRow(e) {
+    const chip = STATUS_LABEL[e.status]
+      ? `<span class="cal-chip chip-${e.status}">${STATUS_LABEL[e.status]}</span>` : '';
+    return `<div class="cal-row${e.past ? ' past' : ''}">
+      <span class="cal-when">${esc(e.label)}</span>
+      <span class="cal-what">
+        <span class="cal-kind">${esc(e.title)}</span>${e.location ? ` <span class="cal-meta">· ${esc(e.location)}</span>` : ''}
+        ${e.attendees ? `<span class="cal-who" title="${esc(e.attendees)}">${esc(e.attendees)}</span>` : ''}
+        ${e.note ? `<span class="cal-who">${esc(e.note)}</span>` : ''}
+      </span>
+      ${chip}
+      ${canEdit ? `<button class="cal-edit" type="button" aria-label="Edit ${esc(e.title)}, ${esc(e.label)}" data-kind="event" data-id="${e.id}">${PENCIL}</button>` : ''}
     </div>`;
   }
 
   function render() {
-    $('drill-sub').textContent = `CY ${data.year}`;
-    // Chips only when there is more than one year to choose from — the
-    // displayed year plus every year that has rows.
+    $('cal-sub').textContent = `CY ${data.year}`;
+    // Chips only when there is more than one year to choose from — the displayed
+    // year plus every year with rows. .seg-toggle rather than a new chip type:
+    // it is already 44px and already announces state.
     const years = [...new Set([data.year, ...data.years])].sort((a, b) => a - b);
-    const chips = years.length > 1
-      ? `<div class="drill-years" role="group" aria-label="Year">${years.map(y =>
-          `<button class="drill-year${y === data.year ? ' active' : ''}" type="button" data-year="${y}" aria-pressed="${y === data.year}">${y}</button>`).join('')}</div>`
+    const picker = years.length > 1
+      ? `<div class="seg-toggle cal-years" role="group" aria-label="Year">${years.map(y =>
+          `<button class="seg-btn cal-year${y === data.year ? ' active' : ''}" type="button" data-year="${y}" aria-pressed="${y === data.year}">${y}</button>`).join('')}</div>`
       : '';
-    const admin = canEdit ? '<div class="drill-admin"><button class="add-btn" id="drill-add" type="button">+ Add drill</button></div>' : '';
-    const list = data.entries.length
-      ? `<div class="drill-list">${data.entries.map(row).join('')}</div>`
-      : `<div class="tl-empty">No drill dates entered for ${data.year}.</div>`;
-    $('drill-card').innerHTML = chips + admin + list;
+    const admin = canEdit
+      ? `<div class="cal-admin">
+           <button class="add-btn" type="button" id="cal-add-drill">+ Add drill</button>
+           <button class="add-btn" type="button" id="cal-add-event">+ Add event</button>
+         </div>` : '';
+
+    // No drills and no events: a year nobody has filled in yet. Twelve
+    // "No UTA" lines would read as a schedule rather than an empty one.
+    if (!data.months.some(m => m.entries.length)) {
+      $('cal-host').innerHTML = picker + admin
+        + `<div class="res-empty">Nothing on the calendar for ${data.year}.</div>`;
+      return;
+    }
+    const body = data.months.map(m => `
+      <div class="cal-month">
+        <div class="cal-month-hd">
+          <span class="cal-month-name">${esc(m.label)}</span>
+          ${m.noUta ? '<span class="cal-nouta">No UTA</span>' : ''}
+        </div>
+        ${m.entries.map(e => (e.kind === 'drill' ? drillRow(e) : eventRow(e))).join('')}
+      </div>`).join('');
+    $('cal-host').innerHTML = picker + admin + `<div class="card cal-list">${body}</div>`;
   }
 
-  // ── Editor modal (admins only) ──────────────────────────────────────────
+  // ── Editor modals (admins only) ─────────────────────────────────────────
   function ensureModal() {
-    if ($('drill-modal')) return;
+    if ($('cal-modal')) return;
     const el = document.createElement('div');
     el.className = 'modal-backdrop';
-    el.id = 'drill-modal';
+    el.id = 'cal-modal';
     el.innerHTML = `
       <div class="modal-sheet">
         <div class="modal-hdr">
-          <h2 class="modal-title" id="drill-modal-title">Add drill</h2>
-          <button class="modal-close" type="button" aria-label="Close" id="drill-close">
+          <h2 class="modal-title" id="cal-modal-title">Add drill</h2>
+          <button class="modal-close" type="button" aria-label="Close" id="cal-close">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
           </button>
         </div>
+        <div class="modal-field" id="cal-f-title-wrap"><label for="cal-f-title">Title</label>
+          <input id="cal-f-title" type="text" maxlength="120" placeholder="RADR"></div>
+        <div class="modal-field" id="cal-f-location-wrap"><label for="cal-f-location">Location</label>
+          <input id="cal-f-location" type="text" maxlength="120" placeholder="Dobbins ARB, GA"></div>
         <div class="field-row">
-          <div class="modal-field"><label for="drill-f-start">Start</label><input id="drill-f-start" type="date"></div>
-          <div class="modal-field"><label for="drill-f-end">End</label><input id="drill-f-end" type="date"></div>
+          <div class="modal-field"><label for="cal-f-start">Start</label><input id="cal-f-start" type="date"></div>
+          <div class="modal-field"><label for="cal-f-end">End</label><input id="cal-f-end" type="date"></div>
         </div>
-        <div class="modal-field"><label for="drill-f-note">Note (optional)</label>
-          <input id="drill-f-note" type="text" maxlength="80" placeholder="Jan &amp; Feb combined"></div>
-        <button class="modal-submit" type="button" id="drill-save">Save</button>
-        <button class="add-btn" type="button" id="drill-delete" style="display:none;width:100%;margin-top:10px;color:var(--urgent)">Delete drill</button>
+        <div class="modal-field" id="cal-f-attendees-wrap"><label for="cal-f-attendees">Attending</label>
+          <textarea id="cal-f-attendees" rows="3" maxlength="600" placeholder="SrA Fowler / MSgt Brown"></textarea></div>
+        <div class="modal-field" id="cal-f-status-wrap"><label for="cal-f-status">Status</label>
+          <select id="cal-f-status">
+            <option value="scheduled">Scheduled</option>
+            <option value="complete">Complete</option>
+            <option value="cancelled">Cancelled</option>
+          </select></div>
+        <div class="modal-field"><label for="cal-f-note">Note (optional)</label>
+          <input id="cal-f-note" type="text" maxlength="200" placeholder="Jan &amp; Feb combined"></div>
+        <button class="modal-submit" type="button" id="cal-save">Save</button>
+        <button class="add-btn" type="button" id="cal-delete" style="display:none;width:100%;margin-top:10px;color:var(--urgent)">Delete</button>
       </div>`;
     document.body.appendChild(el);
-    el.addEventListener('click', (e) => { if (e.target === el) closeModal('drill-modal'); });
-    $('drill-close').addEventListener('click', () => closeModal('drill-modal'));
-    $('drill-save').addEventListener('click', save);
-    $('drill-delete').addEventListener('click', remove);
+    el.addEventListener('click', (e) => { if (e.target === el) closeModal('cal-modal'); });
+    $('cal-close').addEventListener('click', () => closeModal('cal-modal'));
+    $('cal-save').addEventListener('click', save);
+    $('cal-delete').addEventListener('click', remove);
   }
 
-  function openEditor(id) {
-    ensureModal();
-    editingId = id;
-    const d = id ? data.entries.find(e => e.kind === 'drill' && e.id === id) : null;
-    $('drill-modal-title').textContent = d ? 'Edit drill' : 'Add drill';
-    $('drill-f-start').value = d ? d.start_date : '';
-    $('drill-f-end').value = d ? d.end_date : '';
-    $('drill-f-note').value = d ? (d.note || '') : '';
-    $('drill-delete').style.display = d ? '' : 'none';
-    openModal('drill-modal');
-    $('drill-f-start').focus();
+  function findEntry(kind, id) {
+    for (const m of data.months) {
+      const hit = m.entries.find(e => e.kind === kind && e.id === id);
+      if (hit) return hit;
+    }
+    return null;
   }
+
+  function openEditor(kind, id) {
+    ensureModal();
+    editing = { kind, id };
+    const isEvent = kind === 'event';
+    const e = id ? findEntry(kind, id) : null;
+    $('cal-modal-title').textContent = `${e ? 'Edit' : 'Add'} ${isEvent ? 'event' : 'drill'}`;
+    // A drill is two dates and a note; an event adds title, location, attendees
+    // and status. One sheet, four fields hidden for a drill.
+    for (const f of ['title', 'location', 'attendees', 'status']) {
+      $(`cal-f-${f}-wrap`).hidden = !isEvent;
+    }
+    $('cal-f-title').value = e && isEvent ? e.title : '';
+    $('cal-f-location').value = e && isEvent ? (e.location || '') : '';
+    $('cal-f-start').value = e ? e.start_date : '';
+    $('cal-f-end').value = e ? e.end_date : '';
+    $('cal-f-attendees').value = e && isEvent ? (e.attendees || '') : '';
+    $('cal-f-status').value = e && isEvent ? e.status : 'scheduled';
+    $('cal-f-note').value = e ? (e.note || '') : '';
+    $('cal-delete').style.display = e ? '' : 'none';
+    $('cal-delete').textContent = `Delete ${isEvent ? 'event' : 'drill'}`;
+    openModal('cal-modal');
+    (isEvent ? $('cal-f-title') : $('cal-f-start')).focus();
+  }
+
+  const pathFor = (kind) => (kind === 'event' ? '/api/calendar-events' : '/api/drill-dates');
 
   async function save() {
-    const body = { start_date: $('drill-f-start').value, end_date: $('drill-f-end').value, note: $('drill-f-note').value };
-    const btn = $('drill-save');
+    const { kind, id } = editing;
+    const body = kind === 'event'
+      ? { title: $('cal-f-title').value, location: $('cal-f-location').value,
+          start_date: $('cal-f-start').value, end_date: $('cal-f-end').value,
+          attendees: $('cal-f-attendees').value, status: $('cal-f-status').value,
+          note: $('cal-f-note').value }
+      : { start_date: $('cal-f-start').value, end_date: $('cal-f-end').value, note: $('cal-f-note').value };
+    const btn = $('cal-save');
     btn.disabled = true;
     try {
-      const res = await fetch(editingId ? `/api/drill-dates/${editingId}` : '/api/drill-dates', {
-        method: editingId ? 'PATCH' : 'POST',
+      const res = await fetch(id ? `${pathFor(kind)}/${id}` : pathFor(kind), {
+        method: id ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
       const saved = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(saved.error || 'Could not save');
-      closeModal('drill-modal');
-      toast(editingId ? 'Drill updated' : 'Drill added', 'success');
-      // Show the year the saved drill belongs to, so a next-year entry is visible at once.
-      await load(Number(saved.start_date.slice(0, 4)));
+      closeModal('cal-modal');
+      toast(id ? 'Saved' : (kind === 'event' ? 'Event added' : 'Drill added'), 'success');
+      // Show the year it belongs to, so a next-year entry is visible at once.
+      await load(Number(String(saved.start_date).slice(0, 4)) || data.year);
     } catch (e) {
-      toast(e.message || 'Could not save', 'error');   // 400/409: modal stays open
-      if (/no longer exists/.test(e.message || '')) { closeModal('drill-modal'); await load(data.year); }
+      // 400 and 409 leave the modal open so the dates can be corrected.
+      toast(e.message || 'Could not save', 'error');
+      if (/no longer exists/.test(e.message || '')) { closeModal('cal-modal'); await load(data.year); }
     }
     btn.disabled = false;
   }
 
   async function remove() {
-    const d = data.entries.find(e => e.kind === 'drill' && e.id === editingId);
-    if (!d) return;
-    if (!await uiConfirm({ title: `Delete the ${d.label} drill?`, message: 'It disappears from the schedule and the newsletter.', confirmLabel: 'Delete', danger: true })) return;
+    const { kind, id } = editing;
+    const e = findEntry(kind, id);
+    if (!e) return;
+    const what = kind === 'event' ? `${e.title}, ${e.label}` : `the ${e.label} drill`;
+    if (!await uiConfirm({ title: `Delete ${what}?`,
+      message: 'It disappears from the calendar for everyone.',
+      confirmLabel: 'Delete', danger: true })) return;
     try {
-      const res = await fetch(`/api/drill-dates/${editingId}`, { method: 'DELETE' });
-      if (!res.ok && res.status !== 404) throw new Error((await res.json().catch(() => ({}))).error || 'Could not delete');
-      closeModal('drill-modal');
-      toast('Drill deleted', 'success');
+      const res = await fetch(`${pathFor(kind)}/${id}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 404) {
+        throw new Error((await res.json().catch(() => ({}))).error || 'Could not delete');
+      }
+      closeModal('cal-modal');
+      toast('Deleted', 'success');
       await load(data.year);
-    } catch (e) { toast(e.message || 'Could not delete', 'error'); }
+    } catch (err) { toast(err.message || 'Could not delete', 'error'); }
   }
 
-  window.drillDatesInit = function ({ canEdit: ce } = {}) {
+  window.calendarInit = function ({ canEdit: ce } = {}) {
     const was = canEdit;
     canEdit = !!ce;
     if (!shellReady) { shell(); load(); return; }
@@ -1768,113 +2527,121 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 })();
 ```
 
-- [ ] **Step 2: Load the script, add the CSS and the card markup in `index.html`**
+- [ ] **Step 2: Load the script and add the CSS**
 
 After the `duties.js` script tag add:
 
 ```html
-  <script src="/drill-dates.js" defer></script>
+  <script src="/calendar.js" defer></script>
 ```
 
-After the `.duty-edit svg { … }` rule add:
+After the `.duty-edit svg` rule, insert:
 
 ```css
-    /* ── Useful Links → RSD schedule (public/drill-dates.js) ─────────────── */
-    .drill-years { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-    .drill-year {
-      border: 1px solid var(--border); background: var(--bg); color: var(--t2); font-family: inherit;
-      font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; min-height: 36px;
+    /* ── Calendar (public/calendar.js) ───────────────────────────────────── */
+    .cal-years { margin-bottom: 12px; }
+    .cal-admin { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cal-list { padding: 0 14px; }
+    .cal-month + .cal-month { border-top: 1px solid var(--border); }
+    .cal-month-hd {
+      display: flex; align-items: center; gap: 10px; padding: 9px 0 7px;
+      position: sticky; top: 0; background: var(--bg); z-index: 1;
     }
-    .drill-year.active { background: var(--text); color: var(--bg); border-color: var(--text); }
-    .drill-admin { margin-bottom: 10px; }
-    .drill-list { display: flex; flex-direction: column; }
-    .drill-row {
-      display: flex; align-items: center; gap: 10px; padding: 10px 0;
-      border-bottom: 1px solid var(--border); font-size: 14px; min-height: 44px;
+    .cal-month-name {
+      font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--t2);
     }
-    .drill-row:last-child { border-bottom: 0; }
-    .drill-label { font-weight: 600; flex: 1; min-width: 0; }
-    .drill-meta, .drill-note { color: var(--t2); font-size: 12px; font-weight: 500; }
-    .drill-row.past .drill-label, .drill-row.past .drill-note { text-decoration: line-through; color: var(--t3); font-weight: 500; }
-    .drill-row.no-uta .drill-label { color: var(--t3); font-weight: 500; }
-    .drill-row.next { box-shadow: inset 3px 0 0 var(--ok); padding-left: 10px; }
-    .drill-tag {
-      padding: 2px 8px; border-radius: 6px; background: var(--ok); color: var(--bg);
-      font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    .cal-nouta { font-size: 11px; color: var(--t3-nav-text); }
+    .cal-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 9px 0; min-height: 44px; font-size: 13.5px;
     }
-    .drill-edit {
+    .cal-row + .cal-row { border-top: 1px solid var(--border); }
+    .cal-when { font-weight: 600; flex: none; min-width: 92px; }
+    .cal-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .cal-kind { font-weight: 600; }
+    .cal-meta { color: var(--t2); font-weight: 500; font-size: 12.5px; }
+    /* Two lines then ellipsis; the full roster is in the row's title attribute. */
+    .cal-who {
+      color: var(--t2); font-size: 12px; line-height: 1.35; overflow: hidden;
+      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    }
+    /* Past is weight and colour only. No side stripe, no left border, no inset
+       shadow — those are banned here and the codebase is clean of them. */
+    .cal-row.past .cal-when, .cal-row.past .cal-kind { font-weight: 500; text-decoration: line-through; }
+    .cal-row.past .cal-when, .cal-row.past .cal-kind, .cal-row.past .cal-meta { color: var(--t3-nav-text); }
+    .cal-chip {
+      flex: none; align-self: center; padding: 2px 8px; border-radius: 6px;
+      font-size: 10.5px; font-weight: 700; white-space: nowrap;
+    }
+    /* The app's measured pairings, never a solid fill. */
+    .chip-next, .chip-complete { background: var(--ok-bg); color: var(--ok); }
+    .chip-cancelled { background: var(--urg-bg); color: var(--urgent); }
+    .cal-edit {
       border: 0; background: none; color: var(--t2); cursor: pointer; padding: 8px;
       min-width: 44px; min-height: 44px; border-radius: 8px; flex: none;
     }
-    .drill-edit:hover { color: var(--text); background: var(--s2); }
-    .drill-edit svg { width: 16px; height: 16px; }
+    .cal-edit:hover { color: var(--text); background: var(--s2); }
+    .cal-edit svg { width: 16px; height: 16px; }
+    @media (max-width: 420px) {
+      .cal-row { flex-wrap: wrap; }
+      .cal-when { min-width: 84px; }
+    }
 ```
 
-At the top of `#res-pane-links` (line 3478), insert **before** the existing `<div class="sec-hd" …><h2 class="sec-title">Useful Links</h2>` block:
+- [ ] **Step 3: Verify in the browser**
 
-```html
-        <!-- RSD schedule for the calendar year, above the links. Rendered by
-             public/drill-dates.js from /api/drill-dates; roster admins edit. -->
-        <div class="sec-hd" style="padding:0 0 12px">
-          <h2 class="sec-title">RSD Schedule</h2>
-          <div class="sec-sub" id="drill-sub">Drill weekends this year</div>
-        </div>
-        <div class="card card-pad mb-md" id="drill-card"><div class="skeleton"></div></div>
-```
+Preview → Resources → **Calendar**, as `gablin` / `preview123`:
 
-- [ ] **Step 3: Wire it into `switchResPane`**
+- Twelve month groups for CY 2026. August and September carry the seeded drills; **July** shows `No UTA` in its header; April shows the 11–12 Apr drill above the 12–18 Apr RADR.
+- Drills before today are struck through in muted text; **11–13 Sep** carries the green **Next** chip and is not struck. No coloured stripe or bar anywhere on a row.
+- The RADR rows show location and attendee names; **Complete** and **Cancelled** chips appear on the right in green and red respectively.
+- The FY26 DFT row clamps its 23 names to two lines; hovering shows the full roster.
+- Year chips read **2025 | 2026** (the December 2025 rotation). Tapping 2025 shows twelve months, all `No UTA`, with the one rotation in December.
+- **+ Add drill** offers only dates and a note. **+ Add event** offers title, location, dates, attendees and status.
+- Adding a drill of `2026-09-12` → `2026-09-14` toasts "Those dates overlap the 11–13 Sep drill" with the modal open. An 8-day drill and an end before the start each toast their 400.
+- Adding an event for `2027-03-01` switches the view to CY 2027 and adds a **2027** chip.
+- Pencils are 44×44 and pre-fill correctly for both kinds; **Delete** confirms first.
+- As `becerra` / `becerra`: the calendar renders, no Add buttons, no pencils.
+- Dark mode: chips and struck-through rows stay legible; check the muted text with DevTools' contrast readout (≥4.5:1).
+- 375px: month headers stick while scrolling; rows wrap rather than overflow; no horizontal scroll.
 
-In `switchResPane(name)` add, after the `forms` line:
+Delete the test drill and event from staging afterwards.
 
-```js
-  if (name === 'links' && window.drillDatesInit) window.drillDatesInit({ canEdit: !!currentMember?.can_manage_roster });
-```
-
-- [ ] **Step 4: Verify in the browser**
-
-Preview at http://localhost:3100, Resources → **Useful Links**, as `gablin` / `preview123`:
-
-- The card lists the ten 2026 drills and **No UTA — July** in date order; drills before today are struck through; the next one carries the green edge and a **Next** tag; 3-day drills say "· 3-day"; the Jan–Feb row shows its note.
-- No year chips (only 2026 has rows). **+ Add drill** with `2027-01-09` → `2027-01-10` saves, the card switches to CY 2027 with one drill and eleven gaps, and **2026 / 2027** chips appear; tapping 2026 returns.
-- Adding `2026-09-12` → `2026-09-14` shows the "overlap the 11–13 Sep drill" toast with the modal open; an end before the start, or an 8-day span, shows its 400 message.
-- The pencil on a drill pre-fills both dates; **Delete drill** confirms then removes it.
-- As `becerra` / `becerra`: the card, no Add, no pencils, no chips (after you delete the 2027 row).
-- Dark mode and 375px: rows stay on one line or wrap the note under the label; the links grid below is unchanged.
-
-Delete the 2027 test drill on staging afterwards.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add public/drill-dates.js public/index.html
-git commit -m "Useful Links: the year's drill schedule, struck through as it goes
+git add public/calendar.js public/index.html
+git commit -m "Calendar: the year's drills and rotations in one stream
 
-A card above the links lists every drill and every month without one,
-with the next drill marked and finished ones struck through, so the
-list reads as progress through the year. Roster admins add next year's
-dates in the same card, and a year chip appears for everyone the moment
-a second year has rows. Renders what /api/drill-dates derives; no date
-logic in the browser.
+Twelve month groups, drills and events interleaved by date, with No UTA
+marking the months without one so the year reads as a whole object rather
+than a list of what happens to exist. Past entries are struck through and
+the next drill takes a chip, so the page answers 'what is coming up' in
+one read. Renders what /api/calendar derives — no date logic here.
+
+Emphasis is weight plus the app's measured chip pairings; there is no
+coloured edge on any row, and muted text is --t3-nav-text throughout.
+Admins add drills and events from the same sheet, four fields hidden for
+a drill.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 8: Newsletter — two live slides, four files gone
+### Task 10: Newsletter — two live slides, four files gone
 
 **Files:**
-- Modify: `newsletter/from-db.js` (header comment; two queries; two fields)
-- Modify: `newsletter/slides.js` (two slide functions + exports)
-- Modify: `newsletter/theme.js` (three rules, before the `@media` block at line 277)
-- Modify: `newsletter/render.js` (`STATIC_SLIDES`, `sections`, header comment)
-- Modify: `newsletter/shape.js` (header comment, lines 1–2)
+- Modify: `newsletter/from-db.js`, `slides.js`, `theme.js`, `render.js`, `shape.js`
 - Delete: `newsletter/static/additional-duties.html`, `newsletter/static/rsd-schedule.html`, `newsletter/from-sample.js`, `newsletter/preview-server.js`
-- Test: `test/newsletter-http.test.js` (modify `seed()`, add one test)
+- Test: `test/newsletter-http.test.js`
 
 **Interfaces:**
-- Consumes: `duties.list(pool)`, `drillCal.listAll/buildYear/isoDate` (Tasks 2–3).
-- Produces: `data.duties: Row[]`, `data.calendar: { year, entries }`; `S.additionalDuties(d)`, `S.rsdSchedule(d)`.
+- Consumes: `duties.list`, `drillCal.listAll/buildYear/isoDate` (Tasks 2–3).
+- Produces: `data.duties`, `data.calendar`; `S.additionalDuties(d)`, `S.rsdSchedule(d)`.
+
+`meets-radr.html` **stays** a hand-edited partial: `calendar_events` feeds the app only this round (spec §14).
 
 - [ ] **Step 1: Extend the newsletter test**
 
@@ -1892,7 +2659,7 @@ In `test/newsletter-http.test.js`, at the end of `seed()` (after the `uta_cycles
       (DATE '2026-09-11', DATE '2026-09-13', NULL)`);
 ```
 
-Then add this test after the "leadership gets the full deck" test:
+Add this test after "leadership gets the full deck":
 
 ```js
 test('the duties and RSD slides render from the tables, relative to the cycle being printed', async () => {
@@ -1904,7 +2671,7 @@ test('the duties and RSD slides render from the tables, relative to the cycle be
     'a duty with no primary owner prints red');
   assert.match(html, /RSD Schedule — CY 2026/);
   assert.match(html, /<s>5–7 Jun 2026 \(3-Day Drill\)<\/s>/, 'a drill that ended before this cycle is struck through');
-  assert.match(html, /<b>8–9 Aug 2026<\/b>/, 'this cycle\'s own drill is bold');
+  assert.match(html, /<b>8–9 Aug 2026<\/b>/, "this cycle's own drill is bold");
   assert.match(html, /<li>11–13 Sep 2026 \(3-Day Drill\)<\/li>/, 'a later drill is plain');
   assert.match(html, /NO UTA JULY 2026/);
   assert.strictEqual((html.match(/<section class="slide/g) || []).length, 23);
@@ -1915,7 +2682,7 @@ test('the duties and RSD slides render from the tables, relative to the cycle be
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `node --env-file=.env.test --test test/newsletter-http.test.js`
-Expected: FAIL on the new test — `Lodging Monitor` is absent (the static partial renders instead).
+Expected: FAIL on the new test — the static partial renders instead, so `Lodging Monitor` is absent.
 
 - [ ] **Step 3: `newsletter/from-db.js`**
 
@@ -1935,19 +2702,21 @@ const duties = require('../lib/duties');
 const drillCal = require('../lib/drill-calendar');
 ```
 
-After the `counts` query and before the `return`, add:
+After the `counts` query, before the `return`, add:
 
 ```js
-  // Reference tables. The RSD slide is relative to the cycle being printed,
-  // not to today: drills that ended before this UTA are struck through and this
-  // UTA's own drill is the bold one — the convention the hand-edited partial used.
+  // Reference tables. The RSD slide is relative to the cycle being printed, not
+  // to today: drills that ended before this UTA are struck through and this
+  // UTA's own drill is the bold one, which is how the hand-edited partial was
+  // kept. calendar_events is deliberately not read here — the MEETs/RADR slide
+  // stays hand-edited for now (spec §14).
   const dutyRows = await duties.list(pool);
   const drillRows = await drillCal.listAll(pool);
   const reference = cycle.start_date ? drillCal.isoDate(cycle.start_date) : drillCal.isoDate(new Date());
   const calendar = drillCal.buildYear(drillRows, Number(reference.slice(0, 4)), reference);
 ```
 
-And add two fields to the returned object, after `upgrade:`:
+Add two fields to the returned object, after `upgrade:`:
 
 ```js
     duties: dutyRows,
@@ -1961,8 +2730,8 @@ Insert before `// Wrap an editable static partial's body in standard slide chrom
 ```js
 // ── 9. Additional Duties ──────────────────────────────────────────────────
 // Two side-by-side tables, split in half, so ~50 rows fit one printed page —
-// the layout the hand-edited partial used. A duty with no primary owner
-// prints red: that is what "needs owner" looks like on paper.
+// the layout the hand-edited partial used. A duty with no primary owner prints
+// red: that is what "needs owner" looks like on paper.
 function additionalDuties(d) {
   const rows = d.duties || [];
   const half = Math.ceil(rows.length / 2);
@@ -1993,14 +2762,14 @@ function rsdSchedule(d) {
 }
 ```
 
-Add `additionalDuties, rsdSchedule,` to `module.exports` (after `inbound, upgrade,`).
+Add `additionalDuties, rsdSchedule,` to `module.exports`, after `inbound, upgrade,`.
 
 - [ ] **Step 5: `newsletter/theme.js`**
 
-Insert before the `@media` block (the line beginning `  .two-col,.ug-cols,.med-grid,.tl-wrap{flex-direction:column` is inside it; put these rules just above that `@media` opening line):
+Immediately above the `@media` block near the end (the one containing `.two-col,.ug-cols,.med-grid,.tl-wrap{flex-direction:column`), insert:
 
 ```css
-/* Additional duties: two half-tables side by side, 8.5px, as the old partial */
+/* Additional duties: two half-tables side by side at 8.5px, as the old partial */
 .duties-cols{display:flex;gap:14px;align-items:flex-start;}
 .duties-table{flex:1;width:100%;border-collapse:collapse;font-size:8.5px;}
 .duties-table th{text-align:left;padding:4px 7px;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);border-bottom:1px solid var(--border);}
@@ -2011,11 +2780,11 @@ Insert before the `@media` block (the line beginning `  .two-col,.ug-cols,.med-g
 .rsd-list s{color:var(--t3-nav);}
 ```
 
-Inside the `@media` block, extend the existing `.data-table,.static-body table{display:block;overflow-x:auto;}` rule to `.data-table,.static-body table,.duties-table{display:block;overflow-x:auto;}` and add `.duties-cols` to the `flex-direction:column` selector list.
+Inside that `@media` block, extend `.data-table,.static-body table{display:block;overflow-x:auto;}` to `.data-table,.static-body table,.duties-table{display:block;overflow-x:auto;}`, and add `.duties-cols` to the `flex-direction:column` selector list.
 
 - [ ] **Step 6: `newsletter/render.js` and `shape.js`**
 
-In `render.js`: delete the `additional:` and `rsd:` lines from `STATIC_SLIDES`; change slide 9 to `() => S.additionalDuties(data),              //  9  Additional Duties` and slide 23 to `() => S.rsdSchedule(data),                   // 23  RSD Schedule`; and change the header comment's last sentence to: `Live sections are built from Postgres; six remaining partials in static/ are editable by hand, because the tracker has no field for them yet.`
+In `render.js`: delete the `additional:` and `rsd:` entries from `STATIC_SLIDES`; change slide 9 to `() => S.additionalDuties(data),              //  9  Additional Duties` and slide 23 to `() => S.rsdSchedule(data),                   // 23  RSD Schedule`; and change the header comment's last sentence to `Live sections are built from Postgres; six remaining partials in static/ are editable by hand, because the tracker has no field for them yet.`
 
 In `shape.js`, replace lines 1–2 with:
 
@@ -2030,14 +2799,19 @@ In `shape.js`, replace lines 1–2 with:
 git rm newsletter/static/additional-duties.html newsletter/static/rsd-schedule.html newsletter/from-sample.js newsletter/preview-server.js
 ```
 
-Then confirm nothing references them: `grep -rn "from-sample\|preview-server\|additional-duties.html\|rsd-schedule.html" --include=*.js --include=*.json --include=*.md . --exclude-dir=node_modules --exclude-dir=.claude` should return only `MEMORY.md` lines (fixed in Task 9) and the spec.
+Confirm nothing still references them:
+
+```bash
+grep -rn "from-sample\|preview-server\|additional-duties.html\|rsd-schedule.html" --include=*.js --include=*.json --include=*.md . --exclude-dir=node_modules --exclude-dir=.claude
+```
+Expected: only `MEMORY.md` (fixed in Task 11) and the spec.
 
 - [ ] **Step 8: Run the tests to verify they pass**
 
 Run: `node --env-file=.env.test --test test/newsletter-http.test.js`
 Expected: `# pass 6`, `# fail 0`
 
-Open the preview's **Generate Newsletter** (leadership → Tools) and check slide 9 fits one landscape page at print preview and slide 23 reads like the old partial.
+Then open **Generate Newsletter** from the preview (leadership → Tools) and check in print preview that slide 9 fits one landscape page and slide 23 reads like the old partial.
 
 - [ ] **Step 9: Commit**
 
@@ -2045,66 +2819,75 @@ Open the preview's **Generate Newsletter** (leadership → Tools) and check slid
 git add -A newsletter test/newsletter-http.test.js
 git commit -m "Newsletter: the duties and RSD slides read the tables
 
-Slides 9 and 23 were the last two hand-edited partials with a field in
-the tracker. They now render from additional_duties and drill_dates; the
-RSD slide is relative to the cycle being printed, so earlier drills are
-struck through and this UTA is bold, as the partial was kept by hand.
+Slides 9 and 23 were the last two hand-edited partials with a field in the
+tracker. They now render from additional_duties and drill_dates; the RSD
+slide is relative to the cycle being printed, so earlier drills are struck
+through and this UTA is bold, exactly as the partial was kept by hand.
+MEETs/RADR stays hand-edited — calendar_events feeds the app only.
+
 from-sample.js and preview-server.js required generate-sample-template.js,
-deleted on 2026-08-17, and have not run since — gone with the partials.
+deleted on 2026-08-17, and have not run since. Gone with the partials.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 9: Docs, the full suite, and the PR
+### Task 11: Docs, the full suite, and the PR
 
 **Files:**
-- Modify: `MEMORY.md` §5 (after the "Rollout-feedback batch" bullet block), §12 (key files)
+- Modify: `MEMORY.md` §5 and §12
 - Verify: whole suite, deploy probes
 
 - [ ] **Step 1: MEMORY.md §5 — add after the rollout-feedback bullets**
 
 ```markdown
-- **Resources reference data (2026-08-23):** two newsletter partials became tables.
-  - **Additional duties** (`additional_duties`): Resources → **People** (the renamed Org Chart tab) → "Additional duties" toggle; filter by duty or name; a blank primary owner renders as **Needs owner**. `GET /api/duties` (any member); `POST/PATCH/DELETE` (roster admins). Logic `lib/duties.js`, UI `public/duties.js`.
-  - **Drill calendar** (`drill_dates`): Resources → Useful Links, an "RSD Schedule" card — every drill plus a "No UTA" line per empty month, 3-day tag, past struck through, next highlighted, year chips once a second year has rows. `GET /api/drill-dates?year=` returns the year already derived; writes reject overlaps. Logic `lib/drill-calendar.js` (pure derivation shared with the newsletter), UI `public/drill-dates.js`.
-  - **Seed-on-create:** each table is loaded from `data/additional-duties.js` / `data/drill-dates.js` only in the boot that creates it (`ensureTable`), so production got the 52 duties and ten 2026 drills on first deploy and deleted rows never return. `schema.sql` carries the CREATEs empty.
-  - The newsletter's Additional Duties (9) and RSD Schedule (23) slides now render from these tables, relative to the cycle being printed. `newsletter/from-sample.js` and `preview-server.js` were removed (dead since 2026-08-17).
+- **Resources restructure + reference data (2026-08-23):** the tab strip became five subject-shaped tabs — **Calculators · Forms · Links · People · Calendar** — and two more newsletter partials became tables.
+  - **Calculators:** PT and Promotion now share one tab behind a `.seg-toggle` (`setCalcView`). Their panes keep their ids and only swapped `.res-pane` for `.calc-view`, so no calculator code changed. This freed the slot Calendar took.
+  - **People** (the renamed Org Chart tab): chain of command | **additional duties** (`additional_duties`), a filterable divider list; a blank primary owner renders a **Needs owner** chip. `GET /api/duties` (any member), `POST/PATCH/DELETE` (roster admins). Logic `lib/duties.js`, UI `public/duties.js`.
+  - **Calendar:** the year as one chronological stream — twelve month groups, drill weekends (`drill_dates`) and TDY/training rotations (`calendar_events`) interleaved, `No UTA` on months without a drill, past struck through, next chipped, year picker once a second year has rows. **One read endpoint,** `GET /api/calendar?year=`, returns the year already derived; writes are `/api/drill-dates` and `/api/calendar-events` (roster admins). Drills refuse to overlap each other and cap at seven days; events do neither, because rotations overlap and a DFT runs a fortnight. Logic `lib/drill-calendar.js` (pure derivation, shared with the newsletter) and `lib/calendar-events.js`, UI `public/calendar.js`.
+  - **Seed-on-create:** each table is loaded from `data/additional-duties.js` / `data/drill-dates.js` / `data/calendar-events.js` only in the boot that creates it (`ensureTable`), so production got 52 duties, ten drills and ten rotations on first deploy and deleted rows never return. `schema.sql` carries the CREATEs empty.
+  - Newsletter slides 9 (Additional Duties) and 23 (RSD Schedule) render from the tables, relative to the cycle being printed. **MEETs/RADR (11) stays hand-edited** even though `calendar_events` models it — retiring it is a follow-on. `newsletter/from-sample.js` and `preview-server.js` were removed (dead since 2026-08-17).
+  - Design constraints this work had to honour, all from `.impeccable/` and `design.css`: `--t3` is strokes/icons only (use `--t3-nav-text`), status chips use the measured `--ok-bg`/`--ok` style pairs, no side-stripe accents, 44px targets, toggles are `role="group"` + `aria-pressed`.
 ```
 
-- [ ] **Step 2: MEMORY.md §12 — add these lines after the `lib/presence.js` entry, and delete any line mentioning `from-sample.js` or `preview-server.js`**
+- [ ] **Step 2: MEMORY.md §12 — add after the `lib/presence.js` entry**
 
 ```markdown
-- `lib/duties.js`, `lib/drill-calendar.js` — additional duties and the drill calendar: DDL + seed-on-create (`ensureTable`), validation, CRUD; `drill-calendar.js`'s pure half (`buildYear`, `years`, `label`, `validateDrill`, `overlaps`) is shared with the newsletter and unit-tested.
-- `public/duties.js`, `public/drill-dates.js` — the two Resources views; one global each (`dutiesInit`, `drillDatesInit`), initialised lazily from `switchResPane`/`setPeopleView`.
-- `data/additional-duties.js`, `data/drill-dates.js` — the initial rows, used only by seed-on-create and the tests.
+- `lib/duties.js`, `lib/calendar-events.js`, `lib/drill-calendar.js` — the Resources reference data: DDL + seed-on-create (`ensureTable`), validation, CRUD. `drill-calendar.js`'s pure half (`buildYear` for the newsletter's flat drill list, `buildCalendar` for the app's month groups, plus `label`, `years`, `validateDrill`, `overlaps`) is unit-tested without a database.
+- `public/duties.js`, `public/calendar.js` — the two Resources data views; one global each (`dutiesInit`, `calendarInit`), initialised lazily from `switchResPane`/`setPeopleView`.
+- `data/additional-duties.js`, `data/drill-dates.js`, `data/calendar-events.js` — the initial rows, used only by seed-on-create and the tests.
 ```
 
-Run `grep -n "from-sample\|preview-server\|Org Chart" MEMORY.md` and fix any remaining stale mention (the Resources tab list in §5's first bullets should say **People**, not Org Chart).
+Then run `grep -n "from-sample\|preview-server\|Org Chart\|Useful Links" MEMORY.md` and fix every stale mention: the Resources tab list should read **Calculators · Forms · Links · People · Calendar**.
 
 - [ ] **Step 3: Run the whole suite**
 
 Run: `npm test`
-Expected: every file passes; the count is 346 + 14 (drill-calendar) + 6 (duties) + 7 (drill-dates) + 1 (newsletter) = **374 tests**, `# fail 0`. Do not pipe through `tail`.
+Expected: `# fail 0`. The count is 346 + 20 (drill-calendar) + 6 (duties) + 7 (drill-dates) + 6 (calendar-events) + 1 (newsletter) = **386**. Do not pipe through `tail`.
 
-- [ ] **Step 4: Commit and open the PR**
+- [ ] **Step 4: Commit, push, open the PR**
 
 ```bash
 git add MEMORY.md
-git commit -m "docs: record the duties list and drill calendar, and what seed-on-create means
+git commit -m "docs: record the Resources restructure and its three tables
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push -u origin claude/resources-duties-calendar
-gh pr create --title "Resources: Additional Duties list and drill calendar" --body "$(cat <<'EOF'
-Two newsletter partials become tables the app reads, roster admins edit, and the deck renders from.
+gh pr create --title "Resources: a five-tab restructure, the duties list, and a calendar" --body "$(cat <<'EOF'
+Three newsletter partials' worth of reference data becomes tables the app reads, roster admins edit, and (for two of them) the deck renders from — and the Resources tab is re-cut to hold them without growing.
 
-- **People** (the renamed Org Chart tab): chain of command | additional duties, with a filter; a blank primary owner shows **Needs owner**.
-- **Useful Links**: the year's RSD schedule — every drill, every no-UTA month, 3-day tags, past struck through, next highlighted; year chips once next year is entered.
-- `additional_duties` + `drill_dates`, seeded from `data/` only in the boot that creates them (production and staging both get the 52 duties and ten 2026 drills on deploy; deleted rows never return).
-- Newsletter slides 9 and 23 now read the tables, relative to the cycle being printed. The dead sample path (`from-sample.js`, `preview-server.js`) is removed.
+- **Calculators** — PT and Promotion share one tab behind a toggle. No calculator code changed; their panes kept their ids. This freed the slot Calendar took, and the strip went from 48 characters of label to 35.
+- **People** (was Org Chart) — chain of command, plus the filterable **additional duties** list. A duty with no primary owner shows **Needs owner**.
+- **Calendar** (new) — the year as one stream: drill weekends and TDY/training rotations interleaved by month, `No UTA` on the empty months, past struck through, next chipped.
+- **Links** (was Useful Links) — unchanged but for the name.
+- Three tables seeded from `data/` **only in the boot that creates them**, so production and staging load 52 duties, ten drills and ten rotations on deploy, and deleted rows never return.
+- Newsletter slides 9 and 23 now read the tables. MEETs/RADR stays hand-edited. The dead sample path (`from-sample.js`, `preview-server.js`) is removed.
 
-Spec: `docs/superpowers/specs/2026-08-22-resources-duties-and-drill-calendar-design.md`. Plan: `docs/superpowers/plans/2026-08-23-resources-duties-and-drill-calendar.md`.
+An `/impeccable shape` pass before implementation caught four choices in the first draft that would each have regressed a documented standard — a side-stripe accent, `--t3` as text, invented chip pairings, and 36px targets. See the spec's Appendix A.
+
+Spec: `docs/superpowers/specs/2026-08-22-resources-duties-and-drill-calendar-design.md`
+Plan: `docs/superpowers/plans/2026-08-23-resources-duties-and-drill-calendar.md`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
@@ -2120,4 +2903,4 @@ https://108ces.up.railway.app/                 -> 200, text/html
 https://108ces.up.railway.app/api/auth/me      -> 401
 ```
 
-Then sign in on a phone as a plain member: Resources → People → Additional duties shows 52 rows; Useful Links shows the ten 2026 drills with September marked **Next**. Sign in as a roster admin: Add/pencil controls appear in both. Check the Railway deploy log for the two `Created … and seeded … rows` lines — they appear exactly once, on this deploy, and never again. Generate the newsletter and confirm slides 9 and 23.
+Check the Railway deploy log for the three `Created … and seeded … rows` lines — they appear exactly once, on this deploy, and never again. Then on a phone as a plain member: five tabs, People → Additional duties shows 52 rows, Calendar shows the year with September marked **Next**. As a roster admin: Add and pencil controls in both. Generate the newsletter and confirm slides 9 and 23.
