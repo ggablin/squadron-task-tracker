@@ -85,3 +85,20 @@ test('seed-on-create: a fresh table gets the ten rotations exactly once; deleted
   const dft = all.find(e => e.title === 'FY26 DFT');
   assert.ok(dft.attendees.includes('A1C Whittingham'), 'the 23-name roster survives the round trip');
 });
+
+test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind', async () => {
+  await pool.query('DROP TABLE IF EXISTS calendar_events');
+  // Second row overflows VARCHAR(120), so the INSERT throws partway through.
+  const bad = [{ title: 'RADR', location: null, start: '2026-04-06', end: '2026-04-10',
+                 attendees: null, status: 'scheduled', note: null },
+               { title: 'x'.repeat(200), location: null, start: '2026-05-03', end: '2026-05-09',
+                 attendees: null, status: 'scheduled', note: null }];
+  await assert.rejects(() => events.ensureTable(pool, bad));
+  const { rows } = await pool.query(`SELECT to_regclass('public.calendar_events') AS t`);
+  assert.strictEqual(rows[0].t, null,
+    'the table must roll back with the failed seed, or the next boot skips it forever');
+  // A clean run afterwards still works, and seeds in full.
+  assert.deepStrictEqual(await events.ensureTable(pool, DEFAULTS), { created: true, seeded: 10 });
+  assert.strictEqual(
+    Number((await pool.query('SELECT COUNT(*) FROM calendar_events')).rows[0].count), 10);
+});

@@ -83,3 +83,19 @@ test('seed-on-create: a fresh table gets the ten 2026 drills exactly once; delet
   assert.strictEqual(all[0].start_date, '2026-01-31', 'dates come back as YYYY-MM-DD strings');
   assert.strictEqual(all[0].note, 'Jan & Feb combined');
 });
+
+test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind', async () => {
+  await pool.query('DROP TABLE IF EXISTS drill_dates');
+  // Second row ends before it starts, violating the table's own CHECK, so the
+  // INSERT throws partway through.
+  const bad = [{ start: '2026-01-15', end: '2026-01-16', note: null },
+               { start: '2026-03-06', end: '2026-03-01', note: null }];
+  await assert.rejects(() => cal.ensureTable(pool, bad));
+  const { rows } = await pool.query(`SELECT to_regclass('public.drill_dates') AS t`);
+  assert.strictEqual(rows[0].t, null,
+    'the table must roll back with the failed seed, or the next boot skips it forever');
+  // A clean run afterwards still works, and seeds in full.
+  assert.deepStrictEqual(await cal.ensureTable(pool, DEFAULTS), { created: true, seeded: 10 });
+  assert.strictEqual(
+    Number((await pool.query('SELECT COUNT(*) FROM drill_dates')).rows[0].count), 10);
+});

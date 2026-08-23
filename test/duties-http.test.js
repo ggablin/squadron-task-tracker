@@ -88,3 +88,18 @@ test('seed-on-create: a fresh table gets the 52 duties exactly once; deleted row
     `SELECT primary_owner, alternate_owner FROM additional_duties WHERE duty = 'Records Management / FARM'`);
   assert.deepStrictEqual(rows[0], { primary_owner: null, alternate_owner: null });
 });
+
+test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind', async () => {
+  await pool.query('DROP TABLE IF EXISTS additional_duties');
+  // Second row overflows VARCHAR(120), so the INSERT throws partway through.
+  const bad = [{ duty: 'Lodging Monitor', primary: 'Glikin', alternate: null },
+               { duty: 'x'.repeat(200), primary: null, alternate: null }];
+  await assert.rejects(() => duties.ensureTable(pool, bad));
+  const { rows } = await pool.query(`SELECT to_regclass('public.additional_duties') AS t`);
+  assert.strictEqual(rows[0].t, null,
+    'the table must roll back with the failed seed, or the next boot skips it forever');
+  // A clean run afterwards still works, and seeds in full.
+  assert.deepStrictEqual(await duties.ensureTable(pool, DEFAULTS), { created: true, seeded: 52 });
+  assert.strictEqual(
+    Number((await pool.query('SELECT COUNT(*) FROM additional_duties')).rows[0].count), 52);
+});
