@@ -325,3 +325,50 @@ CREATE INDEX IF NOT EXISTS idx_push_subs_member ON push_subscriptions (member_id
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed_at TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_notifications_unpushed
   ON notifications (pushed_at) WHERE pushed_at IS NULL;
+
+-- ── Resources reference tables ─────────────────────────────────────────────
+-- Additional duties ("who do I see about X"), the calendar year's drill dates,
+-- and the TDY / training rotations. Every member reads them, roster admins edit
+-- them, and the newsletter renders the first two. These CREATEs are the twins of
+-- the DDL in lib/duties.js, lib/drill-calendar.js and lib/calendar-events.js,
+-- which the server.js boot block runs — with one difference: the boot block also
+-- seeds the initial rows the first time it creates each table. This copy creates
+-- them empty, which is what the tests and seed.js want.
+CREATE TABLE IF NOT EXISTS additional_duties (
+  id              SERIAL PRIMARY KEY,
+  duty            VARCHAR(120) NOT NULL,
+  primary_owner   VARCHAR(200),          -- free text; NULL = needs owner
+  alternate_owner VARCHAR(200),
+  updated_by_id   INTEGER REFERENCES members(id),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS additional_duties_duty_key
+  ON additional_duties (lower(duty));
+
+CREATE TABLE IF NOT EXISTS drill_dates (
+  id            SERIAL PRIMARY KEY,
+  start_date    DATE NOT NULL UNIQUE,
+  end_date      DATE NOT NULL,
+  note          VARCHAR(80),             -- 'Jan & Feb combined'
+  updated_by_id INTEGER REFERENCES members(id),
+  updated_at    TIMESTAMP DEFAULT NOW(),
+  CHECK (end_date >= start_date AND end_date - start_date < 7)
+);
+
+-- Events legitimately overlap each other and drills, and a DFT runs a fortnight,
+-- so there is no overlap check, no uniqueness and no 7-day cap here.
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id            SERIAL PRIMARY KEY,
+  title         VARCHAR(120) NOT NULL,
+  location      VARCHAR(120),
+  start_date    DATE NOT NULL,
+  end_date      DATE NOT NULL,
+  attendees     VARCHAR(600),
+  status        VARCHAR(20) NOT NULL DEFAULT 'scheduled'
+                  CHECK (status IN ('scheduled','complete','cancelled')),
+  note          VARCHAR(200),
+  updated_by_id INTEGER REFERENCES members(id),
+  updated_at    TIMESTAMP DEFAULT NOW(),
+  CHECK (end_date >= start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events (start_date);

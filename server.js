@@ -8,6 +8,9 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { acquireMigrationLock } = require('./lib/db');
+const duties = require('./lib/duties');
+const drillCal = require('./lib/drill-calendar');
+const calEvents = require('./lib/calendar-events');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
@@ -303,6 +306,16 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
         END IF;
       END $$;
     `);
+
+    // Resources reference tables (duties, drill dates, calendar events). Each
+    // lib creates its table and seeds it from data/ in the one boot that finds
+    // it absent; every later boot is a no-op, so rows an admin deletes stay
+    // gone. schema.sql carries the twin CREATEs, empty, for tests and seed.js.
+    for (const [name, mod] of [['additional_duties', duties], ['drill_dates', drillCal],
+                               ['calendar_events', calEvents]]) {
+      const r = await mod.ensureTable(pool);
+      if (r.created) console.log(`Created ${name} and seeded ${r.seeded} rows`);
+    }
   } catch (e) {
     console.error('Migration warning:', e.message);
   } finally {
