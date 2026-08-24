@@ -1006,6 +1006,49 @@ app.delete('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboa
   }
 });
 
+// Calendar events — TDY and training rotations. No overlap rule: two rotations
+// in the same week, and a rotation across a drill, are both normal.
+app.post('/api/calendar-events', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const v = calEvents.validate(req.body || {});
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    res.status(201).json(await calEvents.create(pool, v.value, req.session.memberId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/calendar-events/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    const existing = await calEvents.get(pool, id);
+    if (!existing) return res.status(404).json({ error: 'That event no longer exists' });
+    // Merge over the stored row so a one-field PATCH validates as a whole event.
+    const v = calEvents.validate({ ...existing, ...(req.body || {}) });
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const row = await calEvents.update(pool, id, v.value, req.session.memberId);
+    if (!row) return res.status(404).json({ error: 'That event no longer exists' });
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/calendar-events/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    if (!await calEvents.remove(pool, id)) return res.status(404).json({ error: 'That event no longer exists' });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Member task history (Records) ────────────────────────────────────────────
 // Leadership can view any member's cross-cycle history; a supervisor is limited
 // to members in their own shop (checked via getMemberShopId, same own-shop

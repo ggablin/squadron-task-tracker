@@ -102,3 +102,85 @@ test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind
   assert.strictEqual(
     Number((await pool.query('SELECT COUNT(*) FROM calendar_events')).rows[0].count), 10);
 });
+
+const RADR = { title: 'RADR', location: 'Fargo, ND', start_date: '2026-05-03',
+               end_date: '2026-05-09', attendees: 'MSgt Brown', status: 'scheduled', note: null };
+
+test('signed out: every event route is 401', async () => {
+  await seed();
+  for (const [m, p] of [['POST', '/api/calendar-events'], ['PATCH', '/api/calendar-events/1'],
+                        ['DELETE', '/api/calendar-events/1']]) {
+    assert.strictEqual((await api(m, p, null, {})).status, 401, `${m} ${p}`);
+  }
+});
+
+test('403 matrix: member, supervisor and leadership-without-the-capability cannot write', async () => {
+  await seed();
+  for (const slug of ['memtest', 'suptest', 'leadtest']) {
+    const cookie = await login(slug);
+    for (const [m, p] of [['POST', '/api/calendar-events'], ['PATCH', '/api/calendar-events/1'],
+                          ['DELETE', '/api/calendar-events/1']]) {
+      assert.strictEqual((await api(m, p, cookie, RADR)).status, 403, `${slug} ${m} ${p}`);
+    }
+  }
+});
+
+test('admin CRUD round-trip; status defaults to scheduled; updated_by stamped', async () => {
+  const { adminId } = await seed();
+  const admin = await login('admintest');
+
+  let res = await api('POST', '/api/calendar-events', admin,
+    { title: '  RADR  ', location: 'Fargo, ND', start_date: '2026-05-03', end_date: '2026-05-09',
+      attendees: ' MSgt Brown ', note: '' });
+  assert.strictEqual(res.status, 201);
+  const created = await res.json();
+  assert.deepStrictEqual(created, { id: created.id, title: 'RADR', location: 'Fargo, ND',
+    start_date: '2026-05-03', end_date: '2026-05-09', attendees: 'MSgt Brown',
+    status: 'scheduled', note: null });
+
+  // A one-field PATCH keeps everything else, because the route merges over the row.
+  res = await api('PATCH', `/api/calendar-events/${created.id}`, admin, { status: 'complete' });
+  assert.strictEqual(res.status, 200);
+  const patched = await res.json();
+  assert.strictEqual(patched.status, 'complete');
+  assert.strictEqual(patched.title, 'RADR');
+  assert.strictEqual(patched.attendees, 'MSgt Brown');
+  const { rows: [row] } = await pool.query('SELECT updated_by_id FROM calendar_events WHERE id = $1', [created.id]);
+  assert.strictEqual(row.updated_by_id, adminId);
+
+  // Events may overlap each other and a drill, unlike drills.
+  assert.strictEqual((await api('POST', '/api/calendar-events', admin, RADR)).status, 201);
+  assert.strictEqual((await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-05-01', end_date: '2026-05-03', note: null })).status, 201);
+
+  assert.strictEqual((await api('DELETE', `/api/calendar-events/${created.id}`, admin)).status, 204);
+  assert.strictEqual((await api('PATCH', `/api/calendar-events/${created.id}`, admin, { status: 'complete' })).status, 404);
+  assert.strictEqual((await api('DELETE', `/api/calendar-events/${created.id}`, admin)).status, 404);
+  assert.strictEqual((await api('DELETE', '/api/calendar-events/abc', admin)).status, 400);
+});
+
+test('400s: missing title, bad status, end before start, over-long attendees', async () => {
+  await seed();
+  const admin = await login('admintest');
+  const bad = async (body) => {
+    const r = await api('POST', '/api/calendar-events', admin, body);
+    assert.strictEqual(r.status, 400, JSON.stringify(body).slice(0, 80));
+    return (await r.json()).error;
+  };
+  assert.match(await bad({ ...RADR, title: '  ' }), /title is required/);
+  assert.match(await bad({ ...RADR, title: 'x'.repeat(121) }), /120/);
+  assert.match(await bad({ ...RADR, status: 'pending' }), /status must be one of/);
+  assert.match(await bad({ ...RADR, start_date: '2026-13-01' }), /start_date/);
+  assert.match(await bad({ ...RADR, end_date: '2026-05-01' }), /before/);
+  assert.match(await bad({ ...RADR, attendees: 'x'.repeat(601) }), /600/);
+  assert.match(await bad({ ...RADR, note: 'x'.repeat(201) }), /200/);
+});
+
+test('a fortnight-long event is accepted — the seven-day cap is a drill rule', async () => {
+  await seed();
+  const admin = await login('admintest');
+  const res = await api('POST', '/api/calendar-events', admin,
+    { ...RADR, title: 'FY26 DFT', start_date: '2026-06-15', end_date: '2026-06-29' });
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual((await res.json()).end_date, '2026-06-29');
+});
