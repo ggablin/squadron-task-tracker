@@ -14,6 +14,10 @@
   let canEdit = false;
   let shellReady = false;
   let editingId = null;
+  // Tracks whether the last /api/duties fetch actually succeeded — distinct
+  // from all.length, which is legitimately 0 both when nothing has loaded
+  // yet and when the squadron genuinely has zero duties on the books.
+  let loaded = false;
 
   const esc = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -44,15 +48,25 @@
       const res = await fetch('/api/duties');
       if (!res.ok) throw new Error('request failed');
       all = (await res.json()).duties;
+      loaded = true;
       renderList();
     } catch (e) {
       console.error('duties', e);
-      $('duty-list').innerHTML = '<div class="res-offline">The duties list needs a connection. Try again once you have signal.</div>';
-      $('duty-count').textContent = '';
+      loaded = false;
+      renderList();
     }
   }
 
   function renderList() {
+    // A failed/never-attempted fetch gets the honest offline notice, not the
+    // "no duties" empty state — all.length is legitimately 0 in both cases,
+    // so loaded is what tells them apart. Checked ahead of the query so a
+    // filter keystroke after a failure can't paper over it with a false claim.
+    if (!loaded) {
+      $('duty-list').innerHTML = '<div class="res-offline">The duties list needs a connection. Try again once you have signal.</div>';
+      $('duty-count').textContent = '';
+      return;
+    }
     const q = ($('duty-q').value || '').trim().toLowerCase();
     const rows = q
       ? all.filter(d => [d.duty, d.primary_owner, d.alternate_owner]
@@ -170,6 +184,16 @@
     const was = canEdit;
     canEdit = !!ce;
     if (!shellReady) { shell(); load(); return; }
-    if (was !== canEdit) { shell(); renderList(); }
+    // shell() only needs rebuilding when the admin controls themselves
+    // change; it does not imply the data is stale, so it never resets loaded.
+    if (was !== canEdit) shell();
+    // Re-entry retries a failed load instead of leaving the view wedged on
+    // the offline notice for the rest of the tab's life — every sibling
+    // Resources view re-fetches on entry, and this one now matches. Once
+    // loaded, re-entry re-renders (rather than the previous total no-op) so
+    // shell() rebuilds (canEdit flips) are reflected; renderList() reads the
+    // filter input in place, so a query the member already typed carries
+    // forward instead of silently resetting to "all 52" on every pane visit.
+    if (!loaded) load(); else renderList();
   };
 })();

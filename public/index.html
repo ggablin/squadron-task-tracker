@@ -2332,6 +2332,10 @@
       vertical-align: middle; white-space: nowrap;
     }
     .duty-row.needs-owner .duty-tag { background: var(--bg); }
+    /* --t2 is checked against --bg, not against a tint (design.css:28-32) — on
+       the warn tint it drops under 4.5:1 in light mode. --warn is the pairing
+       already measured for this background, and it passes both themes. */
+    .duty-row.needs-owner .duty-owners { color: var(--warn); }
     .duty-edit {
       border: 0; background: none; color: var(--t2); cursor: pointer; padding: 8px;
       min-width: 44px; min-height: 44px; border-radius: 8px; flex: none;
