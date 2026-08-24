@@ -257,6 +257,16 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 
 .empty{color:var(--t3-nav);font-size:11px;font-style:italic;padding:10px 0;}
 
+/* Additional duties: two half-tables side by side at 8.5px, as the old partial */
+.duties-cols{display:flex;gap:14px;align-items:flex-start;}
+.duties-table{flex:1;width:100%;border-collapse:collapse;font-size:8.5px;}
+.duties-table th{text-align:left;padding:4px 7px;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);border-bottom:1px solid var(--border);}
+.duties-table td{padding:3px 7px;border-bottom:1px solid var(--border);vertical-align:top;}
+.duties-table tr.red td{color:var(--urgent);}
+/* RSD schedule */
+.rsd-list{list-style:none;padding:0;margin:0;font-size:15px;line-height:1.9;}
+.rsd-list s{color:var(--t3-nav);}
+
 /* ── Phones ───────────────────────────────────────────────────────────────────
    The deck is authored at 11in for print. Below that width the slides reflow
    to the viewport instead of showing one corner of a landscape page. Screen
@@ -274,12 +284,12 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
   .cover-title{font-size:44px;}
   .cover-meta{position:static;margin-top:26px;flex-direction:column;align-items:flex-start;gap:10px;}
   .cover-stats{flex-wrap:wrap;gap:18px;margin-top:24px;}
-  .two-col,.ug-cols,.med-grid,.tl-wrap{flex-direction:column;gap:14px;}
+  .two-col,.ug-cols,.med-grid,.tl-wrap,.duties-cols{flex-direction:column;gap:14px;}
   .tl-wrap{height:auto;}
   .ws-wrap,.cbt-cols,.med-list{columns:1;}
   .grid-3,.grid-4,.pt-grid{grid-template-columns:1fr 1fr;}
   .org-col{width:calc(50% - 3px);}
-  .data-table,.static-body table{display:block;overflow-x:auto;}
+  .data-table,.static-body table,.duties-table{display:block;overflow-x:auto;}
   .intro{max-width:none;}
 }
 

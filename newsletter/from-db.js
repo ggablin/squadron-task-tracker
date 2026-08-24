@@ -1,11 +1,13 @@
 // newsletter/from-db.js
 // Builds the normalized newsletter `data` object from the live Postgres database for the
-// current UTA cycle. Emits the SAME shape as from-sample.js by delegating to shape.js,
-// so the in-app "Generate Newsletter" output matches the offline sample exactly.
+// current UTA cycle, delegating the task-shaped slides to shape.js. This is the only data
+// source: the offline sample path was retired on 2026-08-17 with generate-sample-template.js.
 
 const { buildOrgChart } = require('./org-chart');
 const shape = require('./shape');
 const { informationalSql } = require('../lib/informational');
+const duties = require('../lib/duties');
+const drillCal = require('../lib/drill-calendar');
 
 const MON_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -91,6 +93,16 @@ async function buildFromDb(pool, utaId) {
                AND NOT ${informationalSql()}) AS tasks
   `, [utaId]);
 
+  // Reference tables. The RSD slide is relative to the cycle being printed, not
+  // to today: drills that ended before this UTA are struck through and this
+  // UTA's own drill is the bold one, which is how the hand-edited partial was
+  // kept. calendar_events is deliberately not read here — the MEETs/RADR slide
+  // stays hand-edited for now (spec §14).
+  const dutyRows = await duties.list(pool);
+  const drillRows = await drillCal.listAll(pool);
+  const reference = cycle.start_date ? drillCal.isoDate(cycle.start_date) : drillCal.isoDate(new Date());
+  const calendar = drillCal.buildYear(drillRows, Number(reference.slice(0, 4)), reference);
+
   return {
     cover: { welcome: 'Welcome to the', title: cycle.name, dateRange: fmtRange(cycle.start_date, cycle.end_date), unit: '108 CES' },
     stats: { members: Number(counts.members), shops: Number(counts.shops), tasks: Number(counts.tasks) },
@@ -106,6 +118,8 @@ async function buildFromDb(pool, utaId) {
     pt: shape.shapePt(tasksByCat.medical),
     inbound: shape.shapeInbound(tasksByCat.upcoming),
     upgrade: shape.shapeUpgrade(tasksByCat.upgrade),
+    duties: dutyRows,
+    calendar,
   };
 }
 

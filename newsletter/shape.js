@@ -1,5 +1,5 @@
-// newsletter/shape.js — pure task-shaping shared by from-sample.js (offline) and
-// from-db.js (live), so both produce an identical `data` object for render.js.
+// newsletter/shape.js — pure task-shaping for from-db.js: turns task rows into the
+// per-slide structures render.js consumes. Kept free of SQL so it can be unit-tested.
 //
 // All shapers take NORMALIZED rows:
 //   task:      { rank, last, title, details, urgency, shop }   (urgency = overdue|this_uta|next_uta|future|info)
