@@ -63,6 +63,7 @@
   <script src="/ui.js" defer></script>
   <script src="/offline.js" defer></script>
   <script src="/duties.js" defer></script>
+  <script src="/calendar.js" defer></script>
   <style>
     /* Self-hosted General Sans — survives base-network blocking of api.fontshare.com */
     @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
@@ -2342,6 +2343,56 @@
     }
     .duty-edit:hover { color: var(--text); background: var(--s2); }
     .duty-edit svg { width: 16px; height: 16px; }
+
+    /* ── Calendar (public/calendar.js) ───────────────────────────────────── */
+    .cal-years { margin-bottom: 12px; }
+    .cal-admin { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cal-list { padding: 0 14px; }
+    .cal-month + .cal-month { border-top: 1px solid var(--border); }
+    .cal-month-hd {
+      display: flex; align-items: center; gap: 10px; padding: 9px 0 7px;
+      position: sticky; top: 0; background: var(--bg); z-index: 1;
+    }
+    .cal-month-name {
+      font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--t2);
+    }
+    .cal-nouta { font-size: 11px; color: var(--t3-nav-text); }
+    .cal-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 9px 0; min-height: 44px; font-size: 13.5px;
+    }
+    .cal-row + .cal-row { border-top: 1px solid var(--border); }
+    .cal-when { font-weight: 600; flex: none; min-width: 92px; }
+    .cal-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .cal-kind { font-weight: 600; }
+    .cal-meta { color: var(--t2); font-weight: 500; font-size: 12.5px; }
+    /* Two lines then ellipsis; the full roster is in the row's title attribute. */
+    .cal-who {
+      color: var(--t2); font-size: 12px; line-height: 1.35; overflow: hidden;
+      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    }
+    /* Past is weight and colour only. No side stripe, no left border, no inset
+       shadow — those are banned here and the codebase is clean of them. */
+    .cal-row.past .cal-when, .cal-row.past .cal-kind { font-weight: 500; text-decoration: line-through; }
+    .cal-row.past .cal-when, .cal-row.past .cal-kind, .cal-row.past .cal-meta { color: var(--t3-nav-text); }
+    .cal-chip {
+      flex: none; align-self: center; padding: 2px 8px; border-radius: 6px;
+      font-size: 10.5px; font-weight: 700; white-space: nowrap;
+    }
+    /* The app's measured pairings, never a solid fill. */
+    .chip-next, .chip-complete { background: var(--ok-bg); color: var(--ok); }
+    .chip-cancelled { background: var(--urg-bg); color: var(--urgent); }
+    .cal-edit {
+      border: 0; background: none; color: var(--t2); cursor: pointer; padding: 8px;
+      min-width: 44px; min-height: 44px; border-radius: 8px; flex: none;
+    }
+    .cal-edit:hover { color: var(--text); background: var(--s2); }
+    .cal-edit svg { width: 16px; height: 16px; }
+    @media (max-width: 420px) {
+      .cal-row { flex-wrap: wrap; }
+      .cal-when { min-width: 84px; }
+    }
 
     /* Category drill-in: category rows expand to task → who hasn't done it */
     .cat-row.drillable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
