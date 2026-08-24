@@ -159,7 +159,7 @@ A leadership tool to author each UTA cycle in-browser and review member history,
 
 **History immutability:** completion writes are gated to the **live** cycle only. `assertTaskInLiveCycle` guards `PUT /api/tasks/:id` (the completion-toggle route) and rejects with `403` if the task's cycle isn't the current live one. Archived cycles are therefore frozen — a permanent, per-member snapshot of where they ended each month, safe for Records to display without fear of retroactive edits.
 
-**Tests:** first automated test tooling in this repo. `node:test` suite in `test/*.test.js` (22 tests across `cycles`, `tasks`, `batches`, `records`, `immutability`), run against a disposable Postgres via `TEST_DATABASE_URL`:
+**Tests:** first automated test tooling in this repo — this branch added 22 tests across `cycles`, `tasks`, `batches`, `records`, `immutability`. (The `test/*.test.js` glob has grown well past that since; see §12 for the current total.) Run against a disposable Postgres via `TEST_DATABASE_URL`:
 ```
 TEST_DATABASE_URL=<pg-connection-string> ENABLE_CRON=false node --test --test-concurrency=1 test/*.test.js
 ```
@@ -368,7 +368,7 @@ Ran `/impeccable critique` and shipped the P1 findings as PR #30 (merged to `mas
 - `tools/make-badge.py`, `tools/icons.md` — the notification badge (Android silhouettes it; an app icon becomes a white square) and how the app icons were made.
 - `schema.sql` — full data model, including `uta_cycles.status`, `uta_cycles_one_current`, `task_batches`, `tasks.batch_id`.
 - `seed.js` — initial DB setup + sample data (destructive).
-- `test/*.test.js`, `test/helpers/` — `node:test` suite (22 tests) for the Task Builder + Records data-safety invariants (§6a).
+- `test/*.test.js`, `test/helpers/` — `node:test` suite (**398 tests**, run with `--test-concurrency=1` against a disposable Postgres — see §6a's command). Started with the Task Builder + Records data-safety invariants (§6a) and has grown to cover the whole app: the mobile app/offline/push layer, rollout-feedback features, roster/attendance/medical/schedule/work-orders/documents, and — as of this branch — the drill-calendar derivation, the `additional_duties`/`drill_dates`/`calendar_events` CRUD + seed-on-create, and the newsletter's live slides.
 - `import-tasks.js` — legacy/backup **monthly Excel → tasks/schedule import** (destructive per cycle); `/build` is the normal path now.
 - `sync-tasks.js` — legacy/backup additive mid-cycle sync; `/build` against the live cycle is the normal path now.
 - `import-members.js` — roster import.
