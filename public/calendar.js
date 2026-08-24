@@ -16,10 +16,21 @@
   // from data.months, which is legitimately empty both before a load and
   // when a year genuinely has nothing scheduled on it.
   let loaded = false;
-  // Holds the in-flight load() promise so two quick re-entries (e.g. the pane
-  // re-entered while a retry is still pending) share one fetch instead of
-  // firing a second concurrent GET.
+  // In-flight de-dup, keyed by year (null = "current year" / no ?year= param):
+  // a second load() for the SAME year while one is already pending reuses
+  // that promise instead of firing a second GET. A load() for a DIFFERENT
+  // year is never swallowed — it starts its own request. seq is a sequence
+  // token: each load() takes the next number, and only the call still holding
+  // the current seq when its request settles is allowed to write data/loaded
+  // or call render(). That keeps the *newest* request authoritative even if
+  // an older, slower one resolves after it — a stale response can never
+  // clobber fresher data. lastYear remembers what the member was actually
+  // looking at, so a retry after a failure returns to that year rather than
+  // silently jumping back to the current one.
   let inFlight = null;
+  let inFlightYear = null;
+  let seq = 0;
+  let lastYear = null;
 
   const esc = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -43,22 +54,34 @@
   }
 
   function load(year) {
-    // Reuse the pending attempt rather than starting a second GET — the
-    // caller still gets a promise that resolves once data/loaded/render()
-    // have all settled, whichever call actually owns the fetch.
-    if (inFlight) return inFlight;
-    inFlight = fetch('/api/calendar' + (year ? `?year=${year}` : ''))
+    const want = year || null;
+    // Only dedupe a repeat request for the SAME year that's already in
+    // flight — a tap on a different year must never be swallowed just
+    // because some other fetch happens to be pending.
+    if (inFlight && inFlightYear === want) return inFlight;
+    const mine = ++seq;
+    inFlightYear = want;
+    lastYear = want;
+    inFlight = fetch('/api/calendar' + (want ? `?year=${want}` : ''))
       .then(async (res) => {
         if (!res.ok) throw new Error('request failed');
-        data = await res.json();
+        const json = await res.json();
+        // Superseded by a newer load() before this one resolved — a stale
+        // response must not overwrite data a fresher request already wrote
+        // (or is about to write).
+        if (mine !== seq) return;
+        data = json;
         loaded = true;
       })
       .catch((e) => {
+        if (mine !== seq) return;
         console.error('calendar', e);
         loaded = false;
       })
       .finally(() => {
+        if (mine !== seq) return;
         inFlight = null;
+        inFlightYear = null;
         render();
       });
     return inFlight;
@@ -97,7 +120,10 @@
     // during a retry can't replace an honest offline message with a false
     // "nothing on the calendar" claim.
     if (!loaded) {
-      $('cal-sub').textContent = '';
+      // Restore the page's own default subtitle rather than blanking it —
+      // #cal-sub ships with "Drill weekends and training"; only the host
+      // needs to say the fetch failed.
+      $('cal-sub').textContent = 'Drill weekends and training';
       $('cal-host').innerHTML = '<div class="res-offline">The calendar needs a connection. Try again once you have signal.</div>';
       return;
     }
@@ -263,13 +289,16 @@
     if (!shellReady) { shell(); load(); return; }
     // Re-entry retries a failed load instead of leaving the view wedged on
     // the offline notice for the rest of the tab's life — every sibling
-    // Resources view re-fetches on entry, and this one now matches. Once
-    // loaded, re-entry re-renders in place rather than re-fetching: render()
-    // reads canEdit fresh each call, so a permissions flip is picked up
-    // without a redundant GET. shell() itself never needs rebuilding on a
-    // canEdit change — unlike duties.js, it only ever mounts the skeleton
-    // and a delegated listener that reads the live DOM at click time, so it
-    // doesn't go stale the way an admin-aware shell would.
-    if (!loaded) load(); else render();
+    // Resources view re-fetches on entry, and this one now matches. The
+    // retry uses lastYear rather than the current year, so a member who
+    // lost signal while looking at CY 2025 comes back to CY 2025, not
+    // wherever "today" falls. Once loaded, re-entry re-renders in place
+    // rather than re-fetching: render() reads canEdit fresh each call, so a
+    // permissions flip is picked up without a redundant GET. shell() itself
+    // never needs rebuilding on a canEdit change — unlike duties.js, it only
+    // ever mounts the skeleton and a delegated listener that reads the live
+    // DOM at click time, so it doesn't go stale the way an admin-aware shell
+    // would.
+    if (!loaded) load(lastYear); else render();
   };
 })();

@@ -2347,7 +2347,18 @@
     /* ── Calendar (public/calendar.js) ───────────────────────────────────── */
     .cal-years { margin-bottom: 12px; }
     .cal-admin { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-    .cal-list { padding: 0 14px; }
+    /* .card sets overflow: hidden, which makes the card itself a scroll
+       container and strands .cal-month-hd's position: sticky against a
+       scrollport that never scrolls. overflow: visible removes that
+       particular blocker; the card's corner clipping isn't load-bearing
+       here — rows already sit inside 14px of padding.
+       This alone makes the header stick at >=768px, where .view is height-
+       constrained and genuinely scrolls. At <768px .view/.main are only
+       min-height-constrained (index.html:108,229,230) so neither ever
+       scrolls internally — the whole page/BODY scrolls instead — which
+       still starves sticky of a moving ancestor there. See the Task 9
+       fix report for the mobile-width finding and scope call. */
+    .cal-list { padding: 0 14px; overflow: visible; }
     .cal-month + .cal-month { border-top: 1px solid var(--border); }
     .cal-month-hd {
       display: flex; align-items: center; gap: 10px; padding: 9px 0 7px;
@@ -2364,7 +2375,11 @@
     }
     .cal-row + .cal-row { border-top: 1px solid var(--border); }
     .cal-when { font-weight: 600; flex: none; min-width: 92px; }
-    .cal-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    /* Not a flex column: .cal-kind and .cal-meta are plain inline spans so
+       the leading "· " reads as an inline separator on the same line;
+       .cal-who below sets display: -webkit-box itself, which is block-level
+       and so still starts its own line without any help from this rule. */
+    .cal-what { flex: 1; min-width: 0; }
     .cal-kind { font-weight: 600; }
     .cal-meta { color: var(--t2); font-weight: 500; font-size: 12.5px; }
     /* Two lines then ellipsis; the full roster is in the row's title attribute. */
