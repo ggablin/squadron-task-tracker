@@ -6179,7 +6179,7 @@ function switchView(btn) {
     member:     [utaLabel,            m ? m.rank+' '+m.last_name+' · '+m.shop : ''],
     supervisor: [viewedShop+' Shop',  'Supervisor View'],
     leadership: ['108th CES',         'Leadership View'],
-    resources:  ['Resources',         'Calculators, links & org chart'],
+    resources:  ['Resources',         'Calculators, forms, links, people & calendar'],
   };
   const [t, s] = titles[name] || ['',''];
   document.getElementById('mob-title').textContent  = t;
@@ -7020,7 +7020,14 @@ function switchResPane(name) {
   document.querySelectorAll('.res-pane').forEach(p =>
     p.classList.toggle('active', p.id === 'res-pane-' + name));
   if (name === 'calc') setCalcView(document.getElementById('calc-vt-promo')?.classList.contains('active') ? 'promo' : 'pfra');
-  if (name === 'orgchart') loadOrgChart();
+  if (name === 'orgchart') {
+    if (document.getElementById('people-vt-duties')?.classList.contains('active')) {
+      setPeopleView('duties');
+    } else {
+      loadOrgChart();
+      setPeopleView('chain');
+    }
+  }
   if (name === 'forms') loadDocuments();
   if (name === 'calendar' && window.calendarInit) window.calendarInit({ canEdit: !!currentMember?.can_manage_roster });
 }
