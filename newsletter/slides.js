@@ -238,7 +238,7 @@ function additionalDuties(d) {
   }</tbody></table>`;
   const body = rows.length
     ? `<div class="duties-cols">${table(rows.slice(0, half))}${table(rows.slice(half))}</div>`
-    : emptyNote('additional duties');
+    : '<p class="empty">No additional duties recorded in the tracker.</p>';
   return chrome('Squadron', 'Additional Duties List', body, '', `${rows.length} duties`);
 }
 
@@ -252,7 +252,12 @@ function rsdSchedule(d) {
     const text = `${esc(e.label)} ${cal.year}${e.threeDay ? ' (3-Day Drill)' : ''}${e.note ? ` (${esc(e.note)})` : ''}`;
     return `<li>${e.past ? `<s>${text}</s>` : e.next ? `<b>${text}</b>` : text}</li>`;
   };
-  const body = cal.entries.length
+  // buildYear() fills every uncovered month with a no_uta entry, so cal.entries is
+  // never empty on its own — a year with no drills entered would otherwise print
+  // twelve "NO UTA <month>" lines instead of the honest empty note. Check for an
+  // actual drill instead.
+  const hasDrills = cal.entries.some(e => e.kind === 'drill');
+  const body = hasDrills
     ? `<p class="intro">Completed drills are struck through; this UTA is in bold.</p><ul class="rsd-list">${cal.entries.map(line).join('')}</ul>`
     : emptyNote('drill dates');
   return chrome('Calendar', `RSD Schedule — CY ${cal.year}`, body);

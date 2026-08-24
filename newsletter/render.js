@@ -44,7 +44,7 @@ function sections(data) {
     () => S.timeline(data),                       //  6  UTA Timeline
     () => staticSlide('safety'),                  //  7  Monthly Safety
     () => S.workSchedule(data),                   //  8  UTA Work Schedule
-    () => S.additionalDuties(data),              //  9  Additional Duties
+    () => S.additionalDuties(data),               //  9  Additional Duties
     () => staticSlide('awards'),                  // 10  Quarterly Awards
     () => staticSlide('meetsRadr'),               // 11  MEETs / RADR / Silver Flag
     () => S.cbts(data),                           // 12  CBTs
@@ -58,7 +58,7 @@ function sections(data) {
     () => staticSlide('measure'),                 // 20  Height / Waist / Weight — no field in the tracker
     () => S.inbound(data),                        // 21  Inbound / Outbound Airmen
     () => S.upgrade(data),                        // 22  Upgrade Training
-    () => S.rsdSchedule(data),                   // 23  RSD Schedule
+    () => S.rsdSchedule(data),                    // 23  RSD Schedule
   ];
 }
 

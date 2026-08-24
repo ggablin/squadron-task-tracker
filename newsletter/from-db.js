@@ -29,9 +29,10 @@ async function buildFromDb(pool, utaId) {
     const { rows } = await pool.query('SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1');
     utaId = rows[0] && rows[0].id;
   }
-  const { rows: cycleRows } = await pool.query(
-    'SELECT name, start_date, end_date FROM uta_cycles WHERE id = $1', [utaId]
-  );
+  const { rows: cycleRows } = await pool.query(`
+    SELECT name, start_date, end_date, to_char(start_date, 'YYYY-MM-DD') AS start_iso
+    FROM uta_cycles WHERE id = $1
+  `, [utaId]);
   const cycle = cycleRows[0] || { name: 'UTA Newsletter' };
 
   // Members -> org chart (mirrors the /api/squadron/org-chart query)
@@ -100,7 +101,7 @@ async function buildFromDb(pool, utaId) {
   // stays hand-edited for now (spec §14).
   const dutyRows = await duties.list(pool);
   const drillRows = await drillCal.listAll(pool);
-  const reference = cycle.start_date ? drillCal.isoDate(cycle.start_date) : drillCal.isoDate(new Date());
+  const reference = cycle.start_iso ? drillCal.isoDate(cycle.start_iso) : drillCal.isoDate(new Date());
   const calendar = drillCal.buildYear(drillRows, Number(reference.slice(0, 4)), reference);
 
   return {
