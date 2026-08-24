@@ -926,6 +926,86 @@ app.delete('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded,
   } catch (err) { dutyError(err, res); }
 });
 
+// ── The calendar (Resources → Calendar) ──────────────────────────────────────
+// One read endpoint for the whole year: merging two tables and regrouping them
+// by month in the browser would duplicate buildCalendar in a second language.
+// The derivation lives in lib/drill-calendar.js, shared with the newsletter.
+app.get('/api/calendar', requireAuth, async (req, res) => {
+  let year = new Date().getUTCFullYear();
+  if (req.query.year !== undefined) {
+    const y = String(req.query.year);
+    if (!/^\d{4}$/.test(y) || Number(y) < 2000 || Number(y) > 2100) {
+      return res.status(400).json({ error: 'year must be a four-digit year between 2000 and 2100' });
+    }
+    year = Number(y);
+  }
+  try {
+    const [drills, events] = await Promise.all([drillCal.listAll(pool), calEvents.listAll(pool)]);
+    const { months } = drillCal.buildCalendar(drills, events, year, new Date());
+    res.json({ year, years: drillCal.years(drills, events), months });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/drill-dates', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const v = drillCal.validateDrill(req.body || {});
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    const clash = await drillCal.findOverlap(pool, v.value, null);
+    if (clash) {
+      return res.status(409).json({
+        error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    }
+    res.status(201).json(await drillCal.create(pool, v.value, req.session.memberId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid drill id' });
+  try {
+    const existing = await drillCal.get(pool, id);
+    if (!existing) return res.status(404).json({ error: 'That drill no longer exists' });
+    // Validate the merged row, so a one-field PATCH is checked against the dates
+    // it will actually have.
+    const body = req.body || {};
+    const v = drillCal.validateDrill({
+      start_date: 'start_date' in body ? body.start_date : existing.start_date,
+      end_date:   'end_date'   in body ? body.end_date   : existing.end_date,
+      note:       'note'       in body ? body.note       : existing.note,
+    });
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const clash = await drillCal.findOverlap(pool, v.value, id);
+    if (clash) {
+      return res.status(409).json({
+        error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    }
+    const row = await drillCal.update(pool, id, v.value, req.session.memberId);
+    if (!row) return res.status(404).json({ error: 'That drill no longer exists' });
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid drill id' });
+  try {
+    if (!await drillCal.remove(pool, id)) return res.status(404).json({ error: 'That drill no longer exists' });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Member task history (Records) ────────────────────────────────────────────
 // Leadership can view any member's cross-cycle history; a supervisor is limited
 // to members in their own shop (checked via getMemberShopId, same own-shop

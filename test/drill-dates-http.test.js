@@ -99,3 +99,117 @@ test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind
   assert.strictEqual(
     Number((await pool.query('SELECT COUNT(*) FROM drill_dates')).rows[0].count), 10);
 });
+
+const SEP = { start_date: '2026-09-11', end_date: '2026-09-13', note: null };
+
+test('signed out: the calendar and every drill route is 401', async () => {
+  await seed();
+  for (const [m, p] of [['GET', '/api/calendar'], ['POST', '/api/drill-dates'],
+                        ['PATCH', '/api/drill-dates/1'], ['DELETE', '/api/drill-dates/1']]) {
+    // fetch refuses a GET that carries a body, so only the writes get one.
+    const body = m === 'GET' ? undefined : {};
+    assert.strictEqual((await api(m, p, null, body)).status, 401, `${m} ${p}`);
+  }
+});
+
+test('403 matrix: member, supervisor and leadership-without-the-capability cannot write; all can read', async () => {
+  await seed();
+  for (const slug of ['memtest', 'suptest', 'leadtest']) {
+    const cookie = await login(slug);
+    assert.strictEqual((await api('GET', '/api/calendar', cookie)).status, 200, `${slug} can read`);
+    for (const [m, p] of [['POST', '/api/drill-dates'], ['PATCH', '/api/drill-dates/1'],
+                          ['DELETE', '/api/drill-dates/1']]) {
+      assert.strictEqual((await api(m, p, cookie, SEP)).status, 403, `${slug} ${m} ${p}`);
+    }
+  }
+});
+
+test('GET /api/calendar: twelve months, drills and events together, years across both tables', async () => {
+  await seed();
+  const admin = await login('admintest');
+  for (const d of [SEP, { start_date: '2026-08-08', end_date: '2026-08-09', note: null }]) {
+    assert.strictEqual((await api('POST', '/api/drill-dates', admin, d)).status, 201);
+  }
+  await pool.query(
+    `INSERT INTO calendar_events (title, location, start_date, end_date, attendees, status)
+     VALUES ('RADR','Fargo, ND',DATE '2026-09-20',DATE '2026-09-26','MSgt Brown','scheduled'),
+            ('Silver Flag','Tyndall AFB, FL',DATE '2025-11-03',DATE '2025-11-09','TSgt Price','complete')`);
+
+  const member = await login('memtest');
+  let body = await (await api('GET', '/api/calendar?year=2026', member)).json();
+  assert.strictEqual(body.year, 2026);
+  assert.deepStrictEqual(body.years, [2025, 2026], 'years spans drills and events');
+  assert.strictEqual(body.months.length, 12);
+  const sep = body.months.find(m => m.month === 9);
+  assert.strictEqual(sep.noUta, false);
+  assert.deepStrictEqual(sep.entries.map(e => [e.kind, e.label]),
+    [['drill', '11–13 Sep'], ['event', '20–26 Sep']]);
+  assert.strictEqual(body.months.find(m => m.month === 7).noUta, true);
+  assert.strictEqual(body.months.filter(m => m.noUta).length, 10, 'only Aug and Sep have drills');
+
+  body = await (await api('GET', '/api/calendar?year=2025', member)).json();
+  assert.strictEqual(body.months.flatMap(m => m.entries).length, 1);
+  assert.ok(body.months.every(m => m.noUta), '2025 has events but no drills');
+
+  for (const bad of ['abc', '99', '1999', '2101']) {
+    assert.strictEqual((await api('GET', `/api/calendar?year=${bad}`, member)).status, 400, `year=${bad}`);
+  }
+  const dflt = await (await api('GET', '/api/calendar', member)).json();
+  assert.strictEqual(dflt.year, new Date().getUTCFullYear(), 'defaults to the current year');
+});
+
+test('admin drill CRUD round-trip with updated_by stamped; 404 on unknown ids', async () => {
+  const { adminId } = await seed();
+  const admin = await login('admintest');
+  let res = await api('POST', '/api/drill-dates', admin, { ...SEP, note: '  3-day  ' });
+  assert.strictEqual(res.status, 201);
+  const created = await res.json();
+  assert.deepStrictEqual(created,
+    { id: created.id, start_date: '2026-09-11', end_date: '2026-09-13', note: '3-day' });
+
+  res = await api('PATCH', `/api/drill-dates/${created.id}`, admin, { end_date: '2026-09-12', note: '' });
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(),
+    { id: created.id, start_date: '2026-09-11', end_date: '2026-09-12', note: null });
+  const { rows: [row] } = await pool.query('SELECT updated_by_id FROM drill_dates WHERE id = $1', [created.id]);
+  assert.strictEqual(row.updated_by_id, adminId);
+
+  assert.strictEqual((await api('DELETE', `/api/drill-dates/${created.id}`, admin)).status, 204);
+  assert.strictEqual((await api('PATCH', `/api/drill-dates/${created.id}`, admin, { note: 'x' })).status, 404);
+  assert.strictEqual((await api('DELETE', `/api/drill-dates/${created.id}`, admin)).status, 404);
+  assert.strictEqual((await api('DELETE', '/api/drill-dates/abc', admin)).status, 400);
+});
+
+test('400s: malformed date, end before start, an eight-day span, an 81-character note', async () => {
+  await seed();
+  const admin = await login('admintest');
+  const bad = async (body) => {
+    const r = await api('POST', '/api/drill-dates', admin, body);
+    assert.strictEqual(r.status, 400, JSON.stringify(body));
+    return (await r.json()).error;
+  };
+  assert.match(await bad({ start_date: '9/11/2026', end_date: '2026-09-13' }), /start_date/);
+  assert.match(await bad({ start_date: '2026-09-13', end_date: '2026-09-11' }), /before/);
+  assert.match(await bad({ start_date: '2026-09-01', end_date: '2026-09-08' }), /seven days/);
+  assert.match(await bad({ ...SEP, note: 'x'.repeat(81) }), /80/);
+});
+
+test('409: overlapping another drill, on create and on edit; a PATCH never conflicts with itself', async () => {
+  await seed();
+  const admin = await login('admintest');
+  const { id } = await (await api('POST', '/api/drill-dates', admin, SEP)).json();
+  const { id: oct } = await (await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-10-17', end_date: '2026-10-18', note: null })).json();
+
+  const dup = await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-09-13', end_date: '2026-09-14', note: null });
+  assert.strictEqual(dup.status, 409);
+  assert.match((await dup.json()).error, /overlap/i);
+  assert.strictEqual((await api('POST', '/api/drill-dates', admin,
+    { start_date: '2026-09-14', end_date: '2026-09-15', note: null })).status, 201, 'adjacent is fine');
+
+  assert.strictEqual((await api('PATCH', `/api/drill-dates/${oct}`, admin,
+    { start_date: '2026-09-12', end_date: '2026-09-13' })).status, 409, 'editing onto another drill');
+  assert.strictEqual((await api('PATCH', `/api/drill-dates/${id}`, admin,
+    { end_date: '2026-09-12' })).status, 200, 'shrinking within itself');
+});
