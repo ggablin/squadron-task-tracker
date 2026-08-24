@@ -176,6 +176,11 @@ test('400s: missing title, bad status, end before start, over-long attendees', a
   assert.match(await bad({ ...RADR, note: 'x'.repeat(201) }), /200/);
 });
 
+test('validate rejects an impossible date instead of throwing', () => {
+  assert.strictEqual(events.validate({ ...RADR, start_date: '2026-13-01' }).ok, false);
+  assert.strictEqual(events.validate({ ...RADR, end_date: '2026-02-30' }).ok, false);
+});
+
 test('a fortnight-long event is accepted — the seven-day cap is a drill rule', async () => {
   await seed();
   const admin = await login('admintest');
