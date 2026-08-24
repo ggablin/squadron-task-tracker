@@ -2926,10 +2926,16 @@ Then run `grep -n "from-sample\|preview-server\|Org Chart\|Useful Links" MEMORY.
 - [ ] **Step 3: Run the whole suite**
 
 Run: `npm test`
-Expected: `# fail 0`, **397 tests**. Derivation, measured rather than assumed: the branch
+Expected: `# fail 0`, **398 tests**. Derivation, measured rather than assumed: the branch
 baseline on `origin/master` at `e13f411` is **351** (the handoff doc's "346" predates
 `test/back-destinations.test.js`, added by PR #81). This branch adds 23 drill-calendar,
-7 duties-http, 8 drill-dates-http, 7 calendar-events-http and 1 newsletter = 46.
+7 duties-http, 8 drill-dates-http, 8 calendar-events-http and 1 newsletter = 47.
+Counted per file, not inferred — `grep -c '^test(' test/<file>` on each. Two of those
+counts moved after this figure was first written: Task 6's review added a direct
+`validate` guard test (calendar-events 7 → 8), and Task 10 added the live-slides test
+(newsletter 5 → 6). The mid-branch full run measured 397 before Task 10, and 397 + 1
+is 398, so the two derivations agree. Note `npm test` prints `ℹ pass 398`, not
+`# pass 398` — a grep for `# pass` against a full-suite log finds nothing.
 A full run took ~13 minutes against the remote test Postgres — CI is faster.
 Do not pipe through `tail`.
 
