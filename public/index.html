@@ -62,6 +62,7 @@
   <link rel="stylesheet" href="/design.css">
   <script src="/ui.js" defer></script>
   <script src="/offline.js" defer></script>
+  <script src="/duties.js" defer></script>
   <style>
     /* Self-hosted General Sans — survives base-network blocking of api.fontshare.com */
     @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
@@ -2305,6 +2306,38 @@
        are switched by setCalcView instead. */
     .calc-view { display: none; }
     .calc-view.active { display: block; }
+
+    /* Shared empty / offline notes for the Resources data views. --t3-nav-text,
+       never --t3: design.css marks --t3 strokes-and-icons only, and it is the
+       documented cause of the contrast failures already logged in Resources. */
+    .res-empty, .res-offline { color: var(--t3-nav-text); font-size: 13px; padding: 18px 2px; line-height: 1.5; }
+
+    /* ── People → Additional duties (public/duties.js) ───────────────────── */
+    .duties-search.search-wrap { padding: 4px 0 10px; border-bottom: 0; }
+    .duty-admin { margin-bottom: 10px; }
+    /* Mirrors .member-row's metrics (design.css) rather than reusing the class,
+       which carries its own hover, .sel and dark-mode rules for a button row. */
+    .duty-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 12px; border-bottom: 1px solid var(--border);
+    }
+    .duty-row:last-child { border-bottom: 0; }
+    .duty-row.needs-owner { background: var(--wrn-bg); }
+    .duty-body { flex: 1; min-width: 0; }
+    .duty-name { font-weight: 600; font-size: 13.5px; }
+    .duty-owners { font-size: 12.5px; color: var(--t2); margin-top: 2px; overflow-wrap: anywhere; }
+    .duty-tag {
+      display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 6px;
+      background: var(--wrn-bg); color: var(--warn); font-size: 10.5px; font-weight: 700;
+      vertical-align: middle; white-space: nowrap;
+    }
+    .duty-row.needs-owner .duty-tag { background: var(--bg); }
+    .duty-edit {
+      border: 0; background: none; color: var(--t2); cursor: pointer; padding: 8px;
+      min-width: 44px; min-height: 44px; border-radius: 8px; flex: none;
+    }
+    .duty-edit:hover { color: var(--text); background: var(--s2); }
+    .duty-edit svg { width: 16px; height: 16px; }
 
     /* Category drill-in: category rows expand to task → who hasn't done it */
     .cat-row.drillable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
