@@ -1429,7 +1429,7 @@ app.delete('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded,
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `node --env-file=.env.test --test test/duties-http.test.js`
-Expected: `# pass 6`, `# fail 0`
+Expected: `# pass 7`, `# fail 0` — Task 3's two seed tests (seed-on-create, atomic rollback) plus the five added here.
 
 - [ ] **Step 5: Commit**
 
@@ -1666,7 +1666,7 @@ app.delete('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboa
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `node --env-file=.env.test --test test/drill-dates-http.test.js`
-Expected: `# pass 7`, `# fail 0`
+Expected: `# pass 8`, `# fail 0` — Task 3's two seed tests (seed-on-create, atomic rollback) plus the six added here.
 
 - [ ] **Step 5: Commit**
 
@@ -1836,7 +1836,7 @@ app.delete('/api/calendar-events/:id', requireAuth, requireRosterAdmin, requireO
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `node --env-file=.env.test --test test/calendar-events-http.test.js`
-Expected: `# pass 6`, `# fail 0`
+Expected: `# pass 7`, `# fail 0` — Task 3's two seed tests (seed-on-create, atomic rollback) plus the five added here.
 
 - [ ] **Step 5: Commit**
 
