@@ -1897,8 +1897,10 @@
     }
     .pm-list b { color: var(--text); font-weight: 600; }
 
-    /* Four tabs now share the resources tab bar — give the labels a little
-       more room on narrow phones so "PT Calculator" doesn't wrap. */
+    /* Five tabs share the resources tab bar. The set was renamed and
+       re-cut in Aug 2026 (Calculators · Forms · Links · People · Calendar),
+       which took the strip from 48 characters of label to 35 — but the
+       narrow-phone rule still earns its place at 375px. */
     @media (max-width: 480px) {
       .res-tab { padding: 9px 3px; font-size: 11.5px; letter-spacing: -.01em; }
     }
@@ -2296,6 +2298,13 @@
     .seg-btn.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
     .seg-note { font-size: 11.5px; color: var(--t2); margin-top: 6px; }
     .drill-scope-note { font-size: 11.5px; color: var(--t2); line-height: 1.45; margin-bottom: 10px; }
+
+    /* ── Resources: calculators and People behind toggles ────────────────── */
+    .calc-toggle, .people-toggle { margin-bottom: 14px; }
+    /* Not .res-pane: switchResPane toggles every .res-pane by id, and these two
+       are switched by setCalcView instead. */
+    .calc-view { display: none; }
+    .calc-view.active { display: block; }
 
     /* Category drill-in: category rows expand to task → who hasn't done it */
     .cat-row.drillable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -3012,11 +3021,11 @@
       </div>
 
       <div class="res-tabs" role="tablist">
-        <button class="res-tab active" data-rt="pfra" onclick="switchResPane('pfra')">PT Calculator</button>
-        <button class="res-tab" data-rt="promo" onclick="switchResPane('promo')">Promotion</button>
+        <button class="res-tab active" data-rt="calc" onclick="switchResPane('calc')">Calculators</button>
         <button class="res-tab" data-rt="forms" onclick="switchResPane('forms')">Forms</button>
-        <button class="res-tab" data-rt="links" onclick="switchResPane('links')">Useful Links</button>
-        <button class="res-tab" data-rt="orgchart" onclick="switchResPane('orgchart')">Org Chart</button>
+        <button class="res-tab" data-rt="links" onclick="switchResPane('links')">Links</button>
+        <button class="res-tab" data-rt="orgchart" onclick="switchResPane('orgchart')">People</button>
+        <button class="res-tab" data-rt="calendar" onclick="switchResPane('calendar')">Calendar</button>
       </div>
 
       <!-- ── Forms: squadron PDFs, uploaded by leadership ── -->
@@ -3030,8 +3039,20 @@
         <div id="doc-list"><div class="skeleton"></div><div class="skeleton"></div></div>
       </div>
 
+      <!-- ── Calculators: the two score tools behind one tab ──────────────
+           PT and Promotion are the same kind of thing — enter numbers, read a
+           score — so they share a tab and free a slot for Calendar. The inner
+           panes keep their ids (roughly 700 lines of calculator CSS and JS key
+           off them) and only swap .res-pane for .calc-view, so switchResPane's
+           querySelectorAll('.res-pane') no longer reaches them. -->
+      <div id="res-pane-calc" class="res-pane active">
+        <div class="seg-toggle calc-toggle" role="group" aria-label="Calculator">
+          <button class="seg-btn active" id="calc-vt-pfra" aria-pressed="true" onclick="setCalcView('pfra')">Fitness</button>
+          <button class="seg-btn" id="calc-vt-promo" aria-pressed="false" onclick="setCalcView('promo')">Promotion</button>
+        </div>
+
       <!-- ── PFRA calculator ──────────────────────── -->
-      <div id="res-pane-pfra" class="res-pane active">
+      <div id="res-pane-pfra" class="calc-view active">
         <div id="pf-root">
 
           <div class="pf-mobilebar">
@@ -3239,7 +3260,7 @@
       </div><!-- /#res-pane-pfra -->
 
       <!-- ── Promotion calculator ─────────────────── -->
-      <div id="res-pane-promo" class="res-pane">
+      <div id="res-pane-promo" class="calc-view">
         <div id="pm-root" style="max-width:1080px">
 
           <div class="pf-mobilebar">
@@ -3473,6 +3494,7 @@
 
         </div><!-- /#pm-root -->
       </div><!-- /#res-pane-promo -->
+      </div><!-- /#res-pane-calc -->
 
       <!-- ── Useful links ─────────────────────────── -->
       <div id="res-pane-links" class="res-pane">
@@ -3559,6 +3581,14 @@
       <!-- ── Org chart — reference material every member needs, so it lives
            here rather than in the (now leadership-only) Squadron tab. ── -->
       <div id="res-pane-orgchart" class="res-pane">
+        <!-- People: the chain of command (who is above me) and the additional
+             duties list (who do I see about X). A toggle rather than a sixth
+             tab — the strip is already at five — and rather than stacking,
+             because four flights of chips would bury the list. -->
+        <div class="seg-toggle people-toggle" role="group" aria-label="People view">
+          <button class="seg-btn active" id="people-vt-chain" aria-pressed="true" onclick="setPeopleView('chain')">Chain of command</button>
+          <button class="seg-btn" id="people-vt-duties" aria-pressed="false" onclick="setPeopleView('duties')">Additional duties</button>
+        </div>
         <div id="sq-orgchart">
           <div class="sec-hd" style="padding:0 0 12px">
             <h2 class="sec-title">Chain of Command</h2>
@@ -3567,7 +3597,23 @@
           <div id="org-staff-banner"></div>
           <div id="org-flights"></div>
         </div>
+        <div id="duties-view" hidden>
+          <div class="sec-hd" style="padding:0 0 12px">
+            <h2 class="sec-title">Additional Duties</h2>
+            <div class="sec-sub">Who to see about what</div>
+          </div>
+          <div id="duties-host"></div>
+        </div>
       </div><!-- /#res-pane-orgchart -->
+
+      <!-- ── Calendar: the year's drills and rotations (public/calendar.js) ── -->
+      <div id="res-pane-calendar" class="res-pane">
+        <div class="sec-hd" style="padding:0 0 12px">
+          <h2 class="sec-title">Calendar</h2>
+          <div class="sec-sub" id="cal-sub">Drill weekends and training</div>
+        </div>
+        <div id="cal-host"></div>
+      </div><!-- /#res-pane-calendar -->
 
     </div><!-- /#view-resources -->
 
@@ -6155,7 +6201,7 @@ function switchView(btn) {
     loadSquadron();
     loadActivity();
   }
-  if (name === 'resources') { switchResPane('pfra'); syncInstallCard(); }
+  if (name === 'resources') { switchResPane('calc'); syncInstallCard(); }
 }
 
 /* ══ Install to home screen ═══════════════════════════════════════════════
@@ -6967,17 +7013,42 @@ async function copyActivityList() {
   }
 }
 
-/* ── Resources sub-tabs (PT Calculator | Promotion | Useful Links | Org Chart) ── */
+/* ── Resources sub-tabs (Calculators | Forms | Links | People | Calendar) ── */
 function switchResPane(name) {
   document.querySelectorAll('.res-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.rt === name));
   document.querySelectorAll('.res-pane').forEach(p =>
     p.classList.toggle('active', p.id === 'res-pane-' + name));
-  // Each calculator builds its gauge + control rows on first open only.
-  if (name === 'pfra' && window.pfInit) window.pfInit();
-  if (name === 'promo' && window.pmInit) window.pmInit();
+  if (name === 'calc') setCalcView(document.getElementById('calc-vt-promo')?.classList.contains('active') ? 'promo' : 'pfra');
   if (name === 'orgchart') loadOrgChart();
   if (name === 'forms') loadDocuments();
+  if (name === 'calendar' && window.calendarInit) window.calendarInit({ canEdit: !!currentMember?.can_manage_roster });
+}
+
+/* Resources → Calculators. Each calculator still builds its gauge and control
+   rows on first open only; nothing initialises until it is actually shown. */
+function setCalcView(mode) {
+  const promo = mode === 'promo';
+  document.getElementById('calc-vt-pfra').classList.toggle('active', !promo);
+  document.getElementById('calc-vt-pfra').setAttribute('aria-pressed', String(!promo));
+  document.getElementById('calc-vt-promo').classList.toggle('active', promo);
+  document.getElementById('calc-vt-promo').setAttribute('aria-pressed', String(promo));
+  document.getElementById('res-pane-pfra').classList.toggle('active', !promo);
+  document.getElementById('res-pane-promo').classList.toggle('active', promo);
+  if (promo) { if (window.pmInit) window.pmInit(); }
+  else if (window.pfInit) window.pfInit();
+}
+
+/* Resources → People: chain of command | additional duties. */
+function setPeopleView(mode) {
+  const dut = mode === 'duties';
+  document.getElementById('people-vt-chain').classList.toggle('active', !dut);
+  document.getElementById('people-vt-chain').setAttribute('aria-pressed', String(!dut));
+  document.getElementById('people-vt-duties').classList.toggle('active', dut);
+  document.getElementById('people-vt-duties').setAttribute('aria-pressed', String(dut));
+  document.getElementById('sq-orgchart').hidden = dut;
+  document.getElementById('duties-view').hidden = !dut;
+  if (dut && window.dutiesInit) window.dutiesInit({ canEdit: !!currentMember?.can_manage_roster });
 }
 
 /* ── Resources → Forms ──────────────────────────────
