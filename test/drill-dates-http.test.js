@@ -158,6 +158,42 @@ test('GET /api/calendar: twelve months, drills and events together, years across
   assert.strictEqual(dflt.year, new Date().getUTCFullYear(), 'defaults to the current year');
 });
 
+// past/next are the only outputs the route's `new Date()` reference argument
+// exists to produce, and until this test nothing asserted either. Dropping that
+// argument makes isoDate(undefined) return '', so every end_date compares as NOT
+// past and `next` lands on the first drill of whatever year is asked for — no
+// throw, and the rest of the suite stays green. A year entirely behind us is the
+// case that separates the two: it must be all past and hold no next at all.
+test('past and next are computed against today, not against an absent reference', async () => {
+  await seed();
+  const admin = await login('admintest');
+  for (const d of [{ start_date: '2020-02-08', end_date: '2020-02-09', note: null },
+                   { start_date: '2020-03-07', end_date: '2020-03-08', note: null },
+                   { start_date: '2099-05-09', end_date: '2099-05-10', note: null },
+                   { start_date: '2099-06-06', end_date: '2099-06-07', note: null }]) {
+    assert.strictEqual((await api('POST', '/api/drill-dates', admin, d)).status, 201, d.start_date);
+  }
+  // An event too: it carries `past` from the same reference, by a separate line.
+  await pool.query(
+    `INSERT INTO calendar_events (title, start_date, end_date, status)
+     VALUES ('Silver Flag', DATE '2020-04-06', DATE '2020-04-12', 'complete')`);
+
+  const member = await login('memtest');
+  const gone = (await (await api('GET', '/api/calendar?year=2020', member)).json())
+    .months.flatMap(m => m.entries);
+  assert.strictEqual(gone.length, 3, 'two drills and one event in 2020');
+  assert.ok(gone.every(e => e.past === true),
+    'every 2020 entry ended years ago, drills and events alike');
+  assert.ok(!gone.some(e => e.next), 'a year that is entirely behind us holds no next drill');
+
+  const ahead = (await (await api('GET', '/api/calendar?year=2099', member)).json())
+    .months.flatMap(m => m.entries);
+  assert.strictEqual(ahead.length, 2);
+  assert.ok(ahead.every(e => e.past === false), 'nothing in 2099 has happened yet');
+  assert.deepStrictEqual(ahead.map(e => e.next), [true, false],
+    'next marks the first drill still ahead, and only that one');
+});
+
 test('admin drill CRUD round-trip with updated_by stamped; 404 on unknown ids', async () => {
   const { adminId } = await seed();
   const admin = await login('admintest');

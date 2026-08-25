@@ -420,8 +420,13 @@ function requireOnboarded(req, res, next) {
   next();
 }
 
-// Parse a route :id param to a positive integer, or null if malformed.
-function reqId(v) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
+// Parse a route :id param to a positive integer, or null if malformed. Capped at
+// int4: every id column here is INTEGER, so a larger number reaches Postgres and
+// raises 22003 — a 500 where the honest answer is 404.
+function reqId(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 && n <= 2147483647 ? n : null;
+}
 
 const VALID_URGENCY = ['overdue', 'this_uta', 'next_uta', 'future', 'info'];
 const URGENCY_LABEL = {

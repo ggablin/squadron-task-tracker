@@ -129,6 +129,30 @@ test('the duties and RSD slides render from the tables, relative to the cycle be
   assert.ok(!/(?:src|href)="(?!data:)/.test(html), 'still self-contained');
 });
 
+// The other half of rsdSchedule's gate. buildYear() fills every month no drill
+// touches with a no_uta entry, so cal.entries is never empty on its own: an
+// ungated slide prints twelve "NO UTA" lines for a year nobody has entered drills
+// for yet, which is what would have gone out to ~70 readers. The populated year
+// above exercises the true branch; this one exercises the false branch.
+test('a year with no drills prints the empty note, not twelve NO UTA lines', async () => {
+  await seed();   // seeds drill_dates for 2026 only
+  const { rows: [cycle] } = await pool.query(
+    `INSERT INTO uta_cycles (name, start_date, end_date, is_current, status)
+     VALUES ('February 2027 UTA', DATE '2027-02-05', DATE '2027-02-07', false, 'live')
+     RETURNING id`);
+  const res = await fetch(`${baseUrl}/newsletter?uta=${cycle.id}`,
+    { headers: { Cookie: await login('leadtest') } });
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /RSD Schedule — CY 2027/, 'the slide is printed for the cycle asked for');
+  assert.match(html, /No drill dates recorded in the tracker for this UTA\./,
+    'the empty note stands in for the whole list');
+  assert.doesNotMatch(html, /NO UTA/,
+    'not one no_uta line may escape the gate, let alone twelve');
+  assert.strictEqual((html.match(/<section class="slide/g) || []).length, 23,
+    'the slide still renders — an empty year is not a missing slide');
+});
+
 test('a malformed ?uta is rejected rather than silently falling back to the live cycle',
   async () => {
     await seed();
