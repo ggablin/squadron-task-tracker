@@ -62,14 +62,41 @@ async function seedLeader() {
   return cookieFrom(res);
 }
 
-async function createCycle(cookie, name) {
+async function createCycle(cookie, name, dates) {
   const res = await fetch(`${baseUrl}/api/cycles`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...dates }),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }
+
+// POST /api/cycles is the only one of lib/cycles.js's three date-carrying
+// queries with an HTTP test, so the wire format gets pinned here rather than in
+// a harness of its own. res.json is where the defect actually bites: a bare DATE
+// column arrives from node-postgres as a Date at LOCAL midnight, and
+// JSON.stringify runs it through toISOString(), so anywhere ahead of UTC the
+// client reads the day before the drill. Under CI's UTC it does not misreport —
+// it serialises as '2026-08-08T00:00:00.000Z' — so assert the exact string and a
+// revert fails in every timezone. (The matching SELECT and UPDATE … RETURNING
+// are covered at the lib level in test/cycles.test.js.)
+test('drill dates come back over the wire as YYYY-MM-DD, not an ISO timestamp', async () => {
+  await resetDb();
+  const cookie = await seedLeader();
+
+  const r = await createCycle(cookie, 'Aug 2026 UTA',
+    { start_date: '2026-08-08', end_date: '2026-08-09' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.body.start_date, '2026-08-08');
+  assert.strictEqual(r.body.end_date, '2026-08-09');
+  assert.strictEqual(r.body.period_count, 4, 'a two-day drill still derives four periods');
+
+  // Both dates omitted stays null rather than becoming a string.
+  const undated = await createCycle(cookie, 'Undated 2026');
+  assert.strictEqual(undated.status, 200);
+  assert.strictEqual(undated.body.start_date, null);
+  assert.strictEqual(undated.body.end_date, null);
+});
 
 test('a name already held by the live cycle is refused with 409', async () => {
   await resetDb();

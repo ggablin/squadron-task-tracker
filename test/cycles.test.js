@@ -46,6 +46,44 @@ test('listCycles returns cycles with task counts, newest first', async () => {
   assert.strictEqual(Number(list[0].task_count), 1);
 });
 
+// Every row this module returns goes straight out of res.json, so the drill
+// dates have to be 'YYYY-MM-DD' strings, not the Date node-postgres builds at
+// LOCAL midnight for a DATE column — JSON.stringify would run that through
+// toISOString() and report the day BEFORE the drill anywhere ahead of UTC.
+// Asserting the exact string fails on a revert in every timezone, including the
+// UTC one CI runs in, where a Date would stringify as '2026-08-08T00:00:00.000Z'
+// rather than throw. All three sites are covered here because only one of them
+// (createDraft, via POST /api/cycles) has an HTTP test to pin it at the edge.
+test('drill dates leave the database as YYYY-MM-DD strings, from all three queries', async () => {
+  await resetDb(); await seedFixtures();
+
+  const created = await cycles.createDraft(pool, 'Aug 2026 UTA', '2026-08-08', '2026-08-09');
+  assert.strictEqual(created.start_date, '2026-08-08', 'createDraft RETURNING');
+  assert.strictEqual(created.end_date, '2026-08-09', 'createDraft RETURNING');
+
+  const listed = (await cycles.listCycles(pool)).find(c => c.id === created.id);
+  assert.strictEqual(listed.start_date, '2026-08-08', 'listCycles SELECT');
+  assert.strictEqual(listed.end_date, '2026-08-09', 'listCycles SELECT');
+
+  const moved = await cycles.setCycleDates(pool, created.id, '2026-09-11', '2026-09-13');
+  assert.strictEqual(moved.start_date, '2026-09-11', 'setCycleDates RETURNING');
+  assert.strictEqual(moved.end_date, '2026-09-13', 'setCycleDates RETURNING');
+
+  // to_char keeps the column's own name; without the alias these come back
+  // under `to_char` and every consumer reads undefined.
+  for (const row of [created, listed, moved]) {
+    assert.ok(!('to_char' in row), 'to_char must be aliased back to the column name');
+  }
+
+  // Dates stay optional — an undated cycle still round-trips as null, not ''.
+  const undated = await cycles.createDraft(pool, 'Undated 2026');
+  assert.strictEqual(undated.start_date, null);
+  assert.strictEqual(undated.end_date, null);
+  const cleared = await cycles.setCycleDates(pool, created.id, null, null);
+  assert.strictEqual(cleared.start_date, null);
+  assert.strictEqual(cleared.end_date, null);
+});
+
 test('goLive promotes a draft, archives the prior live, returns members to notify', async () => {
   await resetDb(); const f = await seedFixtures();
   const { rows: [live] } = await pool.query(
