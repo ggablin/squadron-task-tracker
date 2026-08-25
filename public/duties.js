@@ -216,11 +216,28 @@
   // module's sole public entry point, and shellReady=false/loaded=false makes
   // the next dutiesInit() call behave exactly like a fresh page load (shell()
   // rebuilds, load() re-fetches) without duplicating that logic here.
+  //
+  // The rendered rows have to go with the state, not after it. doLogout() does
+  // not reload the page and showApp() does not reset which view/pane is
+  // active, so the next member in this tab lands on the previous member's
+  // fully rendered list — pencils included — and nothing re-runs dutiesInit
+  // until the pane is re-entered. Clicking one of those stale pencils used to
+  // reach openEditor(id), which looks the row up in the `all` this function
+  // just emptied: `d` came back undefined, so the modal titled itself "Add
+  // duty" with blank fields and a hidden Delete while editingId still held the
+  // REAL row id. A roster admin who typed a name and saved believed they had
+  // added a duty; save() sent PATCH /api/duties/{id} and lib/duties.js mapped
+  // the two empty owner fields to null — an existing squadron record renamed
+  // and both owners wiped, silently. Blanking the host leaves nothing stale to
+  // click.
   window.dutiesInit.reset = function () {
     all = [];
     canEdit = false;
     shellReady = false;
     editingId = null;
     loaded = false;
+    // Guarded: reset() is also reachable on pages that never mounted this pane.
+    const host = $('duties-host');
+    if (host) host.innerHTML = '';
   };
 })();

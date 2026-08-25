@@ -4,7 +4,9 @@
 // fixture across every other *-http.test.js file inserts
 // must_change_password = false (activity-http.test.js even has a mustChange
 // parameter that is never passed true), so deleting requireOnboarded from all
-// 52 route definitions it guards would leave the whole suite green.
+// 51 route definitions it guards would leave the whole suite green.
+// (`grep -c requireOnboarded server.js` says 52 — one of those is the
+// middleware's own definition, not a route.)
 //
 // One fixture member — role='leadership', can_manage_roster=true, active=true
 // — is built to clear every OTHER gate on every route exercised below:
@@ -25,7 +27,7 @@
 // below.
 //
 // Five routes, one per distinct middleware shape that sits in front of
-// requireOnboarded on a write route — not all 52 (per the "you don't need all
+// requireOnboarded on a write route — not all 51 (per the "you don't need all
 // of them" guidance), but enough that every *kind* of gate ahead of it is
 // represented once:
 //   - requireAuth only            → PUT  /api/tasks/:id

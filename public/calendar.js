@@ -11,6 +11,15 @@
   let data = null;          // { year, years, months }
   let canEdit = false;
   let shellReady = false;
+  // #cal-host is a page-lifetime element — shell() only rewrites its *contents*,
+  // never the element itself, unlike duties.js's shell() which replaces
+  // #duty-list wholesale and so binds a fresh element every time. Its delegated
+  // listener therefore has to be attached exactly once per page load, tracked
+  // separately from shellReady: reset() puts shellReady back to false on logout
+  // so the next entry re-mounts the skeleton, and without this second flag that
+  // would stack a second listener on the same element (and one more per logout
+  // after that).
+  let hostBound = false;
   let editing = null;       // { kind: 'drill'|'event', id } | null
   // Tracks whether the last /api/calendar fetch actually succeeded — distinct
   // from data.months, which is legitimately empty both before a load and
@@ -41,15 +50,19 @@
   const STATUS_LABEL = { complete: 'Complete', cancelled: 'Cancelled' };
 
   function shell() {
-    $('cal-host').innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
-    $('cal-host').addEventListener('click', (e) => {
-      const y = e.target.closest('.cal-year');
-      if (y) { load(Number(y.dataset.year)); return; }
-      if (e.target.closest('#cal-add-drill')) { openEditor('drill', null); return; }
-      if (e.target.closest('#cal-add-event')) { openEditor('event', null); return; }
-      const edit = e.target.closest('.cal-edit');
-      if (edit) openEditor(edit.dataset.kind, Number(edit.dataset.id));
-    });
+    const host = $('cal-host');
+    host.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+    if (!hostBound) {
+      host.addEventListener('click', (e) => {
+        const y = e.target.closest('.cal-year');
+        if (y) { load(Number(y.dataset.year)); return; }
+        if (e.target.closest('#cal-add-drill')) { openEditor('drill', null); return; }
+        if (e.target.closest('#cal-add-event')) { openEditor('event', null); return; }
+        const edit = e.target.closest('.cal-edit');
+        if (edit) openEditor(edit.dataset.kind, Number(edit.dataset.id));
+      });
+      hostBound = true;
+    }
     shellReady = true;
   }
 
@@ -317,10 +330,30 @@
   // showing the previous member's data and canEdit. Hung off the existing
   // calendarInit global rather than a second one, for the same reason
   // duties.js does — it's already the module's sole public entry point.
-  // inFlight/inFlightYear are cleared too so a slow request still pending
-  // from the old session can't be handed back by load()'s dedupe check to a
-  // fresh load() for the same year; seq is left alone since it only needs to
-  // keep increasing for that stale response's `mine !== seq` check to drop it.
+  //
+  // The rendered rows go with the state. Clearing `data` alone left the pane
+  // painted: doLogout() does not reload the page and showApp() does not reset
+  // which view/pane is active, so the next member in this tab arrived at the
+  // previous member's fully rendered calendar — and a pencil click on one of
+  // those rows reached findEntry(), which iterates data.months, for an
+  // uncaught `TypeError: Cannot read properties of null`. Blanking the host
+  // leaves nothing stale to click; calendarInit() re-shells and re-fetches on
+  // the next entry because shellReady/loaded are false here.
+  //
+  // inFlight/inFlightYear are cleared so a slow request still pending from the
+  // old session can't be handed back by load()'s dedupe check to a fresh
+  // load() for the same year.
+  //
+  // ++seq is what actually drops that pending request. This used to say seq
+  // "is left alone since it only needs to keep increasing for that stale
+  // response's `mine !== seq` check to drop it" — backwards: nothing else
+  // moves seq at logout, so mine === seq still held and the response was
+  // applied. Both halves of load() would run: the .then writes data/loaded,
+  // and the .finally calls render() — which paints the previous member's
+  // calendar straight back over the host this function just blanked, roughly
+  // a second after they signed out. Bumping seq here is what makes the stated
+  // reasoning true. hostBound is deliberately left alone — it tracks a
+  // listener on an element that survives logout.
   window.calendarInit.reset = function () {
     data = null;
     canEdit = false;
@@ -329,6 +362,15 @@
     loaded = false;
     inFlight = null;
     inFlightYear = null;
+    ++seq;
     lastYear = null;
+    // Guarded: reset() is also reachable on pages that never mounted this pane.
+    const host = $('cal-host');
+    if (host) host.innerHTML = '';
+    // #cal-sub goes back to the subtitle the page ships with, for the same
+    // reason render()'s offline branch restores it: a leftover "CY 2026"
+    // heading over an empty pane is the last session still showing through.
+    const sub = $('cal-sub');
+    if (sub) sub.textContent = 'Drill weekends and training';
   };
 })();

@@ -8,6 +8,13 @@ const express = require('express');
 // calls OUTSIDE its try, and a test sat for 305 seconds instead of failing.
 // Fixing that one throw did not remove the mechanism, so this closes the class.
 // Must be required before any route is defined; see test/async-errors-http.test.js.
+// DELETE THIS LINE (and the dependency) on any move to Express 5: the library
+// was last published in 2020 and patches Express by internal path
+// (require('express/lib/router/layer')), which Express 5 no longer lays out
+// that way — it would hard-fail at boot, at exactly the point it stops being
+// needed, since Express 5 hands a rejected async handler to the error
+// middleware itself. Correct against the installed 4.22.1, and `^4.21.0` in
+// package.json will never float to 5, so there is nothing to do until then.
 require('express-async-errors');
 const compression = require('compression');
 const { Pool } = require('pg');
@@ -1327,10 +1334,20 @@ app.delete('/api/tasks/:id', requireAuth, requireRole('supervisor'), requireOnbo
   if (!taskId) return res.status(400).json({ error: 'Invalid id' });
 
   // The pre-check query and its 404/403 responses live inside this try, not
-  // before it: Express 4 does not adopt a handler's returned promise, and
-  // there is no process-level unhandledRejection handler, so an unguarded
-  // await that rejects (a pool timeout, a Postgres failover) would crash the
-  // whole process instead of just failing this request.
+  // before it, so the whole handler is one guarded block and every await in it
+  // lands on sendTaskError — the only thing that maps tasksLib's typed codes
+  // (NOT_EDITABLE, NOT_FOUND, HAS_COMPLETIONS, …) onto their real status
+  // codes rather than a blanket 500.
+  //
+  // This used to justify itself by saying an unguarded rejecting await would
+  // crash the process, because Express 4 does not adopt a handler's returned
+  // promise and there is no process-level unhandledRejection handler. That
+  // stopped being true at commit 363ea60, which requires express-async-errors
+  // at the top of this file: such a rejection now reaches the error middleware
+  // at the bottom and answers 500. So the boundary is no longer load-bearing —
+  // moving it would not change any response this handler sends today. It stays
+  // where it is because it is the placement that keeps holding as the handler
+  // grows, not because a crash depends on it.
   try {
     const { rows: tr } = await pool.query(
       `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
@@ -1733,8 +1750,10 @@ app.put('/api/tasks/:id/definition', requireAuth, requireRole('supervisor'), req
   }
 
   // The pre-check query and its 404/403 responses live inside this try, not
-  // before it — see the matching comment on DELETE /api/tasks/:id above: an
-  // unguarded await that rejects would otherwise crash the whole process.
+  // before it — see the matching comment on DELETE /api/tasks/:id above: it
+  // keeps the whole handler under sendTaskError's typed mapping. It is not (as
+  // this used to claim) what stops an unguarded rejection crashing the
+  // process; express-async-errors has handled that since 363ea60.
   try {
     const { rows: tr } = await pool.query(
       `SELECT m.shop_id FROM tasks t JOIN members m ON m.id = t.member_id WHERE t.id = $1`, [taskId]);
