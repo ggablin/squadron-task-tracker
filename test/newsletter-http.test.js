@@ -17,6 +17,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const bcrypt = require('bcrypt');
 const { pool, applySchema, resetDb } = require('./helpers/db');
+const { fmtRange } = require('../newsletter/from-db');
 const app = require('../server');
 
 let server, baseUrl;
@@ -152,6 +153,49 @@ test('a year with no drills prints the empty note, not twelve NO UTA lines', asy
   assert.strictEqual((html.match(/<section class="slide/g) || []).length, 23,
     'the slide still renders — an empty year is not a missing slide');
 });
+
+// The cover's date range is the one place the newsletter prints the drill's own
+// dates, and fmtRange used to read getUTC* fields off a LOCAL-midnight Date. Both
+// shapes that reach it produced one: node-pg parses a DATE column to local
+// midnight, and `new Date(str + 'T00:00:00')` — no Z — parses the to_char'd
+// string the same way, which quietly undid the start_iso fix from #85. Under
+// TZ=Asia/Tokyo the cover of the 11–13 Sep 2026 drill printed "10–12 Sep 2026".
+//
+// The zone has to be forced here or this test proves nothing: production runs UTC
+// and the CI/dev host zone is *behind* UTC, the one direction where this family
+// cannot appear (MEMORY.md §8a, §8b).
+test('the cover prints the drill it is for, not the day before, in a zone ahead of UTC',
+  async () => {
+    await seed();
+    const { rows: [cycle] } = await pool.query(
+      `INSERT INTO uta_cycles (name, start_date, end_date, is_current, status)
+       VALUES ('September 2026 UTA', DATE '2026-09-11', DATE '2026-09-13', false, 'live')
+       RETURNING id`);
+    const cookie = await login('leadtest');
+
+    // process.env.TZ is honoured at runtime, but deleting it does NOT restore the
+    // host zone — so put back the resolved name, not the (unset) variable.
+    const prevTz = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      process.env.TZ = 'Asia/Tokyo';
+      assert.strictEqual(Intl.DateTimeFormat().resolvedOptions().timeZone, 'Asia/Tokyo',
+        'the forced zone must actually take, or the rest of this test is a no-op');
+
+      // Shape 1: a to_char'd 'YYYY-MM-DD' string.
+      assert.strictEqual(fmtRange('2026-09-11', '2026-09-13'), '11–13 Sep 2026');
+      // Shape 2: what node-pg hands back for a bare DATE — a Date at LOCAL
+      // midnight, so it is built inside the forced zone to be representative.
+      assert.strictEqual(fmtRange(new Date(2026, 8, 11), new Date(2026, 8, 13)), '11–13 Sep 2026');
+
+      // …and end to end, with node-pg doing the parsing for real.
+      const res = await fetch(`${baseUrl}/newsletter?uta=${cycle.id}`, { headers: { Cookie: cookie } });
+      assert.strictEqual(res.status, 200);
+      assert.match(await res.text(), /<div class="cover-sub">11–13 Sep 2026 ·/,
+        'the rendered cover carries the cycle\'s own dates');
+    } finally {
+      process.env.TZ = prevTz;
+    }
+  });
 
 test('a malformed ?uta is rejected rather than silently falling back to the live cycle',
   async () => {
