@@ -31,7 +31,7 @@
       ${canEdit ? '<div class="duty-admin"><button class="add-btn" type="button" id="duty-add">+ Add duty</button></div>' : ''}
       <div class="search-wrap duties-search">
         <input class="search-input" id="duty-q" type="search" placeholder="Search duties and names" autocomplete="off" aria-label="Filter duties">
-        <div class="search-count" id="duty-count"></div>
+        <div class="search-count" id="duty-count" aria-live="polite"></div>
       </div>
       <div class="duty-list" id="duty-list"><div class="skeleton"></div><div class="skeleton"></div></div>`;
     $('duty-q').addEventListener('input', renderList);
@@ -188,12 +188,15 @@
     // change; it does not imply the data is stale, so it never resets loaded.
     if (was !== canEdit) shell();
     // Re-entry retries a failed load instead of leaving the view wedged on
-    // the offline notice for the rest of the tab's life — every sibling
-    // Resources view re-fetches on entry, and this one now matches. Once
-    // loaded, re-entry re-renders (rather than the previous total no-op) so
-    // shell() rebuilds (canEdit flips) are reflected; renderList() reads the
-    // filter input in place, so a query the member already typed carries
-    // forward instead of silently resetting to "all 52" on every pane visit.
+    // the offline notice for the rest of the tab's life — but a successful
+    // load does NOT re-fetch on re-entry, only a prior failure does. That's
+    // the same loaded-flag guard calendar.js uses; Forms and the org chart
+    // are different, unconditionally re-fetching every time their pane is
+    // entered. Once loaded, re-entry re-renders (rather than the previous
+    // total no-op) so shell() rebuilds (canEdit flips) are reflected;
+    // renderList() reads the filter input in place, so a query the member
+    // already typed carries forward instead of silently resetting to "all
+    // 52" on every pane visit.
     if (!loaded) load(); else renderList();
   };
 })();

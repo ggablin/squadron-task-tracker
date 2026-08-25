@@ -92,14 +92,14 @@
       <span class="cal-when">${esc(e.label)}</span>
       <span class="cal-what"><span class="cal-kind">UTA</span>${e.threeDay ? ' <span class="cal-meta">· 3-day</span>' : ''}${
         e.note ? ` <span class="cal-meta">· ${esc(e.note)}</span>` : ''}</span>
-      ${e.next ? '<span class="cal-chip chip-next">Next</span>' : ''}
+      ${e.next ? '<span class="cal-chip cal-chip-next">Next</span>' : ''}
       ${canEdit ? `<button class="cal-edit" type="button" aria-label="Edit the ${esc(e.label)} drill" data-kind="drill" data-id="${e.id}">${PENCIL}</button>` : ''}
     </div>`;
   }
 
   function eventRow(e) {
     const chip = STATUS_LABEL[e.status]
-      ? `<span class="cal-chip chip-${e.status}">${STATUS_LABEL[e.status]}</span>` : '';
+      ? `<span class="cal-chip cal-chip-${e.status}">${STATUS_LABEL[e.status]}</span>` : '';
     return `<div class="cal-row${e.past ? ' past' : ''}">
       <span class="cal-when">${esc(e.label)}</span>
       <span class="cal-what">

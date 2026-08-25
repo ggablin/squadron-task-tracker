@@ -145,7 +145,6 @@
       font-size: 10.5px; font-weight: 700;
       padding: 1px 7px; border-radius: 10px;
     }
-    .sb-item.active .sb-badge { background: rgba(255,255,255,.22); }
     .sb-spacer { flex: 1; }
     .sb-user {
       padding: 16px 18px;
@@ -1243,7 +1242,6 @@
       color: var(--bg); background: var(--urgent);
       border-radius: 9px;
     }
-    .mt-tab.active .mt-tab-badge { background: rgba(255,255,255,.22); }
     .mt-pane, .shop-pane, .res-pane, .sq-pane { display: none; }
     .mt-pane.active, .shop-pane.active, .res-pane.active, .sq-pane.active { display: block; }
 
@@ -2349,12 +2347,14 @@
        the warn tint it drops under 4.5:1 in light mode. --warn is the pairing
        already measured for this background, and it passes both themes. */
     .duty-row.needs-owner .duty-owners { color: var(--warn); }
-    .duty-edit {
+    /* Shared with .cal-edit below (public/calendar.js) — identical edit-pencil
+       button in both views, so the rule lives once. */
+    .duty-edit, .cal-edit {
       border: 0; background: none; color: var(--t2); cursor: pointer; padding: 8px;
       min-width: 44px; min-height: 44px; border-radius: 8px; flex: none;
     }
-    .duty-edit:hover { color: var(--text); background: var(--s2); }
-    .duty-edit svg { width: 16px; height: 16px; }
+    .duty-edit:hover, .cal-edit:hover { color: var(--text); background: var(--s2); }
+    .duty-edit svg, .cal-edit svg { width: 16px; height: 16px; }
 
     /* ── Calendar (public/calendar.js) ───────────────────────────────────── */
     .cal-years { margin-bottom: 12px; }
@@ -2408,14 +2408,9 @@
       font-size: 10.5px; font-weight: 700; white-space: nowrap;
     }
     /* The app's measured pairings, never a solid fill. */
-    .chip-next, .chip-complete { background: var(--ok-bg); color: var(--ok); }
-    .chip-cancelled { background: var(--urg-bg); color: var(--urgent); }
-    .cal-edit {
-      border: 0; background: none; color: var(--t2); cursor: pointer; padding: 8px;
-      min-width: 44px; min-height: 44px; border-radius: 8px; flex: none;
-    }
-    .cal-edit:hover { color: var(--text); background: var(--s2); }
-    .cal-edit svg { width: 16px; height: 16px; }
+    .cal-chip-next, .cal-chip-complete { background: var(--ok-bg); color: var(--ok); }
+    .cal-chip-cancelled { background: var(--urg-bg); color: var(--urgent); }
+    /* .cal-edit is defined with .duty-edit above (People → Additional duties) — same button, one rule. */
     @media (max-width: 420px) {
       .cal-row { flex-wrap: wrap; }
       .cal-when { min-width: 84px; }
@@ -3691,6 +3686,7 @@
 
       <!-- ── Org chart — reference material every member needs, so it lives
            here rather than in the (now leadership-only) Squadron tab. ── -->
+      <!-- The tab is labelled "People" but the key/id stays "orgchart" on purpose — see data-rt="orgchart" above — since renaming would also mean touching loadOrgChart, #sq-orgchart and the .res-pane id convention for no user-visible gain. -->
       <div id="res-pane-orgchart" class="res-pane">
         <!-- People: the chain of command (who is above me) and the additional
              duties list (who do I see about X). A toggle rather than a sixth
