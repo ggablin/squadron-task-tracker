@@ -8,12 +8,21 @@ const shape = require('./shape');
 const { informationalSql } = require('../lib/informational');
 const duties = require('../lib/duties');
 const drillCal = require('../lib/drill-calendar');
+const { toUTCDate } = require('../lib/attendance');
 
 const MON_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// Both inputs are normalised to UTC midnight before the getUTC* readers below,
+// because both shapes reach here and both used to shift. node-pg parses a DATE
+// column to LOCAL midnight, so a raw pg Date read with getUTCDate() loses a day
+// in any zone ahead of UTC; and `new Date(str + 'T00:00:00')` — no Z — parses
+// the to_char'd string as local midnight too, which quietly undid the
+// `start_iso` fix from #85. Under TZ=Asia/Tokyo the cover of the 11–13 Sep 2026
+// drill printed "10–12 Sep 2026" by BOTH paths. toUTCDate is the one
+// implementation of this normalisation (lib/attendance.js) — local getters for
+// a Date, an explicit 'Z' for a string. See MEMORY.md §8a.
 function fmtRange(start, end) {
-  const d = (v) => (v instanceof Date ? v : (v ? new Date(v + 'T00:00:00') : null));
-  const a = d(start), b = d(end);
+  const a = toUTCDate(start), b = toUTCDate(end);
   if (!a) return '';
   const day = (x) => x.getUTCDate();
   const mo = (x) => MON_ABBR[x.getUTCMonth()];
@@ -124,4 +133,7 @@ async function buildFromDb(pool, utaId) {
   };
 }
 
-module.exports = { buildFromDb };
+// fmtRange is exported for the timezone regression test in
+// test/newsletter-http.test.js — the route alone can only exercise whichever
+// shape node-pg happens to hand back.
+module.exports = { buildFromDb, fmtRange };

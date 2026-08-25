@@ -229,6 +229,76 @@ Seeded test accounts (local): members `becerra`/`derose`/`fowler`/`glenn`/`grada
 
 ---
 
+## 8a. Two bug families this codebase keeps producing
+
+The colour family has surfaced four times and the date family **five** — four across PRs #84 and #85 and a fifth on 2026-08-25, found by a review of the branch that documented the family in the first place. Different files, different people, months apart. Neither is subtle once you know to look, and both are one `grep` away — provided the `grep` is aimed at the whole codebase, which the date one was not until that fifth instance made the gap obvious. **Check these before writing a colour or serialising a date.**
+
+### A hardcoded colour on a token-coloured background
+
+The theme tokens **invert**. `--text` is near-black in light mode and near-**white** in dark. So a rule like `background: rgba(255,255,255,.22)` sitting on a `var(--text)` surface is legible in the theme it was authored in and invisible in the other.
+
+Found in: the active-tab notification badge (measured **1.22:1** in dark — invisible, shipped for months); `.duty-owners` as `--t2` on a `--wrn-bg` tint (4.34:1, under AA); `build.html`'s `.btn-ghost-inv` on `.cycle-bar` (the `+ New cycle` button vanishes on `/build`); and `index.html:919` using `--t3` as text.
+
+`design.css:28-32` already states the rule that catches all of these — *"Each foreground is checked against its own `-bg` pairing, not against `--bg`"* — and `build.html:263` shows someone hitting the inversion and correctly flipping white→black for dark. The knowledge exists; it just is not applied consistently.
+
+```
+grep -nE "rgba\(0,\s*0,\s*0|rgba\(255,\s*255,\s*255" public/*.html public/*.css
+```
+For each hit, ask what `var(--…)` surface it sits on and whether that token inverts. **Measure in both themes** — and measure *after* the transition settles (see §8b).
+
+### A bare `DATE` column reaching `res.json` or `toISOString`
+
+node-postgres parses a `DATE` column to **local** midnight, not UTC. Read it back with `toISOString()` — or let `JSON.stringify` do it — and in any timezone ahead of UTC you get the **previous day**.
+
+Found in: the newsletter's cycle reference date (a 1 January cycle would have printed the previous year's RSD schedule); `/api/squadron/timeline`; `/api/export/shop-lists` (the printed handout showed **7 August for an 8 August drill** under `TZ=Asia/Tokyo`); `lib/cycles.js:7,50,79` via `server.js:1624`, still unfixed as of #85; and the newsletter **cover's date range** — `fmtRange` in `newsletter/from-db.js`, which printed **10–12 Sep for the 11–13 Sep 2026 drill** under `TZ=Asia/Tokyo` (fixed 2026-08-25, regression test in `test/newsletter-http.test.js`).
+
+That last one is the family's own lesson and worth reading twice: **`to_char`ing the column is not enough if the consumer re-parses the string.** #85 added `to_char(start_date, …) AS start_iso` to the newsletter's cycle query, and `fmtRange` then undid it with `new Date(v + 'T00:00:00')` — no `Z`, so local midnight again. Its other branch took node-pg's `Date` and read `getUTCDate()` off it. **Both** input shapes lost the day; fixing only the string half leaves the pg-`Date` half broken. The fix is `lib/attendance.js`'s `toUTCDate` — local getters for a `Date`, an explicit `'Z'` for a string — which is the one correct implementation of this normalisation and, as noted below, was already flagged here as a non-instance.
+
+Production has **no `TZ` set** on the Railway service, so it runs UTC and this whole family is dormant there — one environment variable from live. `lib/attendance.js`'s `toUTCDate` handles a pg `Date` correctly with local getters and is **not** an instance; do not "fix" it — it is the fix, and `newsletter/from-db.js` now calls it.
+
+**The rule:** dates leave the database as strings. Every lib `SELECT` uses `to_char(col, 'YYYY-MM-DD')`, and the calendar compares dates as plain ISO strings precisely to avoid this. If a `DATE` column is going to be serialised or formatted, `to_char` it in the query.
+
+```
+grep -rnE --include=*.js \
+  "\b(start_date|end_date|bmt_start|bmt_grad|tech_start|tech_grad)\b" \
+  *.js lib newsletter tools data
+```
+
+**Scope it to the whole server-side surface, not `server.js lib/*.js`.** The narrow pair was the check's worst failure: it never looked at `newsletter/`, `notify-digests.js`, `seed.js`, `import-tasks.js`, `sync-tasks.js`, `tools/` or `data/` — and the `fmtRange` bug above sat in that blind spot for months while §8a's own found-list already named the newsletter as an instance. `public/` and `test/` are deliberately out: no pg `DATE` reaches them, dates arrive there as JSON strings.
+
+**Do not add `| grep -v to_char`.** The old check ended that way and it is not merely a noise filter, it is a false-negative machine: the filter is line-oriented, so a line carrying a `to_char` for **one** column drops the **bare** columns sitting next to it. `newsletter/from-db.js:42` is exactly that line — `SELECT name, start_date, end_date, to_char(start_date, …) AS start_iso` — and the filter threw it away. Dropping the filter costs 19 extra lines out of 96 and every one of the 19 is a one-glance dismissal. If you want to triage faster, read the hits and ask *which* column on the line is bare; do not let `grep` decide.
+
+**Do not narrow to `SELECT` either.** The obvious version — `grep "SELECT[^;]*start_date"` — misses **three of the five** instances #85 dealt with, for two reasons worth remembering: the queries are **multiline**, so `SELECT` and the column sit on different lines and a line-oriented grep cannot see both; and two of the three `lib/cycles.js` instances are `INSERT … RETURNING` and `UPDATE … RETURNING`, not `SELECT` at all — `RETURNING` serialises columns exactly the same way. (It *would* have matched the two single-line `SELECT`s in `server.js` that #85 fixed. Three of five, not five of five — the advice stands, the absolute did not.)
+
+**Known limitation — the anchor is a hardcoded list of today's `DATE` columns.** A new `DATE` column under any other name is invisible to this check until someone adds it here. The six above are the complete set as of 2026-08-25, and they are declared in **two different shapes**, which is why the old `start_date|end_date` pair looked complete: `start_date`/`end_date` are inline column definitions inside `CREATE TABLE` (`uta_cycles`, `drill_dates`, `calendar_events`), while `bmt_start`/`bmt_grad`/`tech_start`/`tech_grad` only ever appear as `ALTER TABLE … ADD COLUMN` — at `schema.sql:279-282` and again in `server.js`'s boot migration (`:237-240`). A scan that looks for one shape misses the other, so match both:
+
+```
+grep -hiE "^\s+[a-z_]+\s+DATE\b|ADD COLUMN IF NOT EXISTS [a-z_]+ +DATE\b" schema.sql server.js
+```
+
+(`drill_dates` is a **table**, not a column — its `DATE` columns are `start_date`/`end_date` and are already covered. Putting the table name in the pattern would match every reference to the table and buy nothing.)
+
+The check is noisy by design, which is the correct trade for a standing grep: a false positive costs a glance, a false negative ships the bug. **Verified 2026-08-25:** 96 hits across nine files; it finds all three `lib/cycles.js` sites, correctly shows the two `server.js` sites fixed in #85 as `to_char`'d, and — the whole point of the widening — it finds `newsletter/from-db.js:42` and `:117`, the `fmtRange` site. The old `server.js lib/*.js | grep -v to_char` form returned 68 hits and **zero** of the newsletter's.
+
+---
+
+## 8b. Verification gotchas — these each cost an hour to rediscover
+
+- **The Browser pane's `left_click` hangs**, even with the tab fronted. It is a tool problem, not a page problem. Use `element.click()` via `javascript_tool` for genuine handler dispatch, and prove hittability with geometry instead: `getBoundingClientRect()` then `document.elementFromPoint(cx, cy)`, asserting it returns the element or a descendant. That catches overlays, zero-size boxes and off-viewport controls, and covers every control rather than the one you clicked. `computer {action:"screenshot"}` also fails intermittently with a compositing error.
+- **Theme colours animate.** Measuring contrast immediately after flipping `data-theme` returns nonsense — a stale `--text` once produced a bogus 1.06 ratio that looked like a serious defect. Wait for the transition to settle. The app persists its own preference in `localStorage.theme` and `data-theme` on `documentElement`, which **overrides** the browser/OS colour-scheme setting.
+- **The service worker precaches `duties.js` and `calendar.js`** (added in #84 so their offline notices can render). A plain reload after editing either file serves the **stale** module. Unregister the worker and clear caches when verifying front-end changes, or you will debug code that is not running.
+- **A green local suite does not predict CI.** Local runs go to a *remote* Railway Postgres (~50-100ms round trips, ~13 min); CI uses a *local* one (sub-millisecond, ~6 min). A DDL race that local timing reliably hid failed on the first CI run of #84 — `duplicate key value violates unique constraint "pg_type_typname_nsp_index"`. **What fixes it is an advisory lock, not `app.ready`.** Both schema writers take `acquireMigrationLock` from `lib/db.js:39` — `applySchema()` at `test/helpers/db.js:27` on one side, `server.js:120` around the boot migration on the other — so they queue instead of colliding. `test/helpers/db.js:11-40` is explicit that retrying alone "made that survivable but not reliable… So both sides now take the advisory lock from `lib/db.js`"; the retry loop stayed only as a second line of defence.
+
+  `app.ready` is a narrower, separate thing: it covers **raw DDL written in a test body**, which no lock reaches (`server.js:109-116` says so). Counted against the tree 2026-08-25, across 40 test files: 22 `require('../server')`, **29** call `applySchema()`, and only **5** await `app.ready` — the three files that issue their own `CREATE`/`DROP TABLE` (`calendar-events-`, `drill-dates-`, `duties-http`) plus two that await it belt-and-braces. That leaves **16** files doing lock-protected DDL via `applySchema()` while requiring `server.js` and never awaiting `app.ready` — which is **correct, not a violation**; `test/cycle-name-http.test.js` is one of them. Do not "fix" them by adding an await, and do not read a missing `app.ready` as a bug. **For anything timing-sensitive, CI is the only real gate.**
+- **`TZ=…` does not work in the Bash tool, and fails silently.** Verified 2026-08-25: `TZ=UTC` is honoured, but `TZ=Asia/Tokyo` and `TZ=America/Denver` both resolve to **America/New_York** — the host zone — with no error. PowerShell's `$env:TZ = 'Asia/Tokyo'` works correctly. This matters specifically for the date family in §8a: the host zone is *behind* UTC, which is the one direction where that bug **cannot** manifest, so a Bash-run timezone check reports "no bug" no matter what. Any "verified under `TZ=<somewhere>`" claim made through Bash is a no-op. Use PowerShell, and sanity-check the zone actually took:
+  ```
+  $env:TZ='Asia/Tokyo'; node -e "console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)"
+  ```
+  The date bug reproduces cleanly once the zone is real: `new Date('2026-08-08T00:00:00').toISOString().slice(0,10)` gives `2026-08-07` under Asia/Tokyo and `2026-08-08` under UTC.
+- **Suite summary format differs by invocation.** A single-file run prints `# pass N`; the full `npm test` prints `ℹ pass N`. A grep for `# pass` against a full-suite log finds nothing and, with `grep -c`, exits 1 — which has already poisoned a compound command into reporting a passing suite as failed. Match on `pass`, never on `# pass`. And never pipe a test run through `tail`/`head`/`grep`: the exit code becomes the pipe's.
+
+---
+
 ## 9. Uncommitted local WIP — none (resolved 2026-08-17)
 
 **There is no uncommitted WIP any more. `master` is the whole project.** This section used to
