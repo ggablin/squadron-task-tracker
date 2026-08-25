@@ -141,6 +141,36 @@ button { font-family:inherit; cursor:pointer; }
 }
 .btn-ghost-inv:hover { background:rgba(255,255,255,.18); }
 
+/* ── The cycle bar in dark mode ───────────────────────────────────────────
+   .cycle-bar paints itself with var(--text), which INVERTS: near-black in
+   light, near-white in dark. Everything layered on it was authored against
+   the light bar and blends the wrong way on the dark one.
+
+   The button survived on text alone — color:var(--cream) inverts in lockstep
+   with the bar, measured 12.15:1 in dark — but its fill and border are
+   hardcoded white and washed out to 1.02:1 and 1.05:1 against a near-white
+   bar, which is why "+ New cycle" read as bare text with no control around
+   it. Flipping white→black for dark is the same move .mchip.sel .rk already
+   makes below.
+
+   Measured on the dark bar (#ece8e0): fill 1.02→1.34:1 (light is 1.35:1),
+   border 1.05→3.24:1, hover fill 1.02→1.76:1 (light hover is 1.78:1). The
+   border is pushed past 3:1 rather than to light's 2.28:1 because it is the
+   only thing marking the control's bounds; light's own value is left as
+   authored.
+
+   The two opacity-dimmed labels fail the same way in a subtler form: dimming
+   blends them TOWARD the bar, so .55 and .65 that measure 5.52:1 and 7.16:1
+   over the light bar collapse to 3.31:1 and 4.36:1 over the dark one — both
+   under AA. Raised until each clears 4.5:1, keeping the label dimmer than the
+   meta line as in light: 3.31→5.05:1 and 4.36→5.85:1. */
+[data-theme="dark"] .btn-ghost-inv {
+  background:rgba(0,0,0,.13); border-color:rgba(0,0,0,.45);
+}
+[data-theme="dark"] .btn-ghost-inv:hover { background:rgba(0,0,0,.24); }
+[data-theme="dark"] .cycle-bar .cyc-lbl  { opacity:.7; }
+[data-theme="dark"] .cycle-bar .cyc-meta { opacity:.75; }
+
 .home-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 @media (max-width:760px){ .home-grid { grid-template-columns:1fr; } }
 

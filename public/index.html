@@ -902,8 +902,13 @@
       font-size: 10px; color: rgba(255,255,255,.5); margin-top: 1px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    /* .org-rank-sm is the fallback for a staff member with no position — it
+       takes .org-pos's slot, never sits beside it. At .45 it measured 3.96:1
+       on the person tile (#313131), under AA for 10.5px body text; .org-pos's
+       own .5 clears it by 0.01. Raised to .55 → 5.12:1, which also lines up
+       with the dark rule below at 5.09:1. */
     .org-staff-person .org-rank-sm {
-      font-size: 10.5px; color: rgba(255,255,255,.45); margin-top: 1px;
+      font-size: 10.5px; color: rgba(255,255,255,.55); margin-top: 1px;
     }
     [data-theme="dark"] .org-staff {
       background: var(--cream); color: var(--text);
@@ -916,7 +921,13 @@
     }
     [data-theme="dark"] .org-staff-person .org-name { color: var(--text); }
     [data-theme="dark"] .org-staff-person .org-pos { color: var(--t2); }
-    [data-theme="dark"] .org-staff-person .org-rank-sm { color: var(--t3); }
+    /* --t3 is strokes-and-icons-only (design.css:25) and measured 2.35:1 here,
+       on the tile's rgba(255,255,255,.05) over --cream = #35322f. --t3-nav-text
+       is the muted-TEXT token but only reaches 4.20:1 on this particular
+       surface, so it would swap one AA failure for another. --t2 gets 5.09:1 —
+       and it is already what .org-pos uses one line up, which is right, since
+       the two render into the same slot and never appear together. */
+    [data-theme="dark"] .org-staff-person .org-rank-sm { color: var(--t2); }
 
     /* Flight cards */
     .org-flights-grid {
