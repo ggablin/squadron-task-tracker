@@ -145,20 +145,29 @@
     };
     const btn = $('duty-save');
     btn.disabled = true;
+    // Hoisted out of the try so the catch below can see it — res itself is
+    // const-scoped to the try block.
+    let status = null;
     try {
       const res = await fetch(editingId ? `/api/duties/${editingId}` : '/api/duties', {
         method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
+      status = res.status;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not save');
       closeModal('duty-modal');
       toast(editingId ? 'Duty updated' : 'Duty added', 'success');
       await load();
     } catch (e) {
-      // 400 and 409 leave the modal open so the value can be corrected.
+      // 400 and 409 leave the modal open so the value can be corrected. A 404
+      // means the row itself was deleted (another device/tab) since the editor
+      // opened — recover by closing and reloading rather than leaving the
+      // member stuck editing a duty that's already gone. Keyed off the status
+      // code rather than the error text, since the text is just server.js's
+      // wording and shouldn't be load-bearing for client recovery logic.
       toast(e.message || 'Could not save', 'error');
-      if (/no longer exists/.test(e.message || '')) { closeModal('duty-modal'); await load(); }
+      if (status === 404) { closeModal('duty-modal'); await load(); }
     }
     btn.disabled = false;
   }
@@ -198,5 +207,20 @@
     // already typed carries forward instead of silently resetting to "all
     // 52" on every pane visit.
     if (!loaded) load(); else renderList();
+  };
+
+  // Logout hook (called from index.html's doLogout): clears the closure state
+  // above so a same-tab sign-in as a different member starts clean instead of
+  // showing the previous member's rows and canEdit. Hung off the existing
+  // dutiesInit global rather than a second one — dutiesInit is already the
+  // module's sole public entry point, and shellReady=false/loaded=false makes
+  // the next dutiesInit() call behave exactly like a fresh page load (shell()
+  // rebuilds, load() re-fetches) without duplicating that logic here.
+  window.dutiesInit.reset = function () {
+    all = [];
+    canEdit = false;
+    shellReady = false;
+    editingId = null;
+    loaded = false;
   };
 })();

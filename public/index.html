@@ -4523,6 +4523,13 @@ async function doLogout() {
   currentMember = null; currentTasks = []; shopMembers = [];
   // Also drop the SWR caches so the next user in this tab starts clean.
   _tasksLoaded = false; _eventsLoaded = false; _shopEventsKey = ''; shopEventsCache = []; timelineCache = null;
+  // duties.js and calendar.js keep their own closure-private state (rows,
+  // canEdit, shellReady) that this file can't reach directly — each exposes
+  // a .reset() alongside its init global for exactly this. Guarded the same
+  // way callers guard the init calls themselves, so a logout still works if
+  // one of those scripts never loaded.
+  if (window.dutiesInit && window.dutiesInit.reset) window.dutiesInit.reset();
+  if (window.calendarInit && window.calendarInit.reset) window.calendarInit.reset();
   document.getElementById('app').style.display = 'none';
   showLogin();
 }

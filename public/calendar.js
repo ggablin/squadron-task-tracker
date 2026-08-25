@@ -246,11 +246,15 @@
       : { start_date: $('cal-f-start').value, end_date: $('cal-f-end').value, note: $('cal-f-note').value };
     const btn = $('cal-save');
     btn.disabled = true;
+    // Hoisted out of the try so the catch below can see it — res itself is
+    // const-scoped to the try block.
+    let status = null;
     try {
       const res = await fetch(id ? `${pathFor(kind)}/${id}` : pathFor(kind), {
         method: id ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
+      status = res.status;
       const saved = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(saved.error || 'Could not save');
       closeModal('cal-modal');
@@ -258,9 +262,15 @@
       // Show the year it belongs to, so a next-year entry is visible at once.
       await load(Number(String(saved.start_date).slice(0, 4)) || data.year);
     } catch (e) {
-      // 400 and 409 leave the modal open so the dates can be corrected.
+      // 400 and 409 leave the modal open so the dates can be corrected. A 404
+      // means the row itself was deleted (another device/tab) since the editor
+      // opened — recover by closing and reloading rather than leaving the
+      // member stuck editing a drill/event that's already gone. Keyed off the
+      // status code rather than the error text, since the text is just
+      // server.js's wording and shouldn't be load-bearing for client recovery
+      // logic.
       toast(e.message || 'Could not save', 'error');
-      if (/no longer exists/.test(e.message || '')) { closeModal('cal-modal'); await load(data.year); }
+      if (status === 404) { closeModal('cal-modal'); await load(data.year); }
     }
     btn.disabled = false;
   }
@@ -300,5 +310,25 @@
     // DOM at click time, so it doesn't go stale the way an admin-aware shell
     // would.
     if (!loaded) load(lastYear); else render();
+  };
+
+  // Logout hook (called from index.html's doLogout): clears the closure state
+  // above so a same-tab sign-in as a different member starts clean instead of
+  // showing the previous member's data and canEdit. Hung off the existing
+  // calendarInit global rather than a second one, for the same reason
+  // duties.js does — it's already the module's sole public entry point.
+  // inFlight/inFlightYear are cleared too so a slow request still pending
+  // from the old session can't be handed back by load()'s dedupe check to a
+  // fresh load() for the same year; seq is left alone since it only needs to
+  // keep increasing for that stale response's `mine !== seq` check to drop it.
+  window.calendarInit.reset = function () {
+    data = null;
+    canEdit = false;
+    shellReady = false;
+    editing = null;
+    loaded = false;
+    inFlight = null;
+    inFlightYear = null;
+    lastYear = null;
   };
 })();
