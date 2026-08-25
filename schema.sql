@@ -332,11 +332,10 @@ CREATE INDEX IF NOT EXISTS idx_notifications_unpushed
 -- them, and the newsletter renders the first two. These CREATEs are the twins of
 -- the DDL in lib/duties.js, lib/drill-calendar.js and lib/calendar-events.js,
 -- which the server.js boot block runs — with one difference: the boot block also
--- seeds the initial rows the first time it creates each table. This copy still
--- creates them empty, which is what the tests want — but seed.js is not left
--- with empty tables either: it calls each lib's seedIfEmpty right after
--- applying this schema, so a freshly seeded database gets the initial rows
--- too, just one step later than server.js does.
+-- seeds the initial rows the first time it creates each table. This copy creates
+-- them empty, which is what the tests want: they apply this file directly and
+-- insert whatever rows each case needs. Seeding the initial rows is the boot
+-- block's job alone.
 CREATE TABLE IF NOT EXISTS additional_duties (
   id              SERIAL PRIMARY KEY,
   duty            VARCHAR(120) NOT NULL,

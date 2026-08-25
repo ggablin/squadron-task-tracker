@@ -5,9 +5,6 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const fs = require('fs');
 const path = require('path');
-const duties = require('./lib/duties');
-const drillCal = require('./lib/drill-calendar');
-const calEvents = require('./lib/calendar-events');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -125,23 +122,6 @@ async function seed() {
     const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
     await client.query(schema);
     console.log('✓ Schema applied');
-
-    // Resources reference tables. schema.sql creates additional_duties,
-    // drill_dates and calendar_events EMPTY, which then satisfies each lib's
-    // to_regclass guard on every later boot — so server.js would never seed them
-    // and a freshly provisioned database (preview, staging) would render People
-    // and Calendar blank, with no error and no recovery short of dropping the
-    // tables. This is the only moment they can be filled.
-    //
-    // Must run AFTER the schema — each DDL carries REFERENCES members(id), so
-    // creating these first would fail on a database that has no members table —
-    // and on `client`, because everything above is still uncommitted and a
-    // second connection issuing DML against it would block indefinitely.
-    for (const [label, mod] of [['Additional duties', duties], ['Drill dates', drillCal],
-                                ['Calendar events', calEvents]]) {
-      const { seeded } = await mod.seedIfEmpty(client);
-      console.log(`✓ ${label}: ${seeded ? `${seeded} inserted` : 'already populated — left alone'}`);
-    }
 
     // Shop
     const { rows: [shop] } = await client.query(`

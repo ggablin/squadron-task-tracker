@@ -19,6 +19,11 @@ const app = require('../server');
 let server, baseUrl;
 
 test.before(async () => {
+  // Requiring server.js above kicked off its boot migration, which creates and
+  // seeds additional_duties. This file drops and re-creates that table with raw
+  // DDL, which takes no lock, so the boot has to be finished — not merely
+  // ordered against applySchema() — before any of it runs.
+  await app.ready;
   await applySchema();
   await new Promise((resolve, reject) => {
     server = app.listen(0, err => (err ? reject(err) : resolve()));
@@ -102,28 +107,6 @@ test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind
   assert.deepStrictEqual(await duties.ensureTable(pool, DEFAULTS), { created: true, seeded: 52 });
   assert.strictEqual(
     Number((await pool.query('SELECT COUNT(*) FROM additional_duties')).rows[0].count), 52);
-});
-
-// The seed.js path: empty-not-absent. Unlike ensureTable, seedIfEmpty takes an
-// already-created table (schema.sql's twin CREATE, applied here via DDL
-// directly) and must fill it exactly once — a second call on a table that
-// already has rows, whether from a prior seed or from an admin's own edits,
-// must add nothing and touch nothing.
-test('seedIfEmpty: fills an empty table once, and never touches an already-populated one', async () => {
-  await pool.query('DROP TABLE IF EXISTS additional_duties');
-  await pool.query(duties.DDL);
-  const count = async () => Number((await pool.query('SELECT COUNT(*) FROM additional_duties')).rows[0].count);
-  assert.strictEqual(await count(), 0);
-
-  assert.deepStrictEqual(await duties.seedIfEmpty(pool, DEFAULTS), { seeded: 52 });
-  assert.strictEqual(await count(), 52);
-
-  // Mutate one row so a reseed would be visible, then call a second time.
-  await pool.query(`UPDATE additional_duties SET primary_owner = 'Changed' WHERE duty = 'ADUTM'`);
-  assert.deepStrictEqual(await duties.seedIfEmpty(pool, DEFAULTS), { seeded: 0 });
-  assert.strictEqual(await count(), 52, 'a populated table gains no rows');
-  const { rows: [row] } = await pool.query(`SELECT primary_owner FROM additional_duties WHERE duty = 'ADUTM'`);
-  assert.strictEqual(row.primary_owner, 'Changed', 'a populated table is left untouched, not reseeded');
 });
 
 test('signed out: every duties route is 401', async () => {

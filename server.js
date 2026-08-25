@@ -88,7 +88,16 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
 // test process applying schema.sql at the same moment — queues behind this one
 // instead of deadlocking against it. withDeadlockRetry below stays as a second
 // line of defence for anything the lock doesn't cover. See lib/db.js.
-(async () => {
+//
+// Exposed as app.ready because this is fire-and-forget: requiring server.js
+// starts it and nothing could wait for it. A test that then runs its own DDL
+// races these ensureTable calls — the lock orders this block against
+// applySchema(), but raw DDL in a test body is not lock-protected, so if the
+// test side wins the lock first (fast local Postgres, i.e. CI) the CREATEs here
+// land in the middle of the test and collide. Awaiting app.ready first removes
+// the overlap entirely. Resolves rather than rejects: the catch below turns any
+// migration failure into a warning, so awaiting it never throws.
+app.ready = (async () => {
   let releaseMigrationLock = null;
   try {
     releaseMigrationLock = await acquireMigrationLock(pool);
