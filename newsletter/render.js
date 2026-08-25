@@ -2,8 +2,8 @@
 //
 // Section order mirrors the August 2026 RSD newsletter page for page, so anyone
 // used to the PDF finds the same thing in the same place. Live sections are built
-// from Postgres; the rest are editable partials in static/, because the squadron
-// keeps that content by hand and the tracker has no field for it.
+// from Postgres; six remaining partials in static/ are editable by hand, because
+// the tracker has no field for them yet.
 
 const fs = require('fs');
 const path = require('path');
@@ -14,13 +14,11 @@ const STATIC_DIR = path.join(__dirname, 'static');
 
 const STATIC_SLIDES = {
   safety:     { file: 'safety.html',            eyebrow: 'Safety',   title: 'Monthly Safety Review' },
-  additional: { file: 'additional-duties.html', eyebrow: 'Squadron', title: 'Additional Duties List' },
   awards:     { file: 'awards.html',            eyebrow: 'Squadron', title: 'CE / Wing Quarterly Awards' },
   meetsRadr:  { file: 'meets-radr.html',        eyebrow: 'Training', title: 'MEETs / RADR / Silver Flag' },
   addlTrain:  { file: 'additional-training.html', eyebrow: 'Training', title: 'Additional Training — AFI 10-210' },
   measure:    { file: 'measurements.html',      eyebrow: 'Fitness',  title: 'Height / Waist / Weight' },
   dental:     { file: 'dental-buckets.html',    eyebrow: 'Medical',  title: 'Dental Status' },
-  rsd:        { file: 'rsd-schedule.html',      eyebrow: 'Calendar', title: 'RSD Schedule — CY 2026' },
 };
 
 function staticSlide(key) {
@@ -46,7 +44,7 @@ function sections(data) {
     () => S.timeline(data),                       //  6  UTA Timeline
     () => staticSlide('safety'),                  //  7  Monthly Safety
     () => S.workSchedule(data),                   //  8  UTA Work Schedule
-    () => staticSlide('additional'),              //  9  Additional Duties
+    () => S.additionalDuties(data),               //  9  Additional Duties
     () => staticSlide('awards'),                  // 10  Quarterly Awards
     () => staticSlide('meetsRadr'),               // 11  MEETs / RADR / Silver Flag
     () => S.cbts(data),                           // 12  CBTs
@@ -60,7 +58,7 @@ function sections(data) {
     () => staticSlide('measure'),                 // 20  Height / Waist / Weight — no field in the tracker
     () => S.inbound(data),                        // 21  Inbound / Outbound Airmen
     () => S.upgrade(data),                        // 22  Upgrade Training
-    () => staticSlide('rsd'),                     // 23  RSD Schedule CY 2026
+    () => S.rsdSchedule(data),                    // 23  RSD Schedule
   ];
 }
 

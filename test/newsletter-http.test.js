@@ -64,6 +64,15 @@ async function seed() {
   await pool.query(
     `INSERT INTO uta_cycles (name, start_date, end_date, is_current, status)
      VALUES ('August 2026 UTA', DATE '2026-08-08', DATE '2026-08-09', true, 'live')`);
+  await pool.query(`
+    INSERT INTO additional_duties (duty, primary_owner, alternate_owner) VALUES
+      ('Lodging Monitor', 'Glikin', 'King'),
+      ('Records Management / FARM', NULL, NULL)`);
+  await pool.query(`
+    INSERT INTO drill_dates (start_date, end_date, note) VALUES
+      (DATE '2026-06-05', DATE '2026-06-07', NULL),
+      (DATE '2026-08-08', DATE '2026-08-09', NULL),
+      (DATE '2026-09-11', DATE '2026-09-13', NULL)`);
 }
 
 const get = (cookie) => fetch(`${baseUrl}/newsletter`, {
@@ -102,6 +111,46 @@ test('leadership gets the full deck, built from the live cycle', async () => {
     'all 23 sections render even when the cycle is thinly populated');
   assert.ok(!/(?:src|href)="(?!data:)/.test(html),
     'the page must stay self-contained so it survives being emailed');
+});
+
+test('the duties and RSD slides render from the tables, relative to the cycle being printed', async () => {
+  await seed();
+  const html = await (await get(await login('leadtest'))).text();
+  assert.match(html, /Additional Duties List/);
+  assert.match(html, /<td>Lodging Monitor<\/td><td>Glikin<\/td><td>King<\/td>/);
+  assert.match(html, /<tr class="red"><td>Records Management \/ FARM<\/td><td>—<\/td><td>—<\/td>/,
+    'a duty with no primary owner prints red');
+  assert.match(html, /RSD Schedule — CY 2026/);
+  assert.match(html, /<s>5–7 Jun 2026 \(3-Day Drill\)<\/s>/, 'a drill that ended before this cycle is struck through');
+  assert.match(html, /<b>8–9 Aug 2026<\/b>/, "this cycle's own drill is bold");
+  assert.match(html, /<li>11–13 Sep 2026 \(3-Day Drill\)<\/li>/, 'a later drill is plain');
+  assert.match(html, /NO UTA JULY 2026/);
+  assert.strictEqual((html.match(/<section class="slide/g) || []).length, 23);
+  assert.ok(!/(?:src|href)="(?!data:)/.test(html), 'still self-contained');
+});
+
+// The other half of rsdSchedule's gate. buildYear() fills every month no drill
+// touches with a no_uta entry, so cal.entries is never empty on its own: an
+// ungated slide prints twelve "NO UTA" lines for a year nobody has entered drills
+// for yet, which is what would have gone out to ~70 readers. The populated year
+// above exercises the true branch; this one exercises the false branch.
+test('a year with no drills prints the empty note, not twelve NO UTA lines', async () => {
+  await seed();   // seeds drill_dates for 2026 only
+  const { rows: [cycle] } = await pool.query(
+    `INSERT INTO uta_cycles (name, start_date, end_date, is_current, status)
+     VALUES ('February 2027 UTA', DATE '2027-02-05', DATE '2027-02-07', false, 'live')
+     RETURNING id`);
+  const res = await fetch(`${baseUrl}/newsletter?uta=${cycle.id}`,
+    { headers: { Cookie: await login('leadtest') } });
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /RSD Schedule — CY 2027/, 'the slide is printed for the cycle asked for');
+  assert.match(html, /No drill dates recorded in the tracker for this UTA\./,
+    'the empty note stands in for the whole list');
+  assert.doesNotMatch(html, /NO UTA/,
+    'not one no_uta line may escape the gate, let alone twelve');
+  assert.strictEqual((html.match(/<section class="slide/g) || []).length, 23,
+    'the slide still renders — an empty year is not a missing slide');
 });
 
 test('a malformed ?uta is rejected rather than silently falling back to the live cycle',

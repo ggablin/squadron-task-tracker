@@ -225,6 +225,44 @@ function upgrade(d) {
     `<div class="ug-cols">${col('5-Level', d.upgrade.fiveLevel)}${col('7-Level', d.upgrade.sevenLevel)}</div>${waiting}`);
 }
 
+// ── 9. Additional Duties ──────────────────────────────────────────────────
+// Two side-by-side tables, split in half, so ~50 rows fit one printed page —
+// the layout the hand-edited partial used. A duty with no primary owner prints
+// red: that is what "needs owner" looks like on paper.
+function additionalDuties(d) {
+  const rows = d.duties || [];
+  const half = Math.ceil(rows.length / 2);
+  const cell = (v) => esc(v || '—');
+  const table = (list) => `<table class="duties-table"><thead><tr><th>Additional Duty</th><th>Primary</th><th>Alternate</th></tr></thead><tbody>${
+    list.map(r => `<tr${r.primary_owner ? '' : ' class="red"'}><td>${esc(r.duty)}</td><td>${cell(r.primary_owner)}</td><td>${cell(r.alternate_owner)}</td></tr>`).join('')
+  }</tbody></table>`;
+  const body = rows.length
+    ? `<div class="duties-cols">${table(rows.slice(0, half))}${table(rows.slice(half))}</div>`
+    : '<p class="empty">No additional duties recorded in the tracker.</p>';
+  return chrome('Squadron', 'Additional Duties List', body, '', `${rows.length} duties`);
+}
+
+// ── 23. RSD Schedule ──────────────────────────────────────────────────────
+// The calendar year as lib/drill-calendar.js derives it, relative to the cycle
+// being printed: past drills struck through, this UTA bold, gaps spelled out.
+function rsdSchedule(d) {
+  const cal = d.calendar || { year: new Date().getUTCFullYear(), entries: [] };
+  const line = (e) => {
+    if (e.kind === 'no_uta') return `<li>NO UTA ${esc(e.label.toUpperCase())} ${cal.year}</li>`;
+    const text = `${esc(e.label)} ${cal.year}${e.threeDay ? ' (3-Day Drill)' : ''}${e.note ? ` (${esc(e.note)})` : ''}`;
+    return `<li>${e.past ? `<s>${text}</s>` : e.next ? `<b>${text}</b>` : text}</li>`;
+  };
+  // buildYear() fills every uncovered month with a no_uta entry, so cal.entries is
+  // never empty on its own — a year with no drills entered would otherwise print
+  // twelve "NO UTA <month>" lines instead of the honest empty note. Check for an
+  // actual drill instead.
+  const hasDrills = cal.entries.some(e => e.kind === 'drill');
+  const body = hasDrills
+    ? `<p class="intro">Completed drills are struck through; this UTA is in bold.</p><ul class="rsd-list">${cal.entries.map(line).join('')}</ul>`
+    : emptyNote('drill dates');
+  return chrome('Calendar', `RSD Schedule — CY ${cal.year}`, body);
+}
+
 // Wrap an editable static partial's body in standard slide chrome.
 function staticSlide(eyebrow, title, bodyHtml) {
   return chrome(eyebrow, title, `<div class="static-body">${bodyHtml}</div>`);
@@ -232,5 +270,5 @@ function staticSlide(eyebrow, title, bodyHtml) {
 
 module.exports = {
   beginDeck, cover, orgSlide, timeline, workSchedule, sgliVred, cbts,
-  orders, epbs, medical, pt, inbound, upgrade, staticSlide, esc,
+  orders, epbs, medical, pt, inbound, upgrade, additionalDuties, rsdSchedule, staticSlide, esc,
 };

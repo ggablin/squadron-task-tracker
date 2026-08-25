@@ -82,6 +82,13 @@ All three nav tabs are visible to everyone; per-section gating hides what a role
   - **Present-vs-all percentages:** an "All members / At drill" toggle on the Squadron stats pane re-renders gauge, shop chart, category card, and most-behind list. Presence rule lives in `lib/presence.js`: a member is present unless attendance rows exist for the cycle and none is `present`/`agr_at_orders` — unmarked counts present, so both numbers match until attendance is marked. Both flavors ship in the same payloads (`*_present` columns on `/api/squadron` + `/api/squadron/categories`; `/api/squadron/members?present=true` is its own top-10).
   - **My Shop category view:** "By member / By category" toggle on the Members pane (supervisors/leadership only). Category view groups category → task → member chips (tap to toggle done, away badge). `GET /api/shop/tasks` (supervisor own shop; leadership any via `?shop_id`).
   - **Task helpers:** `tasks.link_url` + `tasks.document_id` (FK → Resources documents). Members get "Open link" / form-download pills on the task; bare URLs in details are auto-linkified. Authorable everywhere: supervisor Add Task, leadership bulk add, `/build` new-task + live-add + group editor; carried by copy-forward. Validation shared in `resolveTaskHelpers` (server.js): http(s) only, active documents only.
+- **Resources restructure + reference data (2026-08-23):** the tab strip became five subject-shaped tabs — **Calculators · Forms · Links · People · Calendar** — and two more newsletter partials became tables.
+  - **Calculators:** PT and Promotion now share one tab behind a `.seg-toggle` (`setCalcView`). Their panes keep their ids and only swapped `.res-pane` for `.calc-view`, so no calculator code changed. This freed the slot Calendar took.
+  - **People** (the renamed Org Chart tab): chain of command | **additional duties** (`additional_duties`), a filterable divider list; a blank primary owner renders a **Needs owner** chip. `GET /api/duties` (any member), `POST/PATCH/DELETE` (roster admins). Logic `lib/duties.js`, UI `public/duties.js`.
+  - **Calendar:** the year as one chronological stream — twelve month groups, drill weekends (`drill_dates`) and TDY/training rotations (`calendar_events`) interleaved, `No UTA` on months without a drill, past struck through, next chipped, year picker once a second year has rows. **One read endpoint,** `GET /api/calendar?year=`, returns the year already derived; writes are `/api/drill-dates` and `/api/calendar-events` (roster admins). Drills refuse to overlap each other and cap at seven days; events do neither, because rotations overlap and a DFT runs a fortnight. Logic `lib/drill-calendar.js` (pure derivation, shared with the newsletter) and `lib/calendar-events.js`, UI `public/calendar.js`.
+  - **Seed-on-create:** each table is loaded from `data/additional-duties.js` / `data/drill-dates.js` / `data/calendar-events.js` only in the boot that creates it (`ensureTable`), so production will get 52 duties, ten drills and ten rotations on the first deploy that carries this branch, and deleted rows never return afterwards. `schema.sql` carries the CREATEs empty for the tests, which apply it directly; the boot block is the only thing that ever seeds these three tables.
+  - Newsletter slides 9 (Additional Duties) and 23 (RSD Schedule) render from the tables, relative to the cycle being printed. **MEETs/RADR (11) stays hand-edited** even though `calendar_events` models it — retiring it is a follow-on. `newsletter/from-sample.js` and `newsletter/preview-server.js` were removed (dead since 2026-08-17).
+  - Design constraints this work had to honour, all from `.impeccable/` and `design.css`: `--t3` is strokes/icons only (use `--t3-nav-text`), status chips use the measured `--ok-bg`/`--ok` style pairs, no side-stripe accents, 44px targets, toggles are `role="group"` + `aria-pressed`.
 
 ---
 
@@ -152,7 +159,7 @@ A leadership tool to author each UTA cycle in-browser and review member history,
 
 **History immutability:** completion writes are gated to the **live** cycle only. `assertTaskInLiveCycle` guards `PUT /api/tasks/:id` (the completion-toggle route) and rejects with `403` if the task's cycle isn't the current live one. Archived cycles are therefore frozen — a permanent, per-member snapshot of where they ended each month, safe for Records to display without fear of retroactive edits.
 
-**Tests:** first automated test tooling in this repo. `node:test` suite in `test/*.test.js` (22 tests across `cycles`, `tasks`, `batches`, `records`, `immutability`), run against a disposable Postgres via `TEST_DATABASE_URL`:
+**Tests:** first automated test tooling in this repo — this branch added 22 tests across `cycles`, `tasks`, `batches`, `records`, `immutability`. (The `test/*.test.js` glob has grown well past that since; see §12 for the current total.) Run against a disposable Postgres via `TEST_DATABASE_URL`:
 ```
 TEST_DATABASE_URL=<pg-connection-string> ENABLE_CRON=false node --test --test-concurrency=1 test/*.test.js
 ```
@@ -234,7 +241,9 @@ longer true, and the working copy has been synced to `origin/master` with a clea
   `GET /newsletter` route are on `master` and live. The Squadron view's "Generate Newsletter"
   button works.
 - **`generate-sample-newsletter.js` — deleted.** A 22-line wrapper around
-  `newsletter/from-sample.js` + `newsletter/render.js`, both of which are on `master`.
+  `newsletter/from-sample.js` + `newsletter/render.js`, both on `master` at the time.
+  `from-sample.js` (and `newsletter/preview-server.js` alongside it) was itself deleted
+  2026-08-24 once nothing called it any more — see §5's Resources restructure entry.
 - **`generate-sample-template.js` — deleted.** The Excel template generator, built around a
   hardcoded May 2026 roster that had gone stale against Postgres, `/roster`, and
   `import-members.js` (see §6).
@@ -346,6 +355,9 @@ Ran `/impeccable critique` and shipped the P1 findings as PR #30 (merged to `mas
 - `server.js` — API routes, auth, roles, boot migrations, cron registration. Task Builder/Records routes are thin wrappers over `lib/`.
 - `lib/db.js`, `lib/cycles.js`, `lib/tasks.js`, `lib/batches.js`, `lib/records.js` — Task Builder + Records logic layer (§6a).
 - `lib/presence.js` — the "present at drill" rule for the two-way rollup percentages (shared join fragment + expression).
+- `lib/duties.js`, `lib/calendar-events.js`, `lib/drill-calendar.js` — the Resources reference data: DDL + seed-on-create (`ensureTable`), validation, CRUD. `drill-calendar.js`'s pure half (`buildYear` for the newsletter's flat drill list, `buildCalendar` for the app's month groups, plus `label`, `years`, `validateDrill`, `overlaps`) is unit-tested without a database.
+- `public/duties.js`, `public/calendar.js` — the two Resources data views; one global each (`dutiesInit`, `calendarInit`), initialised lazily from `switchResPane`/`setPeopleView`.
+- `data/additional-duties.js`, `data/drill-dates.js`, `data/calendar-events.js` — the initial rows, used only by seed-on-create and the tests.
 - `public/index.html` — the entire member/supervisor/leadership SPA (styles + markup + JS).
 - `public/build.html` — the `/build` Task Builder page (leadership).
 - `public/records.html` — the `/records` Records page (leadership + supervisor own-shop).
@@ -356,7 +368,7 @@ Ran `/impeccable critique` and shipped the P1 findings as PR #30 (merged to `mas
 - `tools/make-badge.py`, `tools/icons.md` — the notification badge (Android silhouettes it; an app icon becomes a white square) and how the app icons were made.
 - `schema.sql` — full data model, including `uta_cycles.status`, `uta_cycles_one_current`, `task_batches`, `tasks.batch_id`.
 - `seed.js` — initial DB setup + sample data (destructive).
-- `test/*.test.js`, `test/helpers/` — `node:test` suite (22 tests) for the Task Builder + Records data-safety invariants (§6a).
+- `test/*.test.js`, `test/helpers/` — `node:test` suite (**398 tests**, run with `--test-concurrency=1` against a disposable Postgres — see §6a's command). Started with the Task Builder + Records data-safety invariants (§6a) and has grown to cover the whole app: the mobile app/offline/push layer, rollout-feedback features, roster/attendance/medical/schedule/work-orders/documents, and — as of this branch — the drill-calendar derivation, the `additional_duties`/`drill_dates`/`calendar_events` CRUD + seed-on-create, and the newsletter's live slides.
 - `import-tasks.js` — legacy/backup **monthly Excel → tasks/schedule import** (destructive per cycle); `/build` is the normal path now.
 - `sync-tasks.js` — legacy/backup additive mid-cycle sync; `/build` against the live cycle is the normal path now.
 - `import-members.js` — roster import.

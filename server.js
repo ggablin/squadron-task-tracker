@@ -8,6 +8,9 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { acquireMigrationLock } = require('./lib/db');
+const duties = require('./lib/duties');
+const drillCal = require('./lib/drill-calendar');
+const calEvents = require('./lib/calendar-events');
 const { assertTaskInLiveCycle, listGroups, addTaskBatch, copyForward } = require('./lib/tasks');
 const tasksLib = require('./lib/tasks');
 const cycles = require('./lib/cycles');
@@ -85,7 +88,16 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
 // test process applying schema.sql at the same moment — queues behind this one
 // instead of deadlocking against it. withDeadlockRetry below stays as a second
 // line of defence for anything the lock doesn't cover. See lib/db.js.
-(async () => {
+//
+// Exposed as app.ready because this is fire-and-forget: requiring server.js
+// starts it and nothing could wait for it. A test that then runs its own DDL
+// races these ensureTable calls — the lock orders this block against
+// applySchema(), but raw DDL in a test body is not lock-protected, so if the
+// test side wins the lock first (fast local Postgres, i.e. CI) the CREATEs here
+// land in the middle of the test and collide. Awaiting app.ready first removes
+// the overlap entirely. Resolves rather than rejects: the catch below turns any
+// migration failure into a warning, so awaiting it never throws.
+app.ready = (async () => {
   let releaseMigrationLock = null;
   try {
     releaseMigrationLock = await acquireMigrationLock(pool);
@@ -303,6 +315,16 @@ async function withDeadlockRetry(what, fn, attempts = 4) {
         END IF;
       END $$;
     `);
+
+    // Resources reference tables (duties, drill dates, calendar events). Each
+    // lib creates its table and seeds it from data/ in the one boot that finds
+    // it absent; every later boot is a no-op, so rows an admin deletes stay
+    // gone. schema.sql carries the twin CREATEs, empty, for tests and seed.js.
+    for (const [name, mod] of [['additional_duties', duties], ['drill_dates', drillCal],
+                               ['calendar_events', calEvents]]) {
+      const r = await mod.ensureTable(pool);
+      if (r.created) console.log(`Created ${name} and seeded ${r.seeded} rows`);
+    }
   } catch (e) {
     console.error('Migration warning:', e.message);
   } finally {
@@ -407,8 +429,13 @@ function requireOnboarded(req, res, next) {
   next();
 }
 
-// Parse a route :id param to a positive integer, or null if malformed.
-function reqId(v) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
+// Parse a route :id param to a positive integer, or null if malformed. Capped at
+// int4: every id column here is INTEGER, so a larger number reaches Postgres and
+// raises 22003 — a 500 where the honest answer is 404.
+function reqId(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 && n <= 2147483647 ? n : null;
+}
 
 const VALID_URGENCY = ['overdue', 'this_uta', 'next_uta', 'future', 'info'];
 const URGENCY_LABEL = {
@@ -861,6 +888,175 @@ app.delete('/api/documents/:id', requireAuth, requireRosterAdmin, requireOnboard
       'UPDATE documents SET active = false, updated_at = NOW() WHERE id = $1 AND active = true', [id]);
     if (!rowCount) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Additional duties (Resources → People) ───────────────────────────────────
+// Everyone reads; the two roster admins write — the same gate as Forms.
+app.get('/api/duties', requireAuth, async (req, res) => {
+  try {
+    res.json({ duties: await duties.list(pool) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+function dutyError(err, res) {
+  if (err && err.code === 'DUPLICATE') return res.status(409).json({ error: err.message });
+  console.error(err);
+  return res.status(500).json({ error: 'Server error' });
+}
+
+app.post('/api/duties', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const v = duties.validate(req.body || {}, { partial: false });
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    res.status(201).json(await duties.create(pool, v.value, req.session.memberId));
+  } catch (err) { dutyError(err, res); }
+});
+
+app.patch('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid duty id' });
+  const v = duties.validate(req.body || {}, { partial: true });
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    const row = await duties.update(pool, id, v.value, req.session.memberId);
+    if (!row) return res.status(404).json({ error: 'That duty no longer exists' });
+    res.json(row);
+  } catch (err) { dutyError(err, res); }
+});
+
+app.delete('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid duty id' });
+  try {
+    if (!await duties.remove(pool, id)) return res.status(404).json({ error: 'That duty no longer exists' });
+    res.status(204).end();
+  } catch (err) { dutyError(err, res); }
+});
+
+// ── The calendar (Resources → Calendar) ──────────────────────────────────────
+// One read endpoint for the whole year: merging two tables and regrouping them
+// by month in the browser would duplicate buildCalendar in a second language.
+// The derivation lives in lib/drill-calendar.js, shared with the newsletter.
+app.get('/api/calendar', requireAuth, async (req, res) => {
+  let year = new Date().getUTCFullYear();
+  if (req.query.year !== undefined) {
+    const y = String(req.query.year);
+    if (!/^\d{4}$/.test(y) || Number(y) < 2000 || Number(y) > 2100) {
+      return res.status(400).json({ error: 'year must be a four-digit year between 2000 and 2100' });
+    }
+    year = Number(y);
+  }
+  try {
+    const [drills, events] = await Promise.all([drillCal.listAll(pool), calEvents.listAll(pool)]);
+    const { months } = drillCal.buildCalendar(drills, events, year, new Date());
+    res.json({ year, years: drillCal.years(drills, events), months });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/drill-dates', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const v = drillCal.validateDrill(req.body || {});
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    const clash = await drillCal.findOverlap(pool, v.value, null);
+    if (clash) {
+      return res.status(409).json({
+        error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    }
+    res.status(201).json(await drillCal.create(pool, v.value, req.session.memberId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid drill id' });
+  try {
+    const existing = await drillCal.get(pool, id);
+    if (!existing) return res.status(404).json({ error: 'That drill no longer exists' });
+    // Validate the merged row, so a one-field PATCH is checked against the dates
+    // it will actually have.
+    const body = req.body || {};
+    const v = drillCal.validateDrill({
+      start_date: 'start_date' in body ? body.start_date : existing.start_date,
+      end_date:   'end_date'   in body ? body.end_date   : existing.end_date,
+      note:       'note'       in body ? body.note       : existing.note,
+    });
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const clash = await drillCal.findOverlap(pool, v.value, id);
+    if (clash) {
+      return res.status(409).json({
+        error: `Those dates overlap the ${drillCal.label(clash.start_date, clash.end_date)} drill` });
+    }
+    const row = await drillCal.update(pool, id, v.value, req.session.memberId);
+    if (!row) return res.status(404).json({ error: 'That drill no longer exists' });
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/drill-dates/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid drill id' });
+  try {
+    if (!await drillCal.remove(pool, id)) return res.status(404).json({ error: 'That drill no longer exists' });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Calendar events — TDY and training rotations. No overlap rule: two rotations
+// in the same week, and a rotation across a drill, are both normal.
+app.post('/api/calendar-events', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const v = calEvents.validate(req.body || {});
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    res.status(201).json(await calEvents.create(pool, v.value, req.session.memberId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/calendar-events/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    const existing = await calEvents.get(pool, id);
+    if (!existing) return res.status(404).json({ error: 'That event no longer exists' });
+    // Merge over the stored row so a one-field PATCH validates as a whole event.
+    const v = calEvents.validate({ ...existing, ...(req.body || {}) });
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const row = await calEvents.update(pool, id, v.value, req.session.memberId);
+    if (!row) return res.status(404).json({ error: 'That event no longer exists' });
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/calendar-events/:id', requireAuth, requireRosterAdmin, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    if (!await calEvents.remove(pool, id)) return res.status(404).json({ error: 'That event no longer exists' });
+    res.status(204).end();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

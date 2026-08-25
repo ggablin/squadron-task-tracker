@@ -103,7 +103,8 @@ test('assets that never change under a given URL are cache-first', () => {
 
 test('the shared front-end files are stale-while-revalidate, because nothing content-hashes them', () => {
   const { ctx } = loadWorker();
-  for (const p of ['/design.css', '/ui.js', '/member-browser.js', '/offline.js']) {
+  for (const p of ['/design.css', '/ui.js', '/member-browser.js', '/offline.js',
+                   '/duties.js', '/calendar.js']) {
     assert.strictEqual(ctx.routeRequest(req(ORIGIN + p)), 'swr', p);
   }
 });
@@ -237,6 +238,11 @@ test('installing precaches everything the app needs to boot with no signal', asy
   const assets = [...caches.__store.get('assets-testsha').keys()];
   assert.deepStrictEqual(shell, [ORIGIN + '/'], 'the shell belongs in the shell cache');
   for (const p of ['/design.css', '/ui.js', '/member-browser.js', '/offline.js',
+                   // Without these two the app boots offline from the cached shell
+                   // with window.dutiesInit and window.calendarInit undefined, and
+                   // People and Calendar render a heading over an empty panel —
+                   // no skeleton, no offline note, no error.
+                   '/duties.js', '/calendar.js',
                    '/manifest.webmanifest', '/icons/icon-192.png']) {
     assert.ok(assets.includes(ORIGIN + p), `${p} should be precached`);
   }
