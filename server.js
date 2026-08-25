@@ -1,4 +1,14 @@
 const express = require('express');
+// Patches Express 4's router so a rejected async handler is handed to the error
+// middleware at the bottom of this file instead of vanishing. On stock Express 4
+// a throw inside an `async` route handler leaves the returned promise rejected
+// with nothing listening: no error middleware runs and NO RESPONSE IS EVER SENT,
+// so the request hangs until the client gives up. That is not hypothetical here
+// — lib/calendar-events.js once threw out of `validate`, which every write route
+// calls OUTSIDE its try, and a test sat for 305 seconds instead of failing.
+// Fixing that one throw did not remove the mechanism, so this closes the class.
+// Must be required before any route is defined; see test/async-errors-http.test.js.
+require('express-async-errors');
 const compression = require('compression');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
@@ -2351,8 +2361,15 @@ app.get('/api/squadron/attendance/grid', requireAuth, requireRole('leadership'),
 
 app.get('/api/squadron/timeline', requireAuth, async (req, res) => {
   try {
+    // to_char, not the bare DATE columns: node-postgres parses DATE to LOCAL
+    // midnight, and `uta` is serialised straight to the client, where
+    // renderTimeline does start_date.slice(0, 10). JSON.stringify runs a Date
+    // through toISOString() (UTC), so in any zone ahead of UTC the client would
+    // read the day BEFORE the drill. Dormant only because production has no TZ set.
     const { rows: utaRows } = await pool.query(
-      `SELECT id, name, start_date, end_date FROM uta_cycles WHERE is_current = true LIMIT 1`
+      `SELECT id, name, to_char(start_date, 'YYYY-MM-DD') AS start_date,
+              to_char(end_date, 'YYYY-MM-DD') AS end_date
+         FROM uta_cycles WHERE is_current = true LIMIT 1`
     );
     const uta = utaRows[0] || null;
 
@@ -2976,8 +2993,15 @@ const RANK_SENIORITY = {
 
 app.get('/api/export/shop-lists', requireAuth, requireRole('leadership'), async (req, res) => {
   try {
+    // to_char for the same reason as /api/squadron/timeline above: `cycle` ships
+    // to the client whole, and public/export.html reads the dates with
+    // String(d).slice(0, 10) to build the handout's day names and date range. A
+    // bare DATE would arrive as a UTC-serialised local midnight and print the
+    // previous day in any zone ahead of UTC.
     const { rows: [cycle] } = await pool.query(
-      `SELECT id, name, start_date, end_date FROM uta_cycles WHERE is_current = true LIMIT 1`);
+      `SELECT id, name, to_char(start_date, 'YYYY-MM-DD') AS start_date,
+              to_char(end_date, 'YYYY-MM-DD') AS end_date
+         FROM uta_cycles WHERE is_current = true LIMIT 1`);
     if (!cycle) return res.status(404).json({ error: 'No live cycle' });
 
     const [shopsQ, sqEventsQ, shopEventsQ, membersQ, tasksQ] = await Promise.all([
