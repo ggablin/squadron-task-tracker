@@ -103,6 +103,28 @@ test('seed-on-create is atomic: a row that fails mid-seed leaves no table behind
     Number((await pool.query('SELECT COUNT(*) FROM calendar_events')).rows[0].count), 10);
 });
 
+// The seed.js path: empty-not-absent. Unlike ensureTable, seedIfEmpty takes an
+// already-created table (schema.sql's twin CREATE, applied here via DDL
+// directly) and must fill it exactly once — a second call on a table that
+// already has rows, whether from a prior seed or from an admin's own edits,
+// must add nothing and touch nothing.
+test('seedIfEmpty: fills an empty table once, and never touches an already-populated one', async () => {
+  await pool.query('DROP TABLE IF EXISTS calendar_events');
+  await pool.query(events.DDL);
+  const count = async () => Number((await pool.query('SELECT COUNT(*) FROM calendar_events')).rows[0].count);
+  assert.strictEqual(await count(), 0);
+
+  assert.deepStrictEqual(await events.seedIfEmpty(pool, DEFAULTS), { seeded: 10 });
+  assert.strictEqual(await count(), 10);
+
+  // Mutate one row so a reseed would be visible, then call a second time.
+  await pool.query(`UPDATE calendar_events SET note = 'Changed' WHERE title = 'REOTS'`);
+  assert.deepStrictEqual(await events.seedIfEmpty(pool, DEFAULTS), { seeded: 0 });
+  assert.strictEqual(await count(), 10, 'a populated table gains no rows');
+  const { rows: [row] } = await pool.query(`SELECT note FROM calendar_events WHERE title = 'REOTS'`);
+  assert.strictEqual(row.note, 'Changed', 'a populated table is left untouched, not reseeded');
+});
+
 const RADR = { title: 'RADR', location: 'Fargo, ND', start_date: '2026-05-03',
                end_date: '2026-05-09', attendees: 'MSgt Brown', status: 'scheduled', note: null };
 
