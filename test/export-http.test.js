@@ -157,6 +157,14 @@ test('payload: live-cycle scope, rank-descending members, split event types', as
   const body = await res.json();
 
   assert.strictEqual(body.cycle.id, live.id);
+  // to_char'd, not the bare DATE columns. node-postgres parses DATE to LOCAL
+  // midnight and JSON.stringify serialises a Date through toISOString() (UTC),
+  // so a bare column would ship '2026-08-07T…' in any zone ahead of UTC and
+  // public/export.html — which reads these with String(d).slice(0, 10) — would
+  // print the day before the drill.
+  assert.strictEqual(body.cycle.start_date, '2026-08-08',
+    'cycle dates ship as YYYY-MM-DD strings, immune to the server\'s timezone');
+  assert.strictEqual(body.cycle.end_date, '2026-08-09');
   assert.deepStrictEqual(body.shops.map(s => s.name), ['HVAC', 'Structures'],
     'shops come alphabetical');
 

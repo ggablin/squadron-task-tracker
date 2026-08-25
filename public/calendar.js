@@ -11,6 +11,15 @@
   let data = null;          // { year, years, months }
   let canEdit = false;
   let shellReady = false;
+  // #cal-host is a page-lifetime element — shell() only rewrites its *contents*,
+  // never the element itself, unlike duties.js's shell() which replaces
+  // #duty-list wholesale and so binds a fresh element every time. Its delegated
+  // listener therefore has to be attached exactly once per page load, tracked
+  // separately from shellReady: reset() puts shellReady back to false on logout
+  // so the next entry re-mounts the skeleton, and without this second flag that
+  // would stack a second listener on the same element (and one more per logout
+  // after that).
+  let hostBound = false;
   let editing = null;       // { kind: 'drill'|'event', id } | null
   // Tracks whether the last /api/calendar fetch actually succeeded — distinct
   // from data.months, which is legitimately empty both before a load and
@@ -41,15 +50,19 @@
   const STATUS_LABEL = { complete: 'Complete', cancelled: 'Cancelled' };
 
   function shell() {
-    $('cal-host').innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
-    $('cal-host').addEventListener('click', (e) => {
-      const y = e.target.closest('.cal-year');
-      if (y) { load(Number(y.dataset.year)); return; }
-      if (e.target.closest('#cal-add-drill')) { openEditor('drill', null); return; }
-      if (e.target.closest('#cal-add-event')) { openEditor('event', null); return; }
-      const edit = e.target.closest('.cal-edit');
-      if (edit) openEditor(edit.dataset.kind, Number(edit.dataset.id));
-    });
+    const host = $('cal-host');
+    host.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+    if (!hostBound) {
+      host.addEventListener('click', (e) => {
+        const y = e.target.closest('.cal-year');
+        if (y) { load(Number(y.dataset.year)); return; }
+        if (e.target.closest('#cal-add-drill')) { openEditor('drill', null); return; }
+        if (e.target.closest('#cal-add-event')) { openEditor('event', null); return; }
+        const edit = e.target.closest('.cal-edit');
+        if (edit) openEditor(edit.dataset.kind, Number(edit.dataset.id));
+      });
+      hostBound = true;
+    }
     shellReady = true;
   }
 
@@ -92,14 +105,14 @@
       <span class="cal-when">${esc(e.label)}</span>
       <span class="cal-what"><span class="cal-kind">UTA</span>${e.threeDay ? ' <span class="cal-meta">· 3-day</span>' : ''}${
         e.note ? ` <span class="cal-meta">· ${esc(e.note)}</span>` : ''}</span>
-      ${e.next ? '<span class="cal-chip chip-next">Next</span>' : ''}
+      ${e.next ? '<span class="cal-chip cal-chip-next">Next</span>' : ''}
       ${canEdit ? `<button class="cal-edit" type="button" aria-label="Edit the ${esc(e.label)} drill" data-kind="drill" data-id="${e.id}">${PENCIL}</button>` : ''}
     </div>`;
   }
 
   function eventRow(e) {
     const chip = STATUS_LABEL[e.status]
-      ? `<span class="cal-chip chip-${e.status}">${STATUS_LABEL[e.status]}</span>` : '';
+      ? `<span class="cal-chip cal-chip-${e.status}">${STATUS_LABEL[e.status]}</span>` : '';
     return `<div class="cal-row${e.past ? ' past' : ''}">
       <span class="cal-when">${esc(e.label)}</span>
       <span class="cal-what">
@@ -246,11 +259,15 @@
       : { start_date: $('cal-f-start').value, end_date: $('cal-f-end').value, note: $('cal-f-note').value };
     const btn = $('cal-save');
     btn.disabled = true;
+    // Hoisted out of the try so the catch below can see it — res itself is
+    // const-scoped to the try block.
+    let status = null;
     try {
       const res = await fetch(id ? `${pathFor(kind)}/${id}` : pathFor(kind), {
         method: id ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
+      status = res.status;
       const saved = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(saved.error || 'Could not save');
       closeModal('cal-modal');
@@ -258,9 +275,15 @@
       // Show the year it belongs to, so a next-year entry is visible at once.
       await load(Number(String(saved.start_date).slice(0, 4)) || data.year);
     } catch (e) {
-      // 400 and 409 leave the modal open so the dates can be corrected.
+      // 400 and 409 leave the modal open so the dates can be corrected. A 404
+      // means the row itself was deleted (another device/tab) since the editor
+      // opened — recover by closing and reloading rather than leaving the
+      // member stuck editing a drill/event that's already gone. Keyed off the
+      // status code rather than the error text, since the text is just
+      // server.js's wording and shouldn't be load-bearing for client recovery
+      // logic.
       toast(e.message || 'Could not save', 'error');
-      if (/no longer exists/.test(e.message || '')) { closeModal('cal-modal'); await load(data.year); }
+      if (status === 404) { closeModal('cal-modal'); await load(data.year); }
     }
     btn.disabled = false;
   }
@@ -300,5 +323,54 @@
     // DOM at click time, so it doesn't go stale the way an admin-aware shell
     // would.
     if (!loaded) load(lastYear); else render();
+  };
+
+  // Logout hook (called from index.html's doLogout): clears the closure state
+  // above so a same-tab sign-in as a different member starts clean instead of
+  // showing the previous member's data and canEdit. Hung off the existing
+  // calendarInit global rather than a second one, for the same reason
+  // duties.js does — it's already the module's sole public entry point.
+  //
+  // The rendered rows go with the state. Clearing `data` alone left the pane
+  // painted: doLogout() does not reload the page and showApp() does not reset
+  // which view/pane is active, so the next member in this tab arrived at the
+  // previous member's fully rendered calendar — and a pencil click on one of
+  // those rows reached findEntry(), which iterates data.months, for an
+  // uncaught `TypeError: Cannot read properties of null`. Blanking the host
+  // leaves nothing stale to click; calendarInit() re-shells and re-fetches on
+  // the next entry because shellReady/loaded are false here.
+  //
+  // inFlight/inFlightYear are cleared so a slow request still pending from the
+  // old session can't be handed back by load()'s dedupe check to a fresh
+  // load() for the same year.
+  //
+  // ++seq is what actually drops that pending request. This used to say seq
+  // "is left alone since it only needs to keep increasing for that stale
+  // response's `mine !== seq` check to drop it" — backwards: nothing else
+  // moves seq at logout, so mine === seq still held and the response was
+  // applied. Both halves of load() would run: the .then writes data/loaded,
+  // and the .finally calls render() — which paints the previous member's
+  // calendar straight back over the host this function just blanked, roughly
+  // a second after they signed out. Bumping seq here is what makes the stated
+  // reasoning true. hostBound is deliberately left alone — it tracks a
+  // listener on an element that survives logout.
+  window.calendarInit.reset = function () {
+    data = null;
+    canEdit = false;
+    shellReady = false;
+    editing = null;
+    loaded = false;
+    inFlight = null;
+    inFlightYear = null;
+    ++seq;
+    lastYear = null;
+    // Guarded: reset() is also reachable on pages that never mounted this pane.
+    const host = $('cal-host');
+    if (host) host.innerHTML = '';
+    // #cal-sub goes back to the subtitle the page ships with, for the same
+    // reason render()'s offline branch restores it: a leftover "CY 2026"
+    // heading over an empty pane is the last session still showing through.
+    const sub = $('cal-sub');
+    if (sub) sub.textContent = 'Drill weekends and training';
   };
 })();

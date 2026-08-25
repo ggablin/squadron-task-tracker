@@ -31,7 +31,7 @@
       ${canEdit ? '<div class="duty-admin"><button class="add-btn" type="button" id="duty-add">+ Add duty</button></div>' : ''}
       <div class="search-wrap duties-search">
         <input class="search-input" id="duty-q" type="search" placeholder="Search duties and names" autocomplete="off" aria-label="Filter duties">
-        <div class="search-count" id="duty-count"></div>
+        <div class="search-count" id="duty-count" aria-live="polite"></div>
       </div>
       <div class="duty-list" id="duty-list"><div class="skeleton"></div><div class="skeleton"></div></div>`;
     $('duty-q').addEventListener('input', renderList);
@@ -145,20 +145,29 @@
     };
     const btn = $('duty-save');
     btn.disabled = true;
+    // Hoisted out of the try so the catch below can see it — res itself is
+    // const-scoped to the try block.
+    let status = null;
     try {
       const res = await fetch(editingId ? `/api/duties/${editingId}` : '/api/duties', {
         method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
+      status = res.status;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not save');
       closeModal('duty-modal');
       toast(editingId ? 'Duty updated' : 'Duty added', 'success');
       await load();
     } catch (e) {
-      // 400 and 409 leave the modal open so the value can be corrected.
+      // 400 and 409 leave the modal open so the value can be corrected. A 404
+      // means the row itself was deleted (another device/tab) since the editor
+      // opened — recover by closing and reloading rather than leaving the
+      // member stuck editing a duty that's already gone. Keyed off the status
+      // code rather than the error text, since the text is just server.js's
+      // wording and shouldn't be load-bearing for client recovery logic.
       toast(e.message || 'Could not save', 'error');
-      if (/no longer exists/.test(e.message || '')) { closeModal('duty-modal'); await load(); }
+      if (status === 404) { closeModal('duty-modal'); await load(); }
     }
     btn.disabled = false;
   }
@@ -188,12 +197,47 @@
     // change; it does not imply the data is stale, so it never resets loaded.
     if (was !== canEdit) shell();
     // Re-entry retries a failed load instead of leaving the view wedged on
-    // the offline notice for the rest of the tab's life — every sibling
-    // Resources view re-fetches on entry, and this one now matches. Once
-    // loaded, re-entry re-renders (rather than the previous total no-op) so
-    // shell() rebuilds (canEdit flips) are reflected; renderList() reads the
-    // filter input in place, so a query the member already typed carries
-    // forward instead of silently resetting to "all 52" on every pane visit.
+    // the offline notice for the rest of the tab's life — but a successful
+    // load does NOT re-fetch on re-entry, only a prior failure does. That's
+    // the same loaded-flag guard calendar.js uses; Forms and the org chart
+    // are different, unconditionally re-fetching every time their pane is
+    // entered. Once loaded, re-entry re-renders (rather than the previous
+    // total no-op) so shell() rebuilds (canEdit flips) are reflected;
+    // renderList() reads the filter input in place, so a query the member
+    // already typed carries forward instead of silently resetting to "all
+    // 52" on every pane visit.
     if (!loaded) load(); else renderList();
+  };
+
+  // Logout hook (called from index.html's doLogout): clears the closure state
+  // above so a same-tab sign-in as a different member starts clean instead of
+  // showing the previous member's rows and canEdit. Hung off the existing
+  // dutiesInit global rather than a second one — dutiesInit is already the
+  // module's sole public entry point, and shellReady=false/loaded=false makes
+  // the next dutiesInit() call behave exactly like a fresh page load (shell()
+  // rebuilds, load() re-fetches) without duplicating that logic here.
+  //
+  // The rendered rows have to go with the state, not after it. doLogout() does
+  // not reload the page and showApp() does not reset which view/pane is
+  // active, so the next member in this tab lands on the previous member's
+  // fully rendered list — pencils included — and nothing re-runs dutiesInit
+  // until the pane is re-entered. Clicking one of those stale pencils used to
+  // reach openEditor(id), which looks the row up in the `all` this function
+  // just emptied: `d` came back undefined, so the modal titled itself "Add
+  // duty" with blank fields and a hidden Delete while editingId still held the
+  // REAL row id. A roster admin who typed a name and saved believed they had
+  // added a duty; save() sent PATCH /api/duties/{id} and lib/duties.js mapped
+  // the two empty owner fields to null — an existing squadron record renamed
+  // and both owners wiped, silently. Blanking the host leaves nothing stale to
+  // click.
+  window.dutiesInit.reset = function () {
+    all = [];
+    canEdit = false;
+    shellReady = false;
+    editingId = null;
+    loaded = false;
+    // Guarded: reset() is also reachable on pages that never mounted this pane.
+    const host = $('duties-host');
+    if (host) host.innerHTML = '';
   };
 })();
