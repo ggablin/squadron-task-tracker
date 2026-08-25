@@ -229,6 +229,51 @@ Seeded test accounts (local): members `becerra`/`derose`/`fowler`/`glenn`/`grada
 
 ---
 
+## 8a. Two bug families this codebase keeps producing
+
+Both were found four times each across PRs #84 and #85, in different files, by different people, months apart. Neither is subtle once you know to look, and both are one `grep` away. **Check these before writing a colour or serialising a date.**
+
+### A hardcoded colour on a token-coloured background
+
+The theme tokens **invert**. `--text` is near-black in light mode and near-**white** in dark. So a rule like `background: rgba(255,255,255,.22)` sitting on a `var(--text)` surface is legible in the theme it was authored in and invisible in the other.
+
+Found in: the active-tab notification badge (measured **1.22:1** in dark — invisible, shipped for months); `.duty-owners` as `--t2` on a `--wrn-bg` tint (4.34:1, under AA); `build.html`'s `.btn-ghost-inv` on `.cycle-bar` (the `+ New cycle` button vanishes on `/build`); and `index.html:919` using `--t3` as text.
+
+`design.css:28-32` already states the rule that catches all of these — *"Each foreground is checked against its own `-bg` pairing, not against `--bg`"* — and `build.html:263` shows someone hitting the inversion and correctly flipping white→black for dark. The knowledge exists; it just is not applied consistently.
+
+```
+grep -nE "rgba\(0,\s*0,\s*0|rgba\(255,\s*255,\s*255" public/*.html public/*.css
+```
+For each hit, ask what `var(--…)` surface it sits on and whether that token inverts. **Measure in both themes** — and measure *after* the transition settles (see §8b).
+
+### A bare `DATE` column reaching `res.json` or `toISOString`
+
+node-postgres parses a `DATE` column to **local** midnight, not UTC. Read it back with `toISOString()` — or let `JSON.stringify` do it — and in any timezone ahead of UTC you get the **previous day**.
+
+Found in: the newsletter's cycle reference date (a 1 January cycle would have printed the previous year's RSD schedule); `/api/squadron/timeline`; `/api/export/shop-lists` (the printed handout showed **7 August for an 8 August drill** under `TZ=Asia/Tokyo`); and `lib/cycles.js:7,50,79` via `server.js:1624`, still unfixed as of #85.
+
+Production has **no `TZ` set** on the Railway service, so it runs UTC and this whole family is dormant there — one environment variable from live. `lib/attendance.js`'s `toUTCDate` handles a pg `Date` correctly with local getters and is **not** an instance; do not "fix" it.
+
+**The rule:** dates leave the database as strings. Every lib `SELECT` uses `to_char(col, 'YYYY-MM-DD')`, and the calendar compares dates as plain ISO strings precisely to avoid this. If a `DATE` column is going to be serialised or formatted, `to_char` it in the query.
+
+```
+grep -nE "\b(start_date|end_date)\b" server.js lib/*.js | grep -v to_char
+```
+
+**Do not narrow that to `SELECT`.** The obvious version — `grep "SELECT[^;]*start_date"` — misses every known instance, for two reasons worth remembering: the queries are **multiline**, so `SELECT` and the column sit on different lines and a line-oriented grep cannot see both; and two of the three `lib/cycles.js` instances are `INSERT … RETURNING` and `UPDATE … RETURNING`, not `SELECT` at all — `RETURNING` serialises columns exactly the same way. The broad version above returns ~69 hits and is noisy, which is the correct trade for a standing check: a false positive costs a glance, a false negative ships the bug. (Verified 2026-08-25: the broad grep finds all three `cycles.js` sites and correctly excludes the two fixed in #85.)
+
+---
+
+## 8b. Verification gotchas — these each cost an hour to rediscover
+
+- **The Browser pane's `left_click` hangs**, even with the tab fronted. It is a tool problem, not a page problem. Use `element.click()` via `javascript_tool` for genuine handler dispatch, and prove hittability with geometry instead: `getBoundingClientRect()` then `document.elementFromPoint(cx, cy)`, asserting it returns the element or a descendant. That catches overlays, zero-size boxes and off-viewport controls, and covers every control rather than the one you clicked. `computer {action:"screenshot"}` also fails intermittently with a compositing error.
+- **Theme colours animate.** Measuring contrast immediately after flipping `data-theme` returns nonsense — a stale `--text` once produced a bogus 1.06 ratio that looked like a serious defect. Wait for the transition to settle. The app persists its own preference in `localStorage.theme` and `data-theme` on `documentElement`, which **overrides** the browser/OS colour-scheme setting.
+- **The service worker precaches `duties.js` and `calendar.js`** (added in #84 so their offline notices can render). A plain reload after editing either file serves the **stale** module. Unregister the worker and clear caches when verifying front-end changes, or you will debug code that is not running.
+- **A green local suite does not predict CI.** Local runs go to a *remote* Railway Postgres (~50-100ms round trips, ~13 min); CI uses a *local* one (sub-millisecond, ~6 min). A DDL race that local timing reliably hid failed on the first CI run of #84 — `duplicate key value violates unique constraint "pg_type_typname_nsp_index"`. Fixed by exporting the boot promise as `app.ready` and awaiting it in the three test files that do raw DDL; the other 17 files that `require('../server')` do no DDL and were left alone. **For anything timing-sensitive, CI is the only real gate.**
+- **Suite summary format differs by invocation.** A single-file run prints `# pass N`; the full `npm test` prints `ℹ pass N`. A grep for `# pass` against a full-suite log finds nothing and, with `grep -c`, exits 1 — which has already poisoned a compound command into reporting a passing suite as failed. Match on `pass`, never on `# pass`. And never pipe a test run through `tail`/`head`/`grep`: the exit code becomes the pipe's.
+
+---
+
 ## 9. Uncommitted local WIP — none (resolved 2026-08-17)
 
 **There is no uncommitted WIP any more. `master` is the whole project.** This section used to
