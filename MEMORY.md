@@ -368,6 +368,20 @@ longer true, and the working copy has been synced to `origin/master` with a clea
 
 ## 11. Recent work
 
+### 2026-08-26 — MCP server (`mcp/`)
+Claude (Claude Code / desktop app) can now read and update the tracker —
+tasks, shop events/work orders, roster, rollups — through a local stdio MCP
+server at `mcp/` (24 tools). It is a thin wrapper over the **HTTP API as a
+signed-in member** (cookie login, re-login on 401), so role guards, live-cycle
+checks, attribution, and push side effects all behave exactly as in the app;
+it never touches the database. Own `package.json` (ESM,
+`@modelcontextprotocol/sdk` + `zod`), not part of the Railway deploy or the
+root test suite. Unit tests stub fetch; `npm run smoke` runs end-to-end
+against **staging only** (it refuses non-staging URLs) with one reversible
+write. Deliberately absent: deletions (beyond a confirm-gated event delete),
+cycle authoring/go-live, placement/slug edits, anything wrapping
+`import-tasks.js`. Setup and the credential story are in `mcp/README.md`.
+
 ### 2026-08-17 → 08-19 — The tracker becomes a phone app (PRs #74, #75, #76)
 Three phases, all on `master`. **Full detail and the platform traps are in
 [`docs/2026-08-19-mobile-app-handoff.md`](docs/2026-08-19-mobile-app-handoff.md)** — read that,
@@ -423,6 +437,7 @@ Ran `/impeccable critique` and shipped the P1 findings as PR #30 (merged to `mas
 
 ## 12. Key files
 - `server.js` — API routes, auth, roles, boot migrations, cron registration. Task Builder/Records routes are thin wrappers over `lib/`.
+- `mcp/` — the squadron-tracker MCP server (stdio; lets Claude drive the API as a signed-in member). Self-contained sub-package; see `mcp/README.md`.
 - `lib/db.js`, `lib/cycles.js`, `lib/tasks.js`, `lib/batches.js`, `lib/records.js` — Task Builder + Records logic layer (§6a).
 - `lib/presence.js` — the "present at drill" rule for the two-way rollup percentages (shared join fragment + expression).
 - `lib/duties.js`, `lib/calendar-events.js`, `lib/drill-calendar.js` — the Resources reference data: DDL + seed-on-create (`ensureTable`), validation, CRUD. `drill-calendar.js`'s pure half (`buildYear` for the newsletter's flat drill list, `buildCalendar` for the app's month groups, plus `label`, `years`, `validateDrill`, `overlaps`) is unit-tested without a database.
