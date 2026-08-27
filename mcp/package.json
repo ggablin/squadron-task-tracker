@@ -6,8 +6,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test test/client.test.js",
-    "smoke": "node test/smoke.js"
+    "test": "node --test test/client.test.js test/tools.test.js",
+    "smoke": "node test/smoke.js",
+    "smoke:prep": "node test/prep-smoke.js"
   },
   "engines": {
     "node": ">=20"
