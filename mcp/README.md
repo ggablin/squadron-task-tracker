@@ -2,7 +2,8 @@
 
 An MCP (Model Context Protocol) server that lets Claude read and update the
 108 CES UTA Task Tracker — tasks, shop events/work orders, roster members,
-rollups — by driving the tracker's own HTTP API as a signed-in member.
+rollups, and the pre-UTA build of the next cycle — by driving the tracker's own
+HTTP API as a signed-in member.
 
 **It does not touch the database.** Every call goes through the same routes the
 web app uses, so role guards, live-cycle checks, attribution, and push
@@ -39,7 +40,7 @@ role (member / supervisor / leadership) and roster-admin capability. The
 account must have completed its first-login password change; until then the
 API blocks writes and `tracker_whoami` says so.
 
-## Tools (24)
+## Tools (34)
 
 **Reads** — `tracker_whoami`, `tracker_my_tasks`, `tracker_member_tasks`,
 `tracker_shop_members`, `tracker_squadron_rollup`, `tracker_medical_rollup`,
@@ -54,24 +55,64 @@ requires `confirm: true` because it notifies every recipient),
 you want kept), `tracker_update_event_status`, `tracker_delete_event`
 (requires `confirm: true`), `tracker_add_member`, `tracker_update_member`.
 
-**Deliberately not exposed** — task/member/duty/cycle deletion, cycle
-authoring and go-live, placement/role changes, sign-in-name edits, and
-anything wrapping the destructive `import-tasks.js` full-replace. Use `/build`
-and `/roster` in the web app for those. Widening the surface is one
-`tool(...)` registration in `src/index.js`; keep the confirm-parameter pattern
-for anything with blast radius.
+### Pre-UTA prep
+
+Building the next cycle, in the order it is worked. These tools are
+**bulk-shaped, not CRUD-shaped** — prep is "load forty tasks", not "edit one";
+single-row corrections belong in `/build`, where you are already looking at the
+draft.
+
+| Step | Tool | Notes |
+|---|---|---|
+| Open a draft | `tracker_open_cycle` | Dates default to the next drill weekend on the calendar |
+| See what recurred | `tracker_prior_groups` | The menu copy-forward picks from |
+| Seed from last cycle | `tracker_copy_forward` | Tasks, schedule and WOs; the biggest saving in prep |
+| Load the delta | `tracker_load_tasks`, `tracker_load_schedule`, `tracker_load_work_orders` | Bulk, ≤ 50 per call |
+| Correct | `tracker_edit_task_group`, `tracker_delete_task_group` | Keyed on `{category_code, title}` |
+| Review | `tracker_review_draft` | Groups + schedule + WOs + batches in one read |
+| Undo a load | `tracker_undo_batch` | Reverses exactly one batch |
+
+Why this is safe to automate, and where the line sits: a task added to a
+**draft** notifies nobody (go-live is what announces them), every bulk load
+returns a `batch_id` that `tracker_undo_batch` reverses, and schedule/work-order
+writes are refused on an archived cycle. Silent, reversible, gated.
+
+Copy-forward carries each group to whoever held it last cycle **and is still
+active**, so departed members drop out on their own.
+
+**Deliberately not exposed** — **go-live**, the one irreversible push to ~70
+phones; it stays in `/build`, behind a human who meant it. Also cycle deletion,
+member deletion, password reset, the roster-admin toggle, placement/role
+changes, sign-in-name edits, and anything wrapping the destructive
+`import-tasks.js` full-replace. `test/tools.test.js` asserts go-live's absence,
+so re-adding it fails a test rather than slipping through review. Widening the
+surface is one `tool(...)` registration in `src/index.js`; keep the
+confirm-parameter pattern for anything with blast radius.
 
 ## Tests
 
 ```
-npm test        # unit tests — stubbed fetch, no network
+npm test        # unit tests — stubbed fetch + tool registration, no network
 npm run smoke   # live end-to-end against STAGING (refuses non-staging URLs)
+npm run smoke:prep  # live pre-UTA prep pipeline against STAGING; cleans up after itself
 ```
 
-The smoke test needs `TRACKER_BASE_URL` (staging), `TRACKER_SLUG`, and
-`TRACKER_PASSWORD` in the environment. Its only write is flipping one of the
-account's own tasks, which it restores to the exact prior state before exiting.
-Staging accounts are listed in `docs/2026-08-19-mobile-app-handoff.md`.
+`npm test` covers two things: `client.test.js` stubs fetch to exercise the
+session/retry/error logic, and `tools.test.js` boots the real server over stdio
+with fake credentials and inspects the registered tool list. The second needs no
+tracker — registration happens at boot — so a malformed `inputSchema` fails in
+CI rather than in front of someone mid-UTA.
+
+Both smoke tests need `TRACKER_BASE_URL` (staging), `TRACKER_SLUG`, and
+`TRACKER_PASSWORD` in the environment, and both refuse to run against a URL that
+does not look like staging. `smoke`'s only write is flipping one of the account's
+own tasks, which it restores to the exact prior state before exiting.
+`smoke:prep` creates a throwaway **draft** cycle named `ZZ Prep Smoke <stamp>`,
+runs the whole prep pipeline through it, and deletes it in a `finally` block — a
+draft notifies nobody, so nothing it does reaches a member's phone. If a run is
+killed mid-way it says which cycle id to delete by hand. `smoke:prep` needs a
+leadership account and at least one live or archived cycle to copy from. Staging
+accounts are listed in `docs/2026-08-19-mobile-app-handoff.md`.
 
 These tests are not part of the root `npm test` suite (they need no database)
 and do not run in CI.
