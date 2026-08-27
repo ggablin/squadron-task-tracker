@@ -400,8 +400,12 @@ tool('tracker_cycles', {
 tool('tracker_calendar', {
   title: 'Drill calendar',
   description:
-    'The year\'s drill weekends and TDY/training rotations, grouped by month. Optional year (default: ' +
-    'current year); the response lists which years have data.',
+    'The year\'s drill weekends and TDY/training rotations, grouped by month, with each entry\'s id. ' +
+    'noUta marks a month no drill touches — it is derived from the gaps between drills, never stored, ' +
+    'so it is not something to set. Write with tracker_add_drill / tracker_update_drill / ' +
+    'tracker_remove_drill for the drill weekends, and tracker_add_calendar_event / ' +
+    'tracker_update_calendar_event / tracker_remove_calendar_event for the rotations. Optional year ' +
+    '(default: current year); the response lists which years have data.',
   inputSchema: {
     year: z.number().int().min(2000).max(2100).optional(),
   },
@@ -414,6 +418,129 @@ tool('tracker_duties', {
   inputSchema: {},
   annotations: READ,
 }, () => client.get('/api/duties'));
+
+// ── calendar authoring ───────────────────────────────────────────────────────
+// The two halves tracker_calendar reads. Drill weekends (drill_dates) are the
+// UTA schedule itself; calendar events (calendar_events) are the TDY and
+// training rotations that sit alongside them. Roster admins only, both.
+//
+// NOTE the merge semantics, which are the OPPOSITE of tracker_update_event:
+// both updates here are PARTIAL — the server merges the fields you send over
+// the stored row and validates the result, so omitting a field KEEPS it. Do not
+// resend a whole row out of habit; that is the shop-event contract, not this one.
+//
+// No-UTA months are never written. lib/drill-calendar.js derives them from the
+// gaps between drill rows, and a drill spanning a month boundary covers both
+// months — so adding a year means adding only its drills.
+
+const ISO_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
+
+tool('tracker_add_drill', {
+  title: 'Add a drill weekend',
+  description:
+    'Put a drill weekend on the squadron calendar. Dates are YYYY-MM-DD and a drill runs at most seven ' +
+    'days. Months with NO drill are not entered and must not be: the app derives them from the gaps, ' +
+    'and a drill spanning a month boundary (30 Apr–2 May) covers both months, so entering the drills ' +
+    'alone produces the right No-UTA months by itself. Use note for the combined-month label, e.g. ' +
+    '"Apr & May combined". Refused with a 409 naming the clash if the dates overlap an existing drill. ' +
+    'Roster admins only.',
+  inputSchema: {
+    start_date: ISO_DATE.describe('First day of the drill'),
+    end_date: ISO_DATE.describe('Last day; same as start_date for a one-day drill'),
+    note: z.string().max(80).optional().describe('e.g. "Apr & May combined"'),
+  },
+  annotations: WRITE,
+}, ({ start_date, end_date, note }) =>
+  client.post('/api/drill-dates', { start_date, end_date, note: note ?? null }));
+
+tool('tracker_update_drill', {
+  title: 'Correct a drill weekend',
+  description:
+    'Change a drill\'s dates or its note. PARTIAL update — send only what changes; anything omitted is ' +
+    'kept, NOT cleared. (tracker_update_event, for shop events, is the opposite: a full replace. Do not ' +
+    'carry that habit here.) The merged row is validated as a whole and checked for overlap against the ' +
+    'other drills, so a one-field edit cannot produce an impossible drill. The id comes from ' +
+    'tracker_calendar. Roster admins only.',
+  inputSchema: {
+    drill_id: z.number().int().positive().describe('From tracker_calendar'),
+    start_date: ISO_DATE.optional(),
+    end_date: ISO_DATE.optional(),
+    note: z.string().max(80).nullable().optional().describe('Pass null to clear the note'),
+  },
+  annotations: WRITE,
+}, ({ drill_id, ...body }) => client.patch(`/api/drill-dates/${drill_id}`, body));
+
+tool('tracker_remove_drill', {
+  title: 'Remove a drill weekend',
+  description:
+    'Delete a drill weekend from the calendar — a cancelled UTA, or a row entered by mistake. Deleting ' +
+    'the only drill covering a month turns that month into a No-UTA month, since coverage is derived; ' +
+    'that is usually the intent when a drill is cancelled, but check the month before removing one that ' +
+    'was merely mis-dated, which tracker_update_drill fixes without the side effect. confirm must be ' +
+    'exactly true and you should name the drill to the user first. Roster admins only.',
+  inputSchema: {
+    drill_id: z.number().int().positive().describe('From tracker_calendar'),
+    confirm: z.literal(true).describe('Must be true — deletion is permanent'),
+  },
+  annotations: { ...WRITE, destructiveHint: true },
+}, ({ drill_id }) => client.delete(`/api/drill-dates/${drill_id}`)
+  .then(() => ({ deleted: drill_id })));
+
+tool('tracker_add_calendar_event', {
+  title: 'Add a TDY or training rotation',
+  description:
+    'Put a school, TDY or training rotation on the squadron calendar — RADR, Silver Flag, REOTS, a DFT ' +
+    'and so on. Unlike drills these may overlap each other and overlap a drill, because two rotations ' +
+    'in the same week is normal; there is no clash check and no length cap. attendees is free text ' +
+    '(up to 600 characters), conventionally rank-and-surname separated by " / ". An event is listed ' +
+    'under the month it STARTS in, so a fortnight-long DFT appears once. Roster admins only.',
+  inputSchema: {
+    title: z.string().min(1).max(120).describe('e.g. "Silver Flag"'),
+    start_date: ISO_DATE,
+    end_date: ISO_DATE,
+    location: z.string().max(120).optional().describe('e.g. "Tyndall AFB, FL"'),
+    attendees: z.string().max(600).optional().describe('Free text, e.g. "TSgt Grossmick / TSgt Price"'),
+    status: z.enum(['scheduled', 'complete', 'cancelled']).optional().describe("Defaults to 'scheduled'"),
+    note: z.string().max(200).optional(),
+  },
+  annotations: WRITE,
+}, (body) => client.post('/api/calendar-events', body));
+
+tool('tracker_update_calendar_event', {
+  title: 'Update a TDY or training rotation',
+  description:
+    'Change a rotation — most often its status, as one completes or is cancelled. PARTIAL update: send ' +
+    'only what changes and the rest is kept, NOT cleared. (tracker_update_event, for shop events, is a ' +
+    'full replace; this is not.) So marking a rotation complete is status alone, with no need to resend ' +
+    'the attendee list. The id comes from tracker_calendar. Roster admins only.',
+  inputSchema: {
+    event_id: z.number().int().positive().describe('From tracker_calendar'),
+    title: z.string().min(1).max(120).optional(),
+    start_date: ISO_DATE.optional(),
+    end_date: ISO_DATE.optional(),
+    location: z.string().max(120).nullable().optional(),
+    attendees: z.string().max(600).nullable().optional(),
+    status: z.enum(['scheduled', 'complete', 'cancelled']).optional(),
+    note: z.string().max(200).nullable().optional(),
+  },
+  annotations: WRITE,
+}, ({ event_id, ...body }) => client.patch(`/api/calendar-events/${event_id}`, body));
+
+tool('tracker_remove_calendar_event', {
+  title: 'Remove a TDY or training rotation',
+  description:
+    'Delete a rotation from the calendar. For one that was called off, prefer setting status to ' +
+    '"cancelled" via tracker_update_calendar_event — the calendar shows cancelled rotations on purpose, ' +
+    'so the squadron can see that it was scheduled and did not happen. Delete is for rows entered in ' +
+    'error. confirm must be exactly true and you should name the event to the user first. Roster admins ' +
+    'only.',
+  inputSchema: {
+    event_id: z.number().int().positive().describe('From tracker_calendar'),
+    confirm: z.literal(true).describe('Must be true — deletion is permanent'),
+  },
+  annotations: { ...WRITE, destructiveHint: true },
+}, ({ event_id }) => client.delete(`/api/calendar-events/${event_id}`)
+  .then(() => ({ deleted: event_id })));
 
 // ── pre-UTA prep ─────────────────────────────────────────────────────────────
 // The build-a-cycle pipeline, in the order it is worked: open a draft, see what

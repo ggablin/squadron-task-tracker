@@ -47,12 +47,57 @@ const PREP = [
   'tracker_undo_batch',
 ];
 
+const CALENDAR = [
+  'tracker_add_drill', 'tracker_update_drill', 'tracker_remove_drill',
+  'tracker_add_calendar_event', 'tracker_update_calendar_event',
+  'tracker_remove_calendar_event',
+];
+
 test('the server boots and registers its tools', () => {
-  assert.ok(tools.length >= 34, `expected at least 34 tools, got ${tools.length}`);
+  assert.ok(tools.length >= 40, `expected at least 40 tools, got ${tools.length}`);
 });
 
 test('every prep tool is registered', () => {
   for (const name of PREP) assert.ok(byName(name), `${name} is missing`);
+});
+
+test('every calendar tool is registered', () => {
+  for (const name of CALENDAR) assert.ok(byName(name), `${name} is missing`);
+});
+
+test('both halves of the calendar are writable', () => {
+  // tracker_calendar reads drill_dates AND calendar_events. Exposing a writer
+  // for only one half is the trap this pairing exists to close.
+  for (const half of ['drill', 'calendar_event']) {
+    for (const verb of ['add', 'update', 'remove']) {
+      assert.ok(byName(`tracker_${verb}_${half}`), `tracker_${verb}_${half} is missing`);
+    }
+  }
+});
+
+test('calendar deletions require an explicit confirm', () => {
+  for (const name of ['tracker_remove_drill', 'tracker_remove_calendar_event']) {
+    const schema = byName(name).inputSchema;
+    assert.ok(schema.required.includes('confirm'), `${name} should require confirm`);
+    assert.equal(byName(name).annotations?.destructiveHint, true, `${name} should be destructive`);
+  }
+});
+
+test('calendar updates are partial, so only the id is required', () => {
+  // These PATCH routes merge over the stored row — the opposite of
+  // tracker_update_event's full replace. Requiring any other field here would
+  // push callers into resending whole rows and silently clobbering fields.
+  assert.deepEqual(byName('tracker_update_drill').inputSchema.required, ['drill_id']);
+  assert.deepEqual(byName('tracker_update_calendar_event').inputSchema.required, ['event_id']);
+});
+
+test('no tool invites writing a No-UTA month', () => {
+  // noUta is derived from gaps between drills. A tool accepting it would be
+  // offering to set something the app computes.
+  const offenders = tools.filter(t =>
+    Object.keys(t.inputSchema?.properties ?? {}).some(k => /^no_?uta$/i.test(k)));
+  assert.deepEqual(offenders.map(t => t.name), [],
+    'No-UTA months are derived, not stored');
 });
 
 test('every tool has a non-trivial description', () => {

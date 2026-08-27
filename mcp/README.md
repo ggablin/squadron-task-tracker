@@ -2,8 +2,8 @@
 
 An MCP (Model Context Protocol) server that lets Claude read and update the
 108 CES UTA Task Tracker — tasks, shop events/work orders, roster members,
-rollups, and the pre-UTA build of the next cycle — by driving the tracker's own
-HTTP API as a signed-in member.
+rollups, the squadron calendar, and the pre-UTA build of the next cycle — by
+driving the tracker's own HTTP API as a signed-in member.
 
 **It does not touch the database.** Every call goes through the same routes the
 web app uses, so role guards, live-cycle checks, attribution, and push
@@ -40,7 +40,7 @@ role (member / supervisor / leadership) and roster-admin capability. The
 account must have completed its first-login password change; until then the
 API blocks writes and `tracker_whoami` says so.
 
-## Tools (34)
+## Tools (40)
 
 **Reads** — `tracker_whoami`, `tracker_my_tasks`, `tracker_member_tasks`,
 `tracker_shop_members`, `tracker_squadron_rollup`, `tracker_medical_rollup`,
@@ -54,6 +54,32 @@ requires `confirm: true` because it notifies every recipient),
 `tracker_create_event`, `tracker_update_event` (full replace — resend fields
 you want kept), `tracker_update_event_status`, `tracker_delete_event`
 (requires `confirm: true`), `tracker_add_member`, `tracker_update_member`.
+
+### Calendar authoring
+
+`tracker_calendar` reads two tables and both are writable:
+
+| | Add | Update | Remove |
+|---|---|---|---|
+| Drill weekends | `tracker_add_drill` | `tracker_update_drill` | `tracker_remove_drill` |
+| TDY / training rotations | `tracker_add_calendar_event` | `tracker_update_calendar_event` | `tracker_remove_calendar_event` |
+
+**No-UTA months are derived, never stored.** `lib/drill-calendar.js` computes
+them from the gaps between drill rows, and a drill spanning a month boundary
+(30 Apr – 2 May) covers both months. So loading a year means entering only its
+drills — the No-drill months fall out on their own, and no tool accepts a
+`no_uta` field to set.
+
+**These updates are PARTIAL, unlike `tracker_update_event`.** Both PATCH routes
+merge what you send over the stored row and validate the result, so an omitted
+field is kept, not cleared — marking a rotation complete is `status` alone.
+`tracker_update_event`, for *shop* events, is a full replace. Two update tools
+with opposite semantics is a genuine trap; the descriptions say so at both ends.
+
+Drills may not overlap (a 409 names the clash) and cap at seven days. Rotations
+have neither rule: two in one week, and one running across a drill, are both
+normal. Prefer setting a called-off rotation to `cancelled` over deleting it —
+the calendar shows cancelled rotations on purpose.
 
 ### Pre-UTA prep
 
@@ -109,10 +135,12 @@ does not look like staging. `smoke`'s only write is flipping one of the account'
 own tasks, which it restores to the exact prior state before exiting.
 `smoke:prep` creates a throwaway **draft** cycle named `ZZ Prep Smoke <stamp>`,
 runs the whole prep pipeline through it, and deletes it in a `finally` block — a
-draft notifies nobody, so nothing it does reaches a member's phone. If a run is
-killed mid-way it says which cycle id to delete by hand. `smoke:prep` needs a
-leadership account and at least one live or archived cycle to copy from. Staging
-accounts are listed in `docs/2026-08-19-mobile-app-handoff.md`.
+draft notifies nobody, so nothing it does reaches a member's phone. It also
+exercises the calendar tools against far-future 2099 dates, removing those rows
+through the remove tools on the way out, which covers the confirm gate too. If a
+run is killed mid-way it prints the ids to delete by hand. It needs a leadership
+account with roster-admin rights and at least one live or archived cycle to copy
+from. Staging accounts are listed in `docs/2026-08-19-mobile-app-handoff.md`.
 
 These tests are not part of the root `npm test` suite (they need no database)
 and do not run in CI.
