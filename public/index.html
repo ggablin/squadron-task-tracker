@@ -9,24 +9,29 @@
 
        A media-scoped PAIR, plus a plain fallback the script drives.
 
-       The pair exists because a script mutation is too late. Reported from a real
-       Android install: phone on dark, app dark, status bar still cream. The parser
-       records this meta's content as it reads it, and an installed PWA in standalone
-       mode does not re-read it when the head script rewrites the attribute a moment
-       later — "correct it in the same tick" (the approach this replaces) is a tick
-       too many. Two media-scoped values are resolved by the browser itself during
-       parsing, with no script involved, which is early enough. The meta overrides
-       the manifest's theme_color, so the cream value there only governs the splash.
+       The pair exists because a script mutation alone proved too late on a real
+       Android install (phone dark, app dark, bar cream): whatever the installed app
+       consults, it consults it at launch, so the scheme-correct value has to be IN
+       the markup, not written by a script a moment later. Two media-scoped values
+       are resolved by the browser itself during parsing, with no script involved.
+
+       The manifest deliberately carries NO theme_color. It used to say #f6f7ed, and
+       on a Pixel 9 Pro XL (Android 17, Chrome 152) the installed app's status bar
+       stayed exactly that cream in dark mode through a redeploy AND a full
+       uninstall/reinstall — while this page was already serving this pair. Cream
+       is the one value that meta pair never produces under a dark scheme; the
+       manifest was the only place it could still be coming from. With the field
+       absent, the installed app falls back to these metas. (2026-08-29 — dated
+       because every prior confident sentence about these bars has expired once.)
 
        Keying to prefers-color-scheme is right NOW and was wrong BEFORE: b07026a
        collapsed an earlier pair into one because back then the theme was a manual
        toggle that never consulted the OS, so the bar could contradict the app. Since
        6bd9079 the theme is three-state and follows the OS unless the member has
-       toggled — which is exactly the case this pair covers, so the two now agree.
-
-       The script below still wins for a member who HAS toggled: it deletes the pair
-       rather than trying to out-shout it, because a matching media meta beats the
-       unscoped one no matter what its content says. -->
+       toggled. For a member who HAS toggled, the script below rewrites all three
+       metas to the stored choice — rewrites, never deletes: an earlier version
+       deleted the pair for that case, which put those members right back on the
+       launch-time bug it exists to fix. -->
   <meta name="theme-color" content="#f6f7ed" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#2a2724" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" id="theme-color" content="#f6f7ed">
@@ -47,19 +52,26 @@
       function paint(dark) {
         if (dark) document.documentElement.dataset.theme = 'dark';
         else delete document.documentElement.dataset.theme;
-        // Status bar follows the app, never the OS directly — see above. The
-        // unscoped meta is kept correct either way, so that clearing an override
-        // later (toggleTheme removes the key when you land back on the OS value)
-        // does not leave a stale colour behind after the pair has gone.
-        var m = document.getElementById('theme-color');
-        if (m) m.setAttribute('content', dark ? '#2a2724' : '#f6f7ed');
-        // With no stored choice the media pair above already says this, natively and
-        // before first paint — leave it. With one, it has to go: a meta whose media
-        // matches outranks the unscoped one, so a member who picked light on a dark
-        // phone would keep the dark bar however the line above is set.
-        if (stored()) {
-          var scoped = document.querySelectorAll('meta[name="theme-color"][media]');
-          for (var i = 0; i < scoped.length; i++) scoped[i].parentNode.removeChild(scoped[i]);
+        // Status bar follows the app, never the OS directly — see above.
+        //
+        // All three metas are kept present and told the same story. An earlier
+        // version DELETED the media pair when the member had toggled, leaving only
+        // the script-set unscoped meta — which re-created the launch-time bug for
+        // exactly those members, since whichever meta the installed app consults,
+        // it consults it early, and the deleted pair was the only scheme-correct
+        // one. Rewriting instead of deleting means the media-matching meta always
+        // carries the right colour: the member's override when one is stored, the
+        // scheme's own default when not (so clearing an override also heals the
+        // pair rather than leaving stale values behind).
+        var c = dark ? '#2a2724' : '#f6f7ed';
+        var metas = document.querySelectorAll('meta[name="theme-color"]');
+        for (var i = 0; i < metas.length; i++) {
+          var md = metas[i].getAttribute('media');
+          if (!stored() && md) {
+            metas[i].setAttribute('content', /dark/.test(md) ? '#2a2724' : '#f6f7ed');
+          } else {
+            metas[i].setAttribute('content', c);
+          }
         }
       }
 
@@ -711,22 +723,28 @@
       z-index: 200;
     }
 
-    /* There was a rule here (cb11749) forcing this bar to #000 in standalone dark
-       mode, to match an Android gesture bar the app could not colour. Its premise
-       has expired: since Chrome 135 the viewport extends INTO the gesture navigation
-       bar, so the strip behind the pill is painted by the safe-area padding above —
-       by us, not by Android. Matching a black system bar that is no longer there
-       just put a flat black slab under warm-dark content, and killing the
-       border-top along with it removed the one edge that made it read as a bar.
+    /* Android paints its gesture-navigation bar itself and a PWA cannot colour it:
+       there is no manifest field for it, unlike theme_color for the status bar. In
+       dark mode it comes out pure black, which left a visible step against this
+       bar's warm near-black (--bg, #1a1816).
 
-       Reported on a real Android install in dark mode, which is also how the
-       original was reported — the difference is which side owns those pixels now.
-       Letting --bg and --border apply in both themes makes the whole bottom of the
-       app one surface, gesture area included.
+       So meet it where it is, but ONLY inside the installed app — display-mode:
+       standalone — because in a browser tab there is no system bar to match and a
+       pure-black strip would just look wrong. The safe-area padding above already
+       reserves the space the system bar sits over, so this simply continues the
+       colour into it.
 
-       If a device still hands us a black system bar of its own (no edge-to-edge, so
-       env(safe-area-inset-bottom) resolves to 0), this reverts to the near-match
-       step cb11749 was chasing — worth knowing before reintroducing anything here. */
+       Removed once, on the theory that Chrome 135's edge-to-edge change had handed
+       these pixels to the page. It has not, and the counter-evidence is easy to
+       reproduce: install the app, set it to LIGHT, and look at the bottom. The band
+       under the tabs is still black, and light mode's --bg is #fdfdfa — so that
+       black cannot be ours. Confirmed on a Pixel 9 Pro XL, Android 17, Chrome 152,
+       which is well past 135. Whatever edge-to-edge changed, it did not change who
+       owns the gesture bar in an installed PWA. Do not remove this again without
+       that light-mode check coming back cream. */
+    @media (display-mode: standalone) {
+      [data-theme="dark"] .mob-nav { background: #000; border-top-color: #000; }
+    }
     .mob-btn {
       flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
       padding: 4px 8px; background: none; border: none;
