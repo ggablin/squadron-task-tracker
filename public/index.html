@@ -21,10 +21,13 @@
        the script-driven meta around 19 Aug 2026 (dark bar over the dark app —
        screenshot exists), and git proves the entire theme surface — meta, head
        script, toggleTheme, manifest — was byte-identical from the 19 Aug deploy
-       to the 28 Aug breakage report. The app did not change; the phone did
-       (Chrome 152 and/or Android 17 landed in that window), amid Chromium's
-       in-flight WebAPK edge-to-edge / status-bar rework and its long-standing
-       dark-mode theme-color bugs (crbug.com/40634649, crbug.com/40759522). The
+       to the 28 Aug breakage report. The app did not change; CHROME did. Pinned
+       by on-device update dates: Android 17 arrived 5 Aug and the bar worked for
+       13+ days on it (cb11749, 18 Aug, verified the top matching in both themes
+       while fixing only the bottom); Chrome updated to 152 on 25 Aug; broken by
+       28 Aug. Undocumented in the 152 release notes — likely a field-trial flip
+       in Chromium's in-flight WebAPK edge-to-edge / status-bar rework, kin to
+       its dark-mode theme-color bugs (crbug.com/40634649, crbug.com/40759522). The
        working assumption is that platform control returns in a coming Chrome
        release — and this pair + the paint() rewrite is exactly the markup that
        world reads, so LEAVE THEM CORRECT even while standalone ignores them.
