@@ -4,34 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-  <!-- Colours the phone's status bar. Matches .mob-hdr (var(--cream)), which sits
-       directly beneath it, so the bar and the header read as one surface.
+  <!-- theme-color: what it reaches — MEASURED, and then dated by more evidence.
+       (2026-08-29, Pixel 9 Pro XL / Android 17 / Chrome 152, via the #bars overlay.)
 
-       A media-scoped PAIR, plus a plain fallback the script drives.
+       ON THIS PHONE, TODAY, THE INSTALLED APP (WebAPK) IGNORES THESE METAS. The
+       decisive run: a light-theme launch with all three metas #f6f7ed produced a
+       BLACK status bar — a colour served by nothing on this page. With no
+       theme_color in the manifest, the WebAPK paints both system bars from the
+       PHONE's own theme, does not read the metas at launch, does not track
+       mutations, and never follows the in-app toggle. The only web-side input it
+       honours is manifest theme_color, baked into the minted APK (MEMORY.md §8b)
+       — which is why the manifest deliberately carries none: one static baked
+       colour cannot be right in both themes.
 
-       The pair exists because a script mutation alone proved too late on a real
-       Android install (phone dark, app dark, bar cream): whatever the installed app
-       consults, it consults it at launch, so the scheme-correct value has to be IN
-       the markup, not written by a script a moment later. Two media-scoped values
-       are resolved by the browser itself during parsing, with no script involved.
+       BUT "IGNORES" IS A DATED OBSERVATION, NOT A LAW. The same phone HONOURED
+       the script-driven meta around 19 Aug 2026 (dark bar over the dark app —
+       screenshot exists), and git proves the entire theme surface — meta, head
+       script, toggleTheme, manifest — was byte-identical from the 19 Aug deploy
+       to the 28 Aug breakage report. The app did not change; the phone did
+       (Chrome 152 and/or Android 17 landed in that window), amid Chromium's
+       in-flight WebAPK edge-to-edge / status-bar rework and its long-standing
+       dark-mode theme-color bugs (crbug.com/40634649, crbug.com/40759522). The
+       working assumption is that platform control returns in a coming Chrome
+       release — and this pair + the paint() rewrite is exactly the markup that
+       world reads, so LEAVE THEM CORRECT even while standalone ignores them.
+       Browser-tab Chrome honours them today regardless. -->
 
-       The manifest deliberately carries NO theme_color. It used to say #f6f7ed, and
-       on a Pixel 9 Pro XL (Android 17, Chrome 152) the installed app's status bar
-       stayed exactly that cream in dark mode through a redeploy AND a full
-       uninstall/reinstall — while this page was already serving this pair. Cream
-       is the one value that meta pair never produces under a dark scheme; the
-       manifest was the only place it could still be coming from. With the field
-       absent, the installed app falls back to these metas. (2026-08-29 — dated
-       because every prior confident sentence about these bars has expired once.)
 
-       Keying to prefers-color-scheme is right NOW and was wrong BEFORE: b07026a
-       collapsed an earlier pair into one because back then the theme was a manual
-       toggle that never consulted the OS, so the bar could contradict the app. Since
-       6bd9079 the theme is three-state and follows the OS unless the member has
-       toggled. For a member who HAS toggled, the script below rewrites all three
-       metas to the stored choice — rewrites, never deletes: an earlier version
-       deleted the pair for that case, which put those members right back on the
-       launch-time bug it exists to fix. -->
   <meta name="theme-color" content="#f6f7ed" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#2a2724" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" id="theme-color" content="#f6f7ed">
