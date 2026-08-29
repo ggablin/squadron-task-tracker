@@ -4660,7 +4660,13 @@ function __barsTap() {
   __barsTaps.push(now);
   if (__barsTaps.length >= 5) { __barsTaps = []; showBarsDiagnostic(); }
 }
-function showBarsDiagnostic() {
+// The 5-tap trigger flips the theme on the very tap that opens the overlay, and the
+// themed surfaces transition for .25s — so sampling immediately reads mid-animation
+// colours. The first field run did exactly that: .mob-hdr reported light-cream under
+// data-theme dark, which briefly looked like a real inversion bug (§8b called this).
+// Wait out the transition before reading anything computed.
+function showBarsDiagnostic() { setTimeout(__barsReport, 400); }
+function __barsReport() {
   var old = document.getElementById('bars-diag');
   if (old) old.remove();
 
@@ -4696,6 +4702,9 @@ function showBarsDiagnostic() {
   var hdr = document.querySelector('.mob-hdr'), nav = document.querySelector('.mob-nav');
   if (hdr) add('.mob-hdr background', getComputedStyle(hdr).backgroundColor);
   if (nav) add('.mob-nav background', getComputedStyle(nav).backgroundColor);
+  var rs = getComputedStyle(document.documentElement);
+  add('--cream resolves to', rs.getPropertyValue('--cream').trim());
+  add('--bg resolves to', rs.getPropertyValue('--bg').trim());
 
   var box = document.createElement('div');
   box.id = 'bars-diag';
