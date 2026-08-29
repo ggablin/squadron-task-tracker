@@ -50,7 +50,7 @@ function sections(data) {
     () => S.cbts(data),                           // 12  CBTs
     () => staticSlide('addlTrain'),               // 13  Additional Training (AFI 10-210) — no field in the tracker
     () => S.orders(data),                         // 14  Orders / DTS / AROWS
-    () => S.sgliVred(data),                       // 15  SGLI & vRED  (ref p15: the other admin page)
+    () => S.gtc(data),                            // 15  Government Travel Card (ref p15)
     () => S.epbs(data),                           // 16  EPBs / OPBs
     () => S.medical(data),                        // 17  Medical & Dental
     () => staticSlide('dental'),                  // 18  Dental Status

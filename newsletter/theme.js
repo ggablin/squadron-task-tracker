@@ -180,21 +180,57 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .sh-cyan{border-left:3px solid #4a8f93;} .sh-yellow{border-left:3px solid #8a7326;}
 .sh-purple{border-left:3px solid #6b5382;}
 
-/* ── Timeline ────────────────────────────────────────────────────────────── */
-.tl-wrap{display:flex;gap:12px;height:100%;}
-.tl-day{flex:1;min-width:0;display:flex;flex-direction:column;}
+/* ── Timeline ─────────────────────────────────────────────────────────────
+   A horizontal time grid per day: hour ticks in row 1, event bars in rows 2+,
+   one row per lane. Columns are 15-minute slots so a 0730 or 0845 start lands
+   where it belongs; --cols and --hourw come from the slide, since only the
+   shaper knows how long the day runs. */
+.tl-wrap{display:flex;flex-direction:column;gap:10px;height:100%;}
+.tl-day{display:flex;flex-direction:column;min-width:0;}
 .tl-day h3{
-  background:var(--text);color:var(--cream);margin:0;padding:5px 12px;
-  border-radius:var(--rs) var(--rs) 0 0;font-size:11.5px;letter-spacing:.04em;
+  background:var(--text);color:var(--cream);margin:0;padding:4px 12px;
+  border-radius:var(--rs) var(--rs) 0 0;font-size:11px;letter-spacing:.04em;
 }
-.tl-list{border:2px solid var(--border);border-top:0;border-radius:0 0 var(--r) var(--r);
-  background:var(--bg);padding:4px 12px 8px;flex:1;}
-.tl-row{display:flex;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);}
-.tl-row:last-child{border-bottom:0;}
-.tl-time{font-size:10px;font-weight:700;color:var(--t2);width:76px;flex-shrink:0;font-variant-numeric:tabular-nums;}
-.tl-what{font-size:11px;font-weight:500;flex:1;min-width:0;overflow-wrap:anywhere;}
-.tl-emph{background:var(--wrn-bg);margin:0 -12px;padding-left:12px;padding-right:12px;}
-.tl-shop{font-size:8.5px;background:var(--s2);color:var(--t2);padding:1px 6px;border-radius:999px;font-weight:600;}
+.tl-grid{
+  display:grid;
+  grid-template-columns:repeat(var(--cols),1fr);
+  gap:2px;
+  align-content:start;
+  border:2px solid var(--border);border-top:0;border-radius:0 0 var(--r) var(--r);
+  background:var(--bg);
+  /* One hairline per hour, so a bar can be read against the clock. */
+  background-image:linear-gradient(to right,var(--bm) 0 1px,transparent 1px);
+  background-size:var(--hourw) 100%;
+  background-position:0 0;
+  padding:0 0 5px;
+}
+.tl-hour{
+  font-size:8.5px;font-weight:700;color:var(--t2);font-variant-numeric:tabular-nums;
+  grid-row:1;padding:3px 0 3px 4px;border-bottom:1px solid var(--border);
+  letter-spacing:.02em;
+}
+.tl-bar{
+  min-width:0;overflow:hidden;
+  background:var(--s2);border-left:2px solid var(--t3);border-radius:3px;
+  padding:2px 4px;margin-top:2px;
+  display:flex;flex-direction:column;gap:0;
+}
+.tl-t{font-size:7px;font-weight:700;color:var(--t2);font-variant-numeric:tabular-nums;line-height:1.2;}
+.tl-n{font-size:8.5px;font-weight:600;line-height:1.2;overflow-wrap:anywhere;}
+.tl-det{display:block;font-size:7.5px;font-weight:400;color:var(--t2);line-height:1.2;}
+/* A half-hour bar is ~45px wide — too narrow for a wrapped title, so the label runs
+   on past the bar instead of wrapping to shreds. It is deliberately NOT raised above
+   the bars beside it: where the lane is free the title reads in full, and where the
+   next event starts immediately that event's own bar covers the overrun, which reads
+   as clean truncation rather than two labels smeared over each other. The detail line
+   is dropped — a narrow slot can carry a title and its position, not a sentence. */
+.tl-narrow{overflow:visible;}
+.tl-narrow .tl-n{white-space:nowrap;}
+.tl-narrow .tl-det{display:none;}
+.tl-emph{background:var(--wrn-bg);border-left-color:var(--warn);}
+.tl-shop{font-size:7px;background:var(--bg);color:var(--t2);padding:0 4px;border-radius:999px;font-weight:700;margin-left:3px;}
+.tl-notes{display:flex;flex-wrap:wrap;gap:6px;padding:4px 2px 0;}
+.tl-note{font-size:8.5px;font-weight:600;background:var(--wrn-bg);color:var(--warn);padding:2px 7px;border-radius:999px;}
 
 /* ── Work schedule ───────────────────────────────────────────────────────── */
 .ws-wrap{columns:2;column-gap:16px;}
@@ -240,6 +276,10 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .pt-card{background:var(--bg);border:2px solid var(--border);border-radius:var(--rs);padding:9px 11px;font-size:10.5px;}
 .pt-hd{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);margin-bottom:6px;}
 .pt-card div{padding:1.5px 0;}
+/* Tests booked for this drill are the only thing on this slide anyone acts on today,
+   so the card leads and takes two columns — it carries appointment times, not just names. */
+.pt-booked{grid-column:span 2;background:var(--info-bg);border-color:var(--info-bd);}
+.pt-booked .pt-hd{color:var(--info);}
 .ug-cols{display:flex;gap:16px;}
 .ug-col{flex:1;}
 .ug-card{background:var(--bg);border:2px solid var(--border);border-radius:var(--rs);
@@ -286,6 +326,11 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
   .cover-stats{flex-wrap:wrap;gap:18px;margin-top:24px;}
   .two-col,.ug-cols,.med-grid,.tl-wrap,.duties-cols{flex-direction:column;gap:14px;}
   .tl-wrap{height:auto;}
+  /* A ten-hour grid cannot compress to a phone; scroll it instead of crushing the
+     bars into unreadable slivers. The day heading stays put above the scroller. */
+  .tl-day{overflow-x:auto;}
+  .tl-grid{min-width:660px;}
+  .tl-n{font-size:9.5px;}
   .ws-wrap,.cbt-cols,.med-list{columns:1;}
   .grid-3,.grid-4,.pt-grid{grid-template-columns:1fr 1fr;}
   .org-col{width:calc(50% - 3px);}

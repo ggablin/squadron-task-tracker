@@ -52,13 +52,19 @@ async function buildFromDb(pool, utaId) {
     ORDER BY m.last_name, m.first_name
   `);
 
-  // Tasks for this cycle, normalized for shape.js
+  // Tasks for this cycle, normalized for shape.js.
+  //
+  // m.active is the same filter the org-chart query above already applies. Without it
+  // the two halves of the deck disagreed: on the August 2026 cycle two members retired
+  // off the roster were absent from every org chart and from the member count, yet
+  // their medical requirements printed on the Medical & Dental slide of a document that
+  // goes outside the squadron. The app's own API answers "Member not found" for both.
   const { rows: taskRows } = await pool.query(`
     SELECT cat.code AS category, t.title, t.details, t.urgency, t.is_upcoming,
            m.rank, m.last_name, s.name AS shop
     FROM tasks t
     JOIN task_categories cat ON cat.id = t.category_id
-    JOIN members m ON m.id = t.member_id
+    JOIN members m ON m.id = t.member_id AND m.active = true
     LEFT JOIN shops s ON s.id = m.shop_id
     WHERE t.uta_cycle_id = $1
     ORDER BY m.last_name
@@ -93,12 +99,19 @@ async function buildFromDb(pool, utaId) {
   // Cover stat strip — the same three numbers leadership reads off the app, which
   // means "Tasks this UTA" has to exclude notices exactly as the app's rollups do.
   // A raw COUNT(*) printed 113 here against the app's 102 on the August cycle.
+  //
+  // Excluding notices was only half of it. /api/squadron joins `members m ON
+  // m.shop_id = s.id AND m.active = true`, so its total never sees a retired member's
+  // tasks; this count had no members join at all and saw all of them, which put the
+  // printed cover at 478 against the app's 471 on the same cycle. Both halves of the
+  // rule have to match or the promise above is not kept.
   const { rows: [counts] } = await pool.query(`
     SELECT (SELECT COUNT(*) FROM members WHERE active) AS members,
            (SELECT COUNT(*) FROM shops)                AS shops,
            (SELECT COUNT(*)
               FROM tasks t
               JOIN task_categories icat ON icat.id = t.category_id
+              JOIN members m ON m.id = t.member_id AND m.active = true
              WHERE t.uta_cycle_id = $1
                AND NOT ${informationalSql()}) AS tasks
   `, [utaId]);
@@ -110,8 +123,17 @@ async function buildFromDb(pool, utaId) {
   // stays hand-edited for now (spec §14).
   const dutyRows = await duties.list(pool);
   const drillRows = await drillCal.listAll(pool);
-  const reference = cycle.start_iso ? drillCal.isoDate(cycle.start_iso) : drillCal.isoDate(new Date());
-  const calendar = drillCal.buildYear(drillRows, Number(reference.slice(0, 4)), reference);
+  // No start_date means we genuinely do not know which drill this deck is for — every
+  // cycle the Task Builder creates is in that state. Falling back to today was the old
+  // behaviour and it printed a confident lie: on 28 August the August deck struck
+  // through its own 8–9 Aug drill and bolded 11–13 Sep as "this UTA". Pass no reference
+  // instead; buildYear then lists the year without claiming past or next, and the slide
+  // says why. The year still has to come from somewhere, so it falls back to today's —
+  // that only picks which calendar page prints, not which drill is marked.
+  const reference = cycle.start_iso ? drillCal.isoDate(cycle.start_iso) : null;
+  const year = Number((reference || drillCal.isoDate(new Date())).slice(0, 4));
+  const calendar = drillCal.buildYear(drillRows, year, reference);
+  calendar.dated = Boolean(reference);
 
   return {
     cover: { welcome: 'Welcome to the', title: cycle.name, dateRange: fmtRange(cycle.start_date, cycle.end_date), unit: '108 CES' },
@@ -120,7 +142,7 @@ async function buildFromDb(pool, utaId) {
     org: buildOrgChart(memberRows),
     timeline: shape.shapeTimeline(timelineRows),
     workOrders: shape.shapeWorkOrders(woRows),
-    sgliVred: shape.shapeSgliVred(tasksByCat.admin),
+    gtc: shape.shapeGtc(tasksByCat.admin),
     cbts: shape.shapeCbts(tasksByCat.cbt),
     orders: shape.shapeOrders(tasksByCat.admin),
     epbs: shape.shapeEpbs(tasksByCat.admin),
