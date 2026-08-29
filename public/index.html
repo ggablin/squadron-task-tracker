@@ -4636,6 +4636,103 @@ function toggleTheme() {
   // Repaint through the same function the head script uses, so the attribute,
   // the status-bar colour and the stored value can never drift apart.
   (window.__setTheme || function () {})(next === 'dark');
+  __barsTap();
+}
+
+/* TEMPORARY DIAGNOSTIC — the system-bars overlay. Delete once the bars are settled.
+
+   Three fixes for the status/gesture bars have now shipped on theory and been
+   overruled by the handset (#90, #91, and cb11749's removal), because none of the
+   values that matter are observable from a desk: the installed WebAPK bakes
+   manifest fields into an APK minted by Google's server, re-minted on its own
+   ~daily schedule, and nothing in devtools shows what a given phone actually
+   resolved. This overlay reads it all out ON the device instead.
+
+   Two ways in, because standalone has no URL bar: open the app with #bars in the
+   URL (a link to 108ces.up.railway.app/#bars from any app opens in the installed
+   tracker via link capture), or tap the theme toggle five times within two
+   seconds — the theme flapping while you do is harmless, and the last tap's
+   state is what sticks. */
+var __barsTaps = [];
+function __barsTap() {
+  var now = Date.now();
+  __barsTaps = __barsTaps.filter(function (t) { return now - t < 2000; });
+  __barsTaps.push(now);
+  if (__barsTaps.length >= 5) { __barsTaps = []; showBarsDiagnostic(); }
+}
+function showBarsDiagnostic() {
+  var old = document.getElementById('bars-diag');
+  if (old) old.remove();
+
+  var lines = [];
+  function add(k, v) { lines.push([k, String(v)]); }
+
+  add('when', new Date().toISOString());
+  add('userAgent', navigator.userAgent);
+  add('display-mode standalone', window.matchMedia('(display-mode: standalone)').matches);
+  add('prefers-color-scheme dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var stored = null; try { stored = localStorage.getItem('theme'); } catch (e) { stored = 'unreadable: ' + e.name; }
+  add('localStorage.theme', stored);
+  add('data-theme', document.documentElement.dataset.theme || '(none)');
+
+  var metas = document.querySelectorAll('meta[name="theme-color"]');
+  add('theme-color metas', metas.length);
+  for (var i = 0; i < metas.length; i++) {
+    var md = metas[i].getAttribute('media');
+    add('  meta[' + i + '] ' + (md || 'unscoped'),
+        metas[i].getAttribute('content') + (md ? (window.matchMedia(md).matches ? '  ← matches' : '') : ''));
+  }
+
+  // The safe-area insets say who owns the bar pixels: 0 means the system draws an
+  // opaque bar outside the page; >0 means the page extends under it and paints it.
+  var probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);left:0;width:0;visibility:hidden';
+  document.body.appendChild(probe);
+  var r = probe.getBoundingClientRect();
+  add('safe-area-inset-top', Math.round(r.top) + 'px');
+  add('safe-area-inset-bottom', Math.round(window.innerHeight - r.bottom) + 'px');
+  probe.remove();
+
+  var hdr = document.querySelector('.mob-hdr'), nav = document.querySelector('.mob-nav');
+  if (hdr) add('.mob-hdr background', getComputedStyle(hdr).backgroundColor);
+  if (nav) add('.mob-nav background', getComputedStyle(nav).backgroundColor);
+
+  var box = document.createElement('div');
+  box.id = 'bars-diag';
+  box.style.cssText = 'position:fixed;inset:12px;z-index:9999;overflow:auto;background:#fff;color:#111;'
+    + 'font:12px/1.6 monospace;padding:14px;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.45);';
+  var close = document.createElement('button');
+  close.textContent = 'Close';
+  close.style.cssText = 'float:right;font:inherit;padding:4px 12px;';
+  close.onclick = function () { box.remove(); };
+  // The report lives in its own element so updating it cannot disturb the button —
+  // rewriting box.textContent would swallow the button's label into the report.
+  var pre = document.createElement('div');
+  pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;';
+  var out = 'SYSTEM BARS DIAGNOSTIC — screenshot this\n\n';
+  for (var j = 0; j < lines.length; j++) out += lines[j][0] + ': ' + lines[j][1] + '\n';
+  out += '\nmanifest (cache-bypassed fetch): …';
+  pre.textContent = out;
+  box.appendChild(close); box.appendChild(pre);
+  document.body.appendChild(box);
+
+  // What the network actually serves right now, past the SW and HTTP caches — if
+  // this still shows a theme_color, the deploy has not reached the phone; if it is
+  // absent but the bar is still cream, the cream is baked into the minted APK.
+  fetch('/manifest.webmanifest', { cache: 'reload' })
+    .then(function (res) { return res.json(); })
+    .then(function (mf) {
+      pre.textContent = pre.textContent.replace('manifest (cache-bypassed fetch): …',
+        'manifest (cache-bypassed fetch): theme_color=' + JSON.stringify(mf.theme_color)
+        + ' background_color=' + JSON.stringify(mf.background_color));
+    })
+    .catch(function (e) {
+      pre.textContent = pre.textContent.replace('manifest (cache-bypassed fetch): …',
+        'manifest (cache-bypassed fetch): FAILED ' + e);
+    });
+}
+if (location.hash === '#bars') {
+  window.addEventListener('load', function () { setTimeout(showBarsDiagnostic, 300); });
 }
 
 function showLogin() {
