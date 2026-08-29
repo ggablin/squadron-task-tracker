@@ -97,6 +97,22 @@ test('buildYear: past and next are relative to the reference date, and only one 
   assert.strictEqual(drills.find(d => d.next).label, '11–13 Sep');
 });
 
+// A cycle created through the Task Builder has no start_date — cycles 4, 5 and 6 on
+// production all do — and the newsletter used to fall back to `new Date()` for the
+// reference. On 28 August that struck through the 8–9 Aug drill the deck was FOR and
+// bolded 11–13 Sep as "this UTA". A calendar that cannot know which drill it is for
+// must mark none of them rather than confidently mark the wrong one; an empty string
+// is not a safe stand-in either, since every real date sorts after it and that quietly
+// makes January "next".
+test('buildYear: with no reference date, no drill is marked past or next', () => {
+  for (const ref of [null, undefined, '']) {
+    const drills = cal.buildYear(drillRows, 2026, ref).entries.filter(e => e.kind === 'drill');
+    assert.strictEqual(drills.length, 10, `ref=${JSON.stringify(ref)}: every drill still listed`);
+    assert.ok(drills.every(d => d.past === false), `ref=${JSON.stringify(ref)}: nothing struck through`);
+    assert.ok(drills.every(d => d.next === false), `ref=${JSON.stringify(ref)}: nothing bolded`);
+  }
+});
+
 test('buildYear: a reference date inside a drill makes that drill next, not past', () => {
   const { entries } = cal.buildYear(drillRows, 2026, '2026-09-12');
   const sep = entries.find(e => e.label === '11–13 Sep');

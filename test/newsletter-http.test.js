@@ -197,6 +197,75 @@ test('the cover prints the drill it is for, not the day before, in a zone ahead 
     }
   });
 
+// The org chart and the member count filter on m.active; the task query did not. So
+// two members retired off the August 2026 roster still had their medical requirements
+// printed in a deck that goes outside the squadron, and the cover counted their tasks
+// — putting it 7 above the number leadership reads off the app, which is the one thing
+// the cover's own comment promises will never happen.
+async function seedTasksForActivityTest() {
+  await seed();
+  const { rows: [cat] } = await pool.query(
+    `INSERT INTO task_categories (code, label, sort_order) VALUES ('medical','Medical',3) RETURNING id`);
+  const { rows: [cycle] } = await pool.query(
+    `SELECT id FROM uta_cycles WHERE is_current = true`);
+  const { rows: [shop] } = await pool.query(`SELECT id FROM shops LIMIT 1`);
+  const member = async (last, active) => {
+    const { rows: [m] } = await pool.query(
+      `INSERT INTO members (last_name, first_name, rank, shop_id, role, slug, password_hash, active, must_change_password)
+       VALUES ($1,'Test','SSgt',$2,'member',$1,'x',$3,false) RETURNING id`, [last, shop.id, active]);
+    return m.id;
+  };
+  const onRoster = await member('stillhere', true);
+  const retired = await member('movedon', false);
+  for (const id of [onRoster, retired]) {
+    await pool.query(
+      `INSERT INTO tasks (uta_cycle_id, member_id, category_id, title, details, urgency)
+       VALUES ($1,$2,$3,'HIV Blood Draw','Walk-in Saturday 0900-1400','this_uta')`,
+      [cycle.id, id, cat.id]);
+  }
+}
+
+test("an inactive member's tasks stay off the deck, as they are already off the org chart", async () => {
+  await seedTasksForActivityTest();
+  const html = await (await get(await login('leadtest'))).text();
+  assert.match(html, /stillhere/, 'a member on the roster still has their requirements printed');
+  assert.doesNotMatch(html, /movedon/,
+    'a member marked inactive must not appear anywhere in a deck that leaves the squadron');
+});
+
+test('the cover counts the same tasks the app counts, ignoring inactive members', async () => {
+  await seedTasksForActivityTest();
+  const html = await (await get(await login('leadtest'))).text();
+  assert.match(html, /<div class="n">1<\/div><div class="l">Tasks this UTA<\/div>/,
+    'two tasks exist but one belongs to an inactive member, so the cover reads 1');
+});
+
+// Every cycle the Task Builder creates has NULL start/end dates — ids 4, 5 and 6 on
+// production all do. The RSD slide used to date itself against `new Date()` when the
+// cycle had none, so the August deck struck through the 8–9 Aug drill it was FOR and
+// printed 11–13 Sep in bold as "this UTA". Marking the wrong weekend is worse than
+// marking none: a reader has no way to tell it is wrong.
+test('a cycle with no dates marks no drill rather than marking the wrong one', async () => {
+  await seed();   // drill_dates: 5–7 Jun, 8–9 Aug, 11–13 Sep 2026
+  const { rows: [cycle] } = await pool.query(
+    `INSERT INTO uta_cycles (name, start_date, end_date, is_current, status)
+     VALUES ('August 2026 UTA (no dates)', NULL, NULL, false, 'live') RETURNING id`);
+
+  const res = await fetch(`${baseUrl}/newsletter?uta=${cycle.id}`,
+    { headers: { Cookie: await login('leadtest') } });
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+
+  const list = html.match(/<ul class="rsd-list">([\s\S]*?)<\/ul>/);
+  assert.ok(list, 'the RSD slide still renders its list');
+  assert.doesNotMatch(list[1], /<s>/, 'no drill is struck through when the cycle is undated');
+  assert.doesNotMatch(list[1], /<b>/, 'and none is bolded as "this UTA"');
+  assert.match(list[1], /8–9 Aug 2026/, 'every drill is still listed');
+  assert.match(list[1], /11–13 Sep 2026/);
+  assert.match(html, /dates are not set/,
+    'the deck says why nothing is marked, rather than dropping the marking silently');
+});
+
 test('a malformed ?uta is rejected rather than silently falling back to the live cycle',
   async () => {
     await seed();

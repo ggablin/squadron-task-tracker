@@ -95,19 +95,47 @@ function orgSlide(flightName, d) {
 }
 
 // ── 6. UTA Timeline ───────────────────────────────────────────────────────
+// Drawn as a horizontal time grid, the way the newsletter draws it: hours across the
+// top, each event a bar under the hours it actually occupies, overlapping events
+// stacked in lanes. A vertical list of the same events cannot show that the Manning
+// Doc meeting runs inside the afternoon admin block, or where the gaps are.
+//
+// shape.js has already resolved every bar to a start slot, a width and a lane; all
+// this does is turn those into grid-column and grid-row.
 function timeline(d) {
   if (!d.timeline.length) return chrome('Schedule', 'UTA Timeline', emptyNote('schedule events'));
+
   const body = d.timeline.map(day => {
-    const rows = day.events.map(e => {
-      const time = e.start ? `${esc(e.start)}${e.end ? '–' + esc(e.end) : ''}` : (e.type === 'emphasis' ? 'Emphasis' : '');
-      const who = e.shop && e.shop !== 'ALL' ? ` <span class="tl-shop">${esc(e.shop)}</span>` : '';
-      const det = e.details ? `<div class="p-note">${esc(e.details)}</div>` : '';
-      return `<div class="tl-row ${e.type === 'emphasis' ? 'tl-emph' : ''}">
-        <div class="tl-time">${time}</div>
-        <div class="tl-what">${esc(e.title)}${who}${det}</div></div>`;
+    const g = day.grid;
+    const perHour = 60 / g.slot;
+    const hours = g.ticks.map((t, i) =>
+      `<div class="tl-hour" style="grid-column:${i * perHour + 1}/span ${perHour}">${esc(t)}</div>`).join('');
+
+    const bars = day.events.map(e => {
+      const col = (e.startMin - g.from) / g.slot + 1;
+      const span = (e.endMin - e.startMin) / g.slot;
+      const who = e.shop && e.shop !== 'ALL' ? `<span class="tl-shop">${esc(e.shop)}</span>` : '';
+      const det = e.details ? `<span class="tl-det">${esc(e.details)}</span>` : '';
+      const cls = ['tl-bar', e.type === 'emphasis' ? 'tl-emph' : '', span <= 2 ? 'tl-narrow' : ''].filter(Boolean).join(' ');
+      return `<div class="${cls}" style="grid-column:${col}/span ${span};grid-row:${e.lane + 2}">
+        <span class="tl-t">${esc(e.start)}${e.end ? `–${esc(e.end)}` : ''}</span>
+        <span class="tl-n">${esc(e.title)}${who}${det}</span>
+      </div>`;
     }).join('');
-    return `<div class="tl-day"><h3>${esc(day.day)}</h3><div class="tl-list">${rows}</div></div>`;
+
+    const notes = day.untimed.length
+      ? `<div class="tl-notes">${day.untimed.map(e =>
+          `<span class="tl-note">${esc(e.title)}${e.details ? ` — ${esc(e.details)}` : ''}</span>`).join('')}</div>`
+      : '';
+
+    return `<div class="tl-day">
+      <h3>${esc(day.day)}</h3>
+      <div class="tl-grid" style="--cols:${g.cols};--hourw:calc(100% / ${g.ticks.length})">
+        ${hours}${bars}
+      </div>${notes}
+    </div>`;
   }).join('');
+
   return chrome('Schedule', 'UTA Timeline', `<div class="tl-wrap">${body}</div>`, '',
                 'Squadron-wide unless a shop is named');
 }
@@ -126,13 +154,21 @@ function workSchedule(d) {
   return chrome('Shops', 'UTA Work Schedule', `<div class="ws-wrap">${body}</div>`, '', `${n} work orders`);
 }
 
-// ── SGLI & vRED ───────────────────────────────────────────────────────────
-function sgliVred(d) {
+// ── Government Travel Card ────────────────────────────────────────────────
+// Newsletter page 15. Replaced an SGLI & vRED slide that printed two empty columns
+// every cycle — no cycle has ever held a task by either of the names it looked for.
+function gtc(d) {
   const col = (head, list) => `<div class="col"><div class="col-hd">${esc(head)} (${list.length})</div>${
     list.length ? list.map(p => `<div class="p-row"><span class="p-name overdue">${person(p)}</span></div>`).join('') : emptyNote('members')
   }</div>`;
-  const intro = `<p class="intro">Members below need to log in to MilConnect (SGLI) and/or vMPF (vRED) to update. Tell your supervisor once it is done.</p>`;
-  return chrome('Admin', 'SGLI & vRED Updates', intro + `<div class="two-col">${col('SGLI', d.sgliVred.sgli)}${col('vRED', d.sgliVred.vred)}</div>`);
+  const intro = `<p class="intro">Every member needs a Government Travel Card. Apply through CitiDirect, then
+    complete the GTC training and hand the certificate <b>and</b> the Statement of Understanding to your
+    supervisor. If you have a new card, verify it with CitiBank and update the card details in DTS; if you have
+    moved, change your address in DTS.</p>`;
+  const outro = `<p class="intro" style="margin-top:10px">Place both the SoU and the CBT certificate on Chief Cisek's desk.</p>`;
+  return chrome('Admin', 'Government Travel Card', intro
+    + `<div class="two-col">${col('Statement of Understanding', d.gtc.sou)}${col('GTC CBT certificate', d.gtc.cbt)}</div>`
+    + outro, '', `${d.gtc.sou.length + d.gtc.cbt.length} outstanding`);
 }
 
 // ── 12. CBTs ──────────────────────────────────────────────────────────────
@@ -188,14 +224,21 @@ function medical(d) {
 }
 
 // ── 19. PT Testing ────────────────────────────────────────────────────────
+// Tests booked for this drill lead, because that is what a member needs on Saturday
+// morning; the due-month buckets behind them are the year's planning view.
 function pt(d) {
+  const booked = d.pt.scheduled.length
+    ? `<div class="pt-card pt-booked"><div class="pt-hd">Testing this UTA</div>${
+        d.pt.scheduled.map(m => `<div>${esc(m.rank)} ${esc(m.last)}${
+          m.detail ? ` <span class="p-note">${esc(m.detail)}</span>` : ''}</div>`).join('')}</div>`
+    : '';
   const cards = d.pt.buckets.map(b =>
     `<div class="pt-card"><div class="pt-hd">${esc(b.label)}</div>${b.members.map(m => `<div>${esc(m.rank)} ${esc(m.last)}</div>`).join('')}</div>`).join('');
   const od = d.pt.overdue.map(r => `${esc(r.rank)} ${esc(r.last)}`).join(' · ');
   const note = `<p class="intro">Schedule yourself in MyFitness — you can test early, never late.
     ${od ? `<br><span class="overdue">Overdue: ${od}</span>` : ''}</p>`;
-  return chrome('Fitness', 'PT Testing — Due Dates',
-    note + (cards ? `<div class="pt-grid">${cards}</div>` : emptyNote('scheduled tests')));
+  const grid = booked || cards ? `<div class="pt-grid">${booked}${cards}</div>` : emptyNote('scheduled tests');
+  return chrome('Fitness', 'PT Testing — Due Dates', note + grid);
 }
 
 
@@ -257,8 +300,15 @@ function rsdSchedule(d) {
   // twelve "NO UTA <month>" lines instead of the honest empty note. Check for an
   // actual drill instead.
   const hasDrills = cal.entries.some(e => e.kind === 'drill');
+  // `dated` is false when the cycle carries no start_date, in which case nothing is
+  // struck or bolded — so the intro must not promise marking that is not there, and
+  // the reason is worth one muted line rather than an unexplained absence.
+  const intro = cal.dated === false
+    ? `<p class="intro">The squadron's drill weekends for CY ${cal.year}.
+       <span class="p-note">This UTA's dates are not set, so no weekend is marked.</span></p>`
+    : `<p class="intro">Completed drills are struck through; this UTA is in bold.</p>`;
   const body = hasDrills
-    ? `<p class="intro">Completed drills are struck through; this UTA is in bold.</p><ul class="rsd-list">${cal.entries.map(line).join('')}</ul>`
+    ? `${intro}<ul class="rsd-list">${cal.entries.map(line).join('')}</ul>`
     : emptyNote('drill dates');
   return chrome('Calendar', `RSD Schedule — CY ${cal.year}`, body);
 }
@@ -269,6 +319,6 @@ function staticSlide(eyebrow, title, bodyHtml) {
 }
 
 module.exports = {
-  beginDeck, cover, orgSlide, timeline, workSchedule, sgliVred, cbts,
+  beginDeck, cover, orgSlide, timeline, workSchedule, gtc, cbts,
   orders, epbs, medical, pt, inbound, upgrade, additionalDuties, rsdSchedule, staticSlide, esc,
 };

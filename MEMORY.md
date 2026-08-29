@@ -229,9 +229,9 @@ Seeded test accounts (local): members `becerra`/`derose`/`fowler`/`glenn`/`grada
 
 ---
 
-## 8a. Two bug families this codebase keeps producing
+## 8a. Three bug families this codebase keeps producing
 
-The colour family has surfaced four times and the date family **five** — four across PRs #84 and #85 and a fifth on 2026-08-25, found by a review of the branch that documented the family in the first place. Different files, different people, months apart. Neither is subtle once you know to look, and both are one `grep` away — provided the `grep` is aimed at the whole codebase, which the date one was not until that fifth instance made the gap obvious. **Check these before writing a colour or serialising a date.**
+The colour family has surfaced four times, the date family **five** — four across PRs #84 and #85 and a fifth on 2026-08-25, found by a review of the branch that documented the family in the first place — and the literal-filter family **four**, all four found at once on 2026-08-28 by diffing the generated newsletter against the newsletter it replaces. Different files, different people, months apart. None is subtle once you know to look, and all three are one `grep` away — provided the `grep` is aimed at the whole codebase, which the date one was not until that fifth instance made the gap obvious. **Check these before writing a colour, serialising a date, or selecting rows by a string you typed.**
 
 ### A hardcoded colour on a token-coloured background
 
@@ -279,6 +279,36 @@ grep -hiE "^\s+[a-z_]+\s+DATE\b|ADD COLUMN IF NOT EXISTS [a-z_]+ +DATE\b" schema
 (`drill_dates` is a **table**, not a column — its `DATE` columns are `start_date`/`end_date` and are already covered. Putting the table name in the pattern would match every reference to the table and buy nothing.)
 
 The check is noisy by design, which is the correct trade for a standing grep: a false positive costs a glance, a false negative ships the bug. **Verified 2026-08-25:** 96 hits across nine files; it finds all three `lib/cycles.js` sites, correctly shows the two `server.js` sites fixed in #85 as `to_char`'d, and — the whole point of the widening — it finds `newsletter/from-db.js:42` and `:117`, the `fmtRange` site. The old `server.js lib/*.js | grep -v to_char` form returned 68 hits and **zero** of the newsletter's.
+
+### A literal string filter drifting from the data it selects
+
+A shaper picks rows out of a category by comparing a **free-text column** against a string someone typed months ago. The wording in the database changes — an import is rewritten, a title is shortened — and the comparison quietly stops matching. Nothing throws. The section renders its empty state, which says *"nothing recorded in the tracker for this UTA"* over a database that is full.
+
+**That is what makes this family expensive: an empty section and an absent source look identical.** A page that renders cleanly gets no review, so the defect ships every cycle until someone diffs the output against the document it replaces. All four instances below had survived at least one published cycle.
+
+Found in `newsletter/shape.js`, all fixed 2026-08-28:
+
+| Slide | Filter expected | Live data | Cost |
+|---|---|---|---|
+| Orders / DTS / AROWS | `'Complete DTS Voucher'`, `'Sign RMP in AROWS'`, … | `DTS Voucher`, `Sign RUTA`, `Sign Orders`, `AROWS`, `DTS Authorization` | 16 tasks → `0 open` |
+| PT Testing | details matching `/Due (\w{3}) (\d{4})/` | `PT Test Scheduled Saturday @ 1030hrs` | 11 tasks → empty page |
+| SGLI & vRED | `'Update SGLI in MilConnect'`, `'Update vRED in vMPF'` | no such task, ever | empty page every cycle; the 20 `GTC CBT`/`SoU` tasks that belong on newsletter p15 had no slide |
+| EPBs / OPBs | `title.startsWith('EPB')` | `EPB - Closeout`, `OPB - Closeout` | both OPBs dropped from a slide named for them |
+
+The same family runs in reverse. `shapeInbound` took the **whole** `upcoming` category, and that category holds squadron-wide notices as well as a member's school dates — `Family Day` is assigned to all ~70 members, so the slide printed **84 rows against the newsletter's 16**, burying twelve real departures. Note what does *not* fix it: filtering on `informational`, because `BMT & Technical School` carries `urgency: 'info'` too and that empties the slide instead. Over-broad and over-narrow are one bug — *the predicate does not describe the data* — and only reading the live rows tells you which way it fails.
+
+**The rules.**
+1. Prefer a **stable key** (category code, id) over a human-edited display string. Where a literal is unavoidable, match a **word** (`/\bAROWS\b/`) rather than a whole title, so re-wording around it survives.
+2. **Never let a filter discard silently.** Return the residue — `shapeInbound` now returns `other` — or count it. `shapePt` has a test asserting every input reaches exactly one of its three outputs.
+3. **Distinguish the two empties.** `N > 0 && M === 0` is a bug; `N === 0` is the truth. They must not render the same sentence.
+
+`test/newsletter-shape.test.js` holds the guard: `LIVE_ADMIN_TITLES` is the real August 2026 title inventory, and the deck must either route each title to a slide or name it in `NO_SLIDE_YET`. A title that is neither fails the suite instead of emptying a page. **Re-read that list against production when the import changes** — it is a snapshot, and a snapshot goes stale exactly the way the filters did.
+
+```
+grep -rnE "title (===|!==) '|\.includes\(t\.title\)|title\.startsWith\(" newsletter lib
+```
+
+**Related, same root cause:** the deck's queries must agree on **which members exist**. `from-db.js` filtered the org chart on `m.active` but not the task query, so two members retired off the roster had their medical requirements printed in a document that leaves the squadron, and the cover counted their tasks — 478 against the app's 471 on the same cycle, while the cover's own comment promised it showed "the same three numbers leadership reads off the app." `/api/squadron` joins `members m ON … AND m.active = true`; anything claiming to match it must too.
 
 ---
 
@@ -338,6 +368,50 @@ longer true, and the working copy has been synced to `origin/master` with a clea
 - The three-state checkbox supports `partial`/"in progress" in CSS + data, but no UI ever sets it (dead state) — wire a 3-state tap or remove it.
 - Misc polish: `confirm()` vs. the unused styled `.confirm-delete` component; cache data across tab switches (currently refetches every switch); remove the "SSgt Smith, J." placeholder in the desktop subtitle; add an all-clear/empty-state moment at 100%; broader login/onboarding help.
 
+**Cycle dates — the renderer is fixed, the data and the builder are not (2026-08-28)**
+- **The Task Builder never sets `start_date`/`end_date`.** `lib/cycles.js:62` accepts both and
+  writes NULL when they are absent; the builder UI does not send them, so cycles 4, 5 and 6 all
+  have NULL dates while the older May cycles (ids 1–2) carry real ones. The newsletter now
+  degrades honestly rather than marking the wrong drill, but **the dates are still missing**:
+  the cover prints no date range and no weekend is marked. Two things needed — set the dates on
+  the live cycle, and either require them at creation or **derive them from `drill_dates`**,
+  which already holds every CY-2026 drill and is what the RSD slide reads. Deriving is the
+  better fix: it needs no UI change and cannot be forgotten.
+- **Duplicate cycles on production.** Two empty `Aug 2026 UTA` drafts (ids 4, 5 — 0 tasks each)
+  and two identical archived `May 2026 UTA` rows (ids 1, 2 — 286 tasks *each*). `lib/cycles.js:49`
+  now rejects a new non-archived name clash, so this cannot recur, but the existing rows were
+  created before that guard and are still there.
+- **No September cycle exists** as of 2026-08-28. The drill is 11–13 Sep (3-day).
+
+**Newsletter export — open after the 2026-08-28 audit (§11)**
+- **The six hand-edited partials in `newsletter/static/` are the weak link, and four have
+  drifted.** Nothing in the deck signals that a partial is a cycle old, so it prints as
+  confidently as the live pages beside it. **MEETs/RADR** is a full cycle behind (FY26 with
+  COMPLETE/CANCELLED markers and the June 2026 Camp Murray DFT roster; the August newsletter
+  is on FY27, Apr–Jul 2027) — `calendar_events` already models this, so retiring the partial
+  is the real fix. **Dental Status** shares no overdue names with the newsletter (partial:
+  Hill/Geant/Reneau/Bernard/Cabbler; newsletter: Maramba/Veal) and needs a months-since-exam
+  field to go live. **Additional Training** is missing four AFI 10-210 courses. **Safety**
+  carries an Ops row the newsletter lacks, drops its C2 row, and has Cabbler at the wrong rank.
+- **194 of 222 admin tasks reach no slide:** `Form 55's` (56) and `JSTO` (42) are named on the
+  hand-written Safety slide and `Quarterly Award 1206's` (26) on the hand-written Awards slide,
+  but as prose — neither slide reads the tasks. `AtHoc` (50) has no slide anywhere. Giving them
+  slides is a product decision; `NO_SLIDE_YET` in `test/newsletter-shape.test.js` keeps the
+  omission deliberate rather than silent.
+- **Two AFI 10-210 Percipio courses are miscategorised as `cbt`** (`Rapid Damage Assessment CBT`,
+  `Engineering Contingency Responsibilities CBT`), so they print on slide 12 while the static
+  slide 13 lists RDA again by hand — Maramba appears under it twice.
+- **The CBT slide's colour contradicts its own text.** Colour comes from `urgency`, the words
+  from `details`, and on the August cycle they disagree for roughly half the first block of
+  every group (e.g. Ebbert's DAF Ops Security: `urgency: 'overdue'`, details `"15 min — Due
+  This Month"` — a red name beside the words "Due This Month"). Fix the import, not the slide.
+- **Work Schedule:** HVAC WO# 202600466 prints twice (the newsletter lists it once per day and
+  the export dropped the day column), and a shop with no work orders is omitted entirely, so a
+  reader cannot tell "EM away on DFT" from "nobody entered anything".
+- **PT Testing is fixed but thin.** The 11 live tasks now render; the newsletter publishes the
+  *whole year's* roster out to June 2027. Matching it needs a due-date field on the member,
+  not one task per cycle.
+
 **Auth / accounts**
 - Admin password reset shipped (§5). A **self-service email-based reset** ("forgot password") is a reasonable phase 2 (needs reliable member emails + reset tokens).
 
@@ -367,6 +441,46 @@ longer true, and the working copy has been synced to `origin/master` with a clea
 ---
 
 ## 11. Recent work
+
+### 2026-08-28 — Newsletter export audited against the real newsletter
+
+The generated deck was compared page by page against MSgt McNaughton's **August 2026
+RSD newsletter** on the live August cycle. Both are 23 pages in the same order, and
+that structural match had been hiding four slides that misreported their data. Of 23
+slides: 9 faithful, 8 degraded, 6 wrong.
+
+Fixed on this branch (`newsletter/shape.js`, `from-db.js`, `slides.js`, `theme.js`):
+
+- **Orders / DTS / AROWS, PT Testing, EPBs / OPBs, Inbound / Outbound** — the literal-filter
+  family, now §8a's third entry. See that section for the table and the rules.
+- **SGLI & vRED → Government Travel Card.** The old slide printed two empty columns for
+  tasks the tracker has never held; newsletter p15 is GTC/SoU, and the tracker holds 10
+  `GTC CBT` + 10 `Statement of Understanding (SoU)` tasks that had no slide at all.
+- **Inactive members.** The task query now filters `m.active` like the org-chart query,
+  and the cover's count joins members so it matches `/api/squadron` (was 478 vs 471).
+- **An undated cycle no longer marks the wrong drill.** Every cycle the Task Builder creates
+  has `start_date`/`end_date` NULL — ids 4, 5 and 6 on production all do — and the RSD slide
+  fell back to `new Date()` for its reference. On 28 August that struck through the **8–9 Aug
+  drill the deck was for** and bolded **11–13 Sep** as "this UTA", and the cover's date range
+  was blank. `drillEntries` now treats a missing reference as *unknown* (`past:false,
+  next:false` for every drill) rather than dating against today, and the slide says why
+  nothing is marked. Note an empty string is **not** a safe stand-in for "no reference": every
+  real date sorts after `''`, so it silently makes January "next".
+- **UTA Timeline is now horizontal** — a to-scale time grid per day, hours across the top,
+  events as bars under the hours they occupy, overlapping events packed into lanes, which
+  is how the newsletter draws it and how you can see that the Manning Doc meeting runs
+  *inside* the afternoon admin block. Layout maths (`startMin`/`endMin`/`lane`, hour ticks,
+  15-minute columns) lives in `shape.js` so it is unit-tested without parsing HTML;
+  `slides.js` only turns it into `grid-column`/`grid-row`. On a phone the grid scrolls
+  (`min-width:660px`) rather than crushing.
+- **New:** `test/newsletter-shape.test.js` (12 tests), the first unit coverage of `shape.js`.
+
+**Known-good, left alone:** org charts, Additional Duties, Work Schedule, RSD Schedule.
+**Still open** (see §10): four of the six hand-edited partials in `newsletter/static/` have
+drifted from the newsletter — MEETs/RADR is a full cycle behind (FY26 + the June DFT
+roster; the newsletter is on FY27) and Dental Status shares no overdue names with it.
+194 of the 222 admin tasks still have no slide (`Form 55's` 56, `AtHoc` 50, `JSTO` 42,
+`Quarterly Award 1206's` 26).
 
 ### 2026-08-26 — MCP server (`mcp/`)
 Claude (Claude Code / desktop app) can now read and update the tracker —
