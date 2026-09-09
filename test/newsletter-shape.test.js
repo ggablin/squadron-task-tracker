@@ -184,7 +184,7 @@ test('events that overlap are stacked into separate lanes, not overwritten', () 
   const [sat] = shape.shapeTimeline([
     ev('0900', '1200', 'Admin / In-house Training'),
     ev('1000', '1030', 'BCA Measurements'),
-    ev('1030', '1100', 'Manning Doc Meeting'),
+    ev('1100', '1130', 'Manning Doc Meeting'),
     ev('1200', '1330', 'Lunch'),
   ]);
 
@@ -192,7 +192,7 @@ test('events that overlap are stacked into separate lanes, not overwritten', () 
   assert.strictEqual(lane('Admin / In-house Training'), 0);
   assert.strictEqual(lane('BCA Measurements'), 1, 'it runs inside Admin, so it needs its own lane');
   assert.strictEqual(lane('Manning Doc Meeting'), 1,
-    'it clears BCA, so it reuses that lane rather than opening a third');
+    "it starts after BCA's drawn hour, so it reuses that lane rather than opening a third");
   assert.strictEqual(lane('Lunch'), 0, 'Lunch starts as Admin ends, so lane 0 is free again');
   assert.strictEqual(sat.grid.laneCount, 2);
 });
@@ -229,4 +229,75 @@ test('days are ordered Friday, Saturday, Sunday and empty days are dropped', () 
     ev('0800', '0900', 'Saturday formation', { day: 'Saturday' }),
   ]);
   assert.deepStrictEqual(days.map(d => d.day), ['Saturday', 'Sunday']);
+});
+
+// ── Timeline polish (Sep 2026): colour, summaries, and no clipped labels ──────
+
+// Ten of September's 27 events carry no kind at all (Lunch, Building Cleanup,
+// PT Testing, the reenlistment…). Colour keyed on kind alone would leave a third
+// of the grid grey, so the title fills in where the kind is blank.
+test('each timeline event carries a colour category from its kind, with a title fallback', () => {
+  const [sat] = shape.shapeTimeline([
+    ev('0800', '0830', 'Formation / Roll Call', { type: 'formation' }),
+    ev('0900', '1200', 'Admin/In-house Training', { type: 'training' }),
+    ev('0900', '1000', 'Supervisors Promo Briefing', { type: 'briefing' }),
+    ev('1000', '1400', 'Immunizations & Labs walk-ins', { type: 'medical' }),
+    ev('1200', '1300', 'Lunch'),
+    ev('1430', '1530', 'Mandatory Squadron PT'),
+    ev('1530', '1600', 'Building Cleanup'),
+    ev('1600', '1630', 'Reenlistment Ceremony (SrA Dunaway)'),
+  ]);
+  const cat = (t) => sat.events.find(e => e.title.startsWith(t)).cat;
+  assert.strictEqual(cat('Formation'), 'formation');
+  assert.strictEqual(cat('Admin'), 'training');
+  assert.strictEqual(cat('Supervisors'), 'meeting', 'briefings colour with meetings');
+  assert.strictEqual(cat('Immunizations'), 'medical');
+  assert.strictEqual(cat('Lunch'), 'meal');
+  assert.strictEqual(cat('Mandatory'), 'fitness');
+  assert.strictEqual(cat('Building'), 'cleanup');
+  assert.strictEqual(cat('Reenlistment'), 'ceremony');
+});
+
+// The admin block's details list eleven systems and a LOTO reminder; printed in
+// full it was the "giant grey blob". A bar gets one short line and no more.
+test('details are cut to a short summary at a word boundary, never mid-word', () => {
+  const long = "Medical/CBT's/vRED/SGLI/EPB's/UGT/Work Orders/JSTO/Form 55's/PT Testing/DTS/AROWS. *FOCUS ON LOTO & FALL PROTECTION*";
+  const [sat] = shape.shapeTimeline([
+    ev('0900', '1200', 'Admin/In-house Training', { details: long }),
+    ev('1200', '1300', 'Lunch', { details: '' }),
+    ev('1300', '1400', 'PT Testing', { details: 'Members due Sep 26 test at 0830 (see PT task list)' }),
+  ]);
+  const [admin, lunch, pt] = sat.events;
+  assert.ok(admin.summary.length <= 64, `summary is short: ${admin.summary.length}`);
+  assert.ok(admin.summary.endsWith('…'), 'a cut summary says so');
+  assert.ok(!/\w…$/.test(admin.summary) || long.startsWith(admin.summary.slice(0, -1)),
+    'the cut lands on a boundary, not inside a word');
+  assert.strictEqual(lunch.summary, '');
+  assert.strictEqual(pt.summary, 'Members due Sep 26 test at 0830 (see PT task list)',
+    'a detail that already fits is kept whole, with no ellipsis');
+});
+
+// Saturday 0800 Formation had no end, so it drew one slot wide and "Reenlistment
+// Ceremony" — also endless, also narrow — printed on top of it. A bar is now drawn
+// at least an hour wide and lanes are packed on that drawn width, so a label
+// always has room and nothing can sit on top of anything.
+test('a short event is drawn at least an hour wide and lanes are packed on the drawn width', () => {
+  const [sat] = shape.shapeTimeline([
+    ev('0800', '', 'Formation / Roll Call'),
+    ev('0830', '', 'Reenlistment Ceremony'),
+    ev('0830', '', 'PT Testing'),
+    ev('0900', '1200', 'Admin/In-house Training'),
+  ]);
+  const by = (t) => sat.events.find(e => e.title.startsWith(t));
+  assert.strictEqual(by('Formation').drawEnd - by('Formation').startMin, 60, 'endless → one drawn hour');
+  assert.strictEqual(by('Formation').endMin - by('Formation').startMin, 15, 'the true span is untouched');
+  assert.strictEqual(by('Formation').lane, 0);
+  assert.notStrictEqual(by('Reenlistment').lane, 0, 'starts inside the drawn hour, so it moves down');
+  assert.notStrictEqual(by('PT Testing').lane, by('Reenlistment').lane, 'and the two 0830s split too');
+  for (const a of sat.events) for (const b of sat.events) {
+    if (a === b || a.lane !== b.lane) continue;
+    assert.ok(a.drawEnd <= b.startMin || b.drawEnd <= a.startMin,
+      `${a.title} and ${b.title} overlap in lane ${a.lane}`);
+  }
+  assert.ok(sat.grid.to >= 12 * 60, 'the grid closes after the last drawn bar');
 });

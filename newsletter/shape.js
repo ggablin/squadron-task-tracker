@@ -181,6 +181,39 @@ function shapeWorkOrders(rows) {
 // The grid is built here rather than in the slide so it can be tested without parsing
 // HTML: the slide only turns startMin/endMin/lane into grid-column and grid-row.
 const SLOT = 15;   // minutes per grid column — fine enough for :30 starts
+const MIN_DRAW = 60;  // minutes a bar is drawn at minimum, so its label has room
+
+// Colour category. Ten of September's 27 events carry no kind at all (Lunch,
+// Building Cleanup, PT Testing, the reenlistment…), so the kind is consulted first
+// and the title fills in behind it. 'other' is the honest fallback, not grey-by-default.
+const CAT_BY_KIND = { formation: 'formation', training: 'training', meeting: 'meeting',
+                      briefing: 'meeting', medical: 'medical', emphasis: 'emphasis' };
+function categorize(kind, title) {
+  if (CAT_BY_KIND[kind]) return CAT_BY_KIND[kind];
+  const t = String(title || '').toLowerCase();
+  if (/\b(lunch|breakfast|dinner|chow)\b/.test(t)) return 'meal';
+  if (/clean-?up/.test(t)) return 'cleanup';
+  if (/\bpt\b|fitness/.test(t)) return 'fitness';
+  if (/reenlist|ceremony|award|retire/.test(t)) return 'ceremony';
+  if (/formation|roll call/.test(t)) return 'formation';
+  if (/training|breakout/.test(t)) return 'training';
+  if (/meeting|briefing|\bbrief\b/.test(t)) return 'meeting';
+  if (/immuni[sz]|\blabs?\b|medical|dental|audiogram/.test(t)) return 'medical';
+  return 'other';
+}
+
+// One short line per bar. The admin block's details name eleven systems and a LOTO
+// reminder; printed whole they were the grey blob the slide was criticised for. A
+// detail that fits is kept as is; a long one is cut at a word or slash boundary.
+function summarize(details, max = 64) {
+  const s = String(details || '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const sentence = /^(.{16,}?[.!?])\s/.exec(s);
+  if (sentence && sentence[1].length <= max) return sentence[1];
+  let cut = Math.max(s.lastIndexOf(' ', max), s.lastIndexOf('/', max));
+  if (cut < max / 2) cut = max;
+  return s.slice(0, cut).replace(/[\s/,;:\-–]+$/, '') + '…';
+}
 
 // '0730' and '07:30' both appear in the schedule tables; both mean 450.
 function toMinutes(s) {
@@ -196,13 +229,17 @@ const ceilHour = (m) => Math.ceil(m / 60) * 60;
 const hhmm = (m) => String(Math.floor(m / 60)).padStart(2, '0') + String(m % 60).padStart(2, '0');
 
 // Greedy interval packing: reuse the first lane whose last bar has already finished.
-// Events arrive sorted by start, which is what makes one pass enough.
+// Events arrive sorted by start, which is what makes one pass enough. Occupancy is
+// the DRAWN end, not the true end: a 0800 formation with no end time is drawn an
+// hour wide so its label fits, and the 0830 reenlistment must then take another
+// lane rather than land on top of that label — which is exactly what the September
+// slide did before this, printing "Reenlistment" across "Formation / Roll Call".
 function assignLanes(events) {
   const laneEnds = [];
   for (const e of events) {
     let lane = laneEnds.findIndex(end => end <= e.startMin);
     if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
-    laneEnds[lane] = e.endMin;
+    laneEnds[lane] = e.drawEnd;
     e.lane = lane;
   }
   return laneEnds.length;
@@ -213,9 +250,13 @@ function buildDay(day, rows) {
   for (const r of rows) {
     const startMin = toMinutes(r.start);
     if (startMin === null) { untimed.push(r); continue; }
-    // A start with no end still has to be visible, so give it one slot.
+    // A start with no end still has to be visible, so give it one slot — and every
+    // bar is DRAWN at least MIN_DRAW wide so a title fits without overflow tricks.
+    // endMin stays the true span (the time label prints it); drawEnd is the box.
     const endMin = Math.max(toMinutes(r.end) ?? 0, startMin + SLOT);
-    timed.push({ ...r, startMin, endMin });
+    const drawEnd = Math.max(endMin, startMin + MIN_DRAW);
+    timed.push({ ...r, startMin, endMin, drawEnd,
+      cat: categorize(r.type, r.title), summary: summarize(r.details) });
   }
   // Longer first on a tie, so the squadron-wide block holds lane 0 and the short
   // exception that runs inside it drops to lane 1 — not the other way round.
@@ -223,7 +264,7 @@ function buildDay(day, rows) {
   const laneCount = assignLanes(timed);
 
   const from = timed.length ? floorHour(Math.min(...timed.map(e => e.startMin))) : 0;
-  const to = timed.length ? ceilHour(Math.max(...timed.map(e => e.endMin))) : 0;
+  const to = timed.length ? ceilHour(Math.max(...timed.map(e => e.drawEnd))) : 0;
   const ticks = [];
   for (let m = from; m < to; m += 60) ticks.push(hhmm(m));
 
@@ -244,5 +285,5 @@ function shapeTimeline(rows) {
 
 module.exports = {
   shapeCbts, shapeMedical, shapePt, shapeGtc, shapeEpbs, shapeOrders, shapeUpgrade, shapeInbound,
-  shapeWorkOrders, shapeTimeline,
+  shapeWorkOrders, shapeTimeline, summarize, categorize,
 };
