@@ -5,10 +5,23 @@
 // a member who has used the tracker recognises the newsletter as the same thing.
 // Colours and type live in theme.js; this file only decides structure.
 
+const { summarize } = require('./shape');
+
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const person = (p) => `${esc(p.rank)} ${esc(p.last_name || p.last)}`.trim();
+
+// A row of name chips: one per member, tone from `cls`, the member's own status
+// (and their shop, when `withShop`) inside the chip in smaller type. A list of
+// people printed as chips reads as people; the same names run together as a
+// paragraph read as a wall.
+function chips(rows, cls = () => '', withShop = false) {
+  return `<div class="chips">${rows.map(r => {
+    const sub = [r.status, withShop ? r.shop : ''].filter(Boolean).join(' · ');
+    return `<span class="chip ${cls(r) || ''}">${person(r)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</span>`;
+  }).join('')}</div>`;
+}
 
 // Slide numbering is assigned at render time so inserting a section can't leave
 // the printed footers stale.
@@ -194,131 +207,208 @@ function timeline(d) {
 }
 
 // ── 8. Work Schedule ──────────────────────────────────────────────────────
+// One cream card per shop, three across. A work order is its number, its title
+// and one line of its details: the progress notes that follow ("we replaced
+// seven LEDs, with two remaining…") belong in the app, not on a schedule.
 function workSchedule(d) {
   if (!d.workOrders.length) return chrome('Shops', 'UTA Work Schedule', emptyNote('work orders'));
   const n = d.workOrders.reduce((a, s) => a + s.items.length, 0);
   const body = d.workOrders.map(({ shop, items }) => {
     const rows = items.map(i => `<div class="ws-row">
-      <span class="ws-wo">${esc(i.wo)}</span>
-      <span style="flex:1">${esc(i.title)}${i.details ? `<span class="p-note"> — ${esc(i.details)}</span>` : ''}</span>
+      ${i.wo ? `<span class="ws-wo">${esc(i.wo)}</span>` : ''}
+      <div><div class="ws-t">${esc(i.title)}</div>${i.details ? `<div class="ws-d">${esc(summarize(i.details, 96))}</div>` : ''}</div>
     </div>`).join('');
-    return `<div class="ws-shop"><h3>${esc(shop)}</h3>${rows}</div>`;
+    return `<div class="ws-shop"><h3>${esc(shop)}<span class="count">${items.length}</span></h3>${rows}</div>`;
   }).join('');
   return chrome('Shops', 'UTA Work Schedule', `<div class="ws-wrap">${body}</div>`, '', `${n} work orders`);
 }
 
-// ── Government Travel Card ────────────────────────────────────────────────
+// ── 10. Quarterly Awards ──────────────────────────────────────────────────
+// The programme text and the FY schedule stay in the hand-edited partial; the
+// call to action underneath carries the names of the supervisors who still owe a
+// 1206 this quarter, straight off the tracker.
+function awards(d, partial) {
+  const a = d.awards || { members: [], title: '', note: '' };
+  const live = a.members.length ? `<div class="card accent-warn" style="margin-top:10px">
+      <div class="card-hd">${esc(a.title || '1206s owed')}<span class="count">${a.members.length} supervisors</span></div>
+      ${a.note ? `<p class="note">${esc(a.note)}</p>` : ''}
+      ${chips(a.members)}
+    </div>` : '';
+  return chrome('Squadron', 'CE / Wing Quarterly Awards', `<div class="static-body">${partial}</div>${live}`, 'roomy');
+}
+
+// ── 12. CBTs (MyLearning) ─────────────────────────────────────────────────
+// One cream card per course, name left and status right. The sentence every
+// course shares ("In MyLearning. Give cert to your supervisor…") is printed once
+// in the intro; a sentence one course alone carries heads that course. Before
+// this, every one of 134 lines ended in the same 100 characters and the slide ran
+// off the page.
+function cbtBlock(g) {
+  const two = g.members.length > 12;
+  const lines = g.members.map(m =>
+    `<div class="cbt-line"><span class="cbt-name ${URG_CLASS[m.urgency] || ''}">${esc(m.last)}</span>${
+      m.status ? `<span class="cbt-status">${esc(m.status)}</span>` : ''}</div>`).join('');
+  return `<div class="cbt-block">
+    <div class="cbt-type"><span>${esc(g.name)}</span>${g.duration ? `<span class="cbt-dur">${esc(g.duration)}</span>` : ''}</div>
+    <div class="cbt-meta">${g.members.length} ${g.members.length === 1 ? 'member' : 'members'}</div>
+    ${g.note ? `<p class="note">${esc(g.note)}</p>` : ''}
+    <div class="cbt-members${two ? ' two' : ''}">${lines}</div>
+  </div>`;
+}
+const LEGEND = `<span class="overdue">Red = overdue</span> · <span class="due-month">amber = due this month</span> · <span class="complete">green = due next month</span>`;
+
+function cbts(d) {
+  const groups = d.cbts.mandatory || [];
+  if (!groups.length) return chrome('Training', 'Computer-Based Training', emptyNote('CBTs'));
+  const n = groups.reduce((a, g) => a + g.members.length, 0);
+  const note = `<p class="intro">${d.cbts.mandatoryNote ? esc(d.cbts.mandatoryNote) + ' ' : ''}${LEGEND}</p>`;
+  return chrome('Training', 'Computer-Based Training', note + `<div class="cbt-cols">${groups.map(cbtBlock).join('')}</div>`, '',
+                `${n} assignments · ${groups.length} courses`);
+}
+
+// ── 13. Additional Training (Percipio, AFI 10-210) ────────────────────────
+// Live since September 2026: these are the Percipio rows of the CBT category,
+// which the hand-edited partial this replaces used to list a month behind.
+function additional(d) {
+  const groups = d.cbts.additional || [];
+  if (!groups.length) return chrome('Training', 'Additional Training — AFI 10-210', emptyNote('Percipio courses'));
+  const n = groups.reduce((a, g) => a + g.members.length, 0);
+  const cards = groups.map(g => `<div class="card">
+      <div class="card-hd">${esc(g.name)}<span class="count">${esc(g.duration)}</span></div>
+      ${g.note ? `<p class="note">${esc(g.note)}</p>` : ''}
+      ${chips(g.members)}
+    </div>`).join('');
+  const intro = `<p class="intro">${esc(d.cbts.additionalNote || 'Counts toward your overall MRA per AFI 10-210. These courses live on Percipio, not MyLearning. Give certificates to your supervisor.')}</p>`;
+  return chrome('Training', 'Additional Training — AFI 10-210', intro + `<div class="masonry-3 chips-lg">${cards}</div>`, '',
+                `${n} assignments · ${groups.length} courses`);
+}
+
+// ── 14. Orders / DTS / AROWS ──────────────────────────────────────────────
+// A reminder assigned to the whole squadron is one strip with the count; the
+// people who personally owe a voucher or an order signature get a table each.
+function orders(d) {
+  const notices = (d.orders.notices || []).map(nt => `<div class="card notice">
+      <span class="notice-t">${esc(nt.title)}</span><span class="notice-n">Everyone · ${nt.count} members</span>
+      ${nt.details ? `<p class="note">${esc(nt.details)}</p>` : ''}
+    </div>`).join('');
+  const tbl = (head, rows, note, colHead) => `<div class="card"><div class="card-hd">${esc(head)}<span class="count">${rows.length}</span></div>
+    ${note ? `<p class="note">${esc(note)}</p>` : ''}${
+    rows.length ? `<table class="data-table"><thead><tr><th>Member</th><th>${esc(colHead)}</th><th>Note</th></tr></thead><tbody>${
+      rows.map(r => `<tr><td class="b" style="white-space:nowrap">${esc(r.rank)} ${esc(r.name)}</td><td>${esc(r.issue)}</td><td class="muted">${esc(r.comment)}</td></tr>`).join('')
+    }</tbody></table>` : emptyNote('members')}</div>`;
+  const tables = `<div class="two-col">
+    <div class="col">${tbl('DTS Vouchers', d.orders.dts, d.orders.dtsNote, 'Voucher')}</div>
+    <div class="col">${tbl('AROWS — Orders / RMP / RUTA', d.orders.arows, d.orders.arowsNote, 'Order')}</div>
+  </div>`;
+  const total = d.orders.dts.length + d.orders.arows.length;
+  const body = notices || total ? `<div class="stack">${notices}${tables}</div>` : emptyNote('orders actions');
+  return chrome('Admin', 'Orders / DTS / AROWS', body, 'roomy', `${total} open`);
+}
+
+// ── 15. Government Travel Card ────────────────────────────────────────────
 // Newsletter page 15. Replaced an SGLI & vRED slide that printed two empty columns
 // every cycle — no cycle has ever held a task by either of the names it looked for.
 function gtc(d) {
-  const col = (head, list) => `<div class="col"><div class="col-hd">${esc(head)} (${list.length})</div>${
-    list.length ? list.map(p => `<div class="p-row"><span class="p-name overdue">${person(p)}</span></div>`).join('') : emptyNote('members')
-  }</div>`;
-  const intro = `<p class="intro">Every member needs a Government Travel Card. Apply through CitiDirect, then
-    complete the GTC training and hand the certificate <b>and</b> the Statement of Understanding to your
-    supervisor. If you have a new card, verify it with CitiBank and update the card details in DTS; if you have
-    moved, change your address in DTS.</p>`;
-  const outro = `<p class="intro" style="margin-top:10px">Place both the SoU and the CBT certificate on Chief Cisek's desk.</p>`;
-  return chrome('Admin', 'Government Travel Card', intro
-    + `<div class="two-col">${col('Statement of Understanding', d.gtc.sou)}${col('GTC CBT certificate', d.gtc.cbt)}</div>`
-    + outro, '', `${d.gtc.sou.length + d.gtc.cbt.length} outstanding`);
-}
-
-// ── 12. CBTs ──────────────────────────────────────────────────────────────
-function cbts(d) {
-  if (!d.cbts.length) return chrome('Training', 'Computer-Based Training', emptyNote('CBTs'));
-  const n = d.cbts.reduce((a, g) => a + g.members.length, 0);
-  const blocks = d.cbts.map(g => {
-    const lines = g.members.map(m =>
-      `<div class="cbt-line"><span class="${URG_CLASS[m.urgency] || ''}">${esc(m.last)}</span> <span class="cbt-status">${esc(m.status)}</span></div>`).join('');
-    return `<div class="cbt-block"><div class="cbt-type">${esc(g.type)}${g.duration ? ` <span class="p-note">${esc(g.duration)}</span>` : ''}</div>${lines}</div>`;
-  }).join('');
-  const note = `<p class="intro">All “HST” CBTs are in MyLearning. Give certs to your supervisor, who forwards them to the training NCO by COB Sunday.
-    <span class="overdue">Red = overdue</span> · <span class="due-month">amber = due this month</span> · <span class="complete">green = due next month</span>.</p>`;
-  return chrome('Training', 'Computer-Based Training', note + `<div class="cbt-cols">${blocks}</div>`, '', `${n} assignments`);
-}
-
-
-// ── 14. Orders / DTS / AROWS ──────────────────────────────────────────────
-function orders(d) {
-  const tbl = (head, rows) => rows.length ? `<div class="card"><div class="card-hd">${esc(head)}<span class="count">${rows.length}</span></div>
-    <table class="data-table"><thead><tr><th>Rank</th><th>Name</th><th>Action</th></tr></thead><tbody>${
-      rows.map(r => `<tr><td>${esc(r.rank)}</td><td class="b">${esc(r.name)}</td><td>${esc(r.issue)}${r.comment ? ` <span class="p-note">— ${esc(r.comment)}</span>` : ''}</td></tr>`).join('')
-    }</tbody></table></div>` : '';
-  const body = tbl('DTS Vouchers', d.orders.dts) + tbl('AROWS — RMP / RUTA / Orders', d.orders.arows);
-  return chrome('Admin', 'Orders / DTS / AROWS', body || emptyNote('orders actions'), '',
-                `${d.orders.dts.length + d.orders.arows.length} open`);
+  const list = (head, rows, note, cls) => `<div class="card${cls ? ' ' + cls : ''}"><div class="card-hd">${esc(head)}<span class="count">${rows.length}</span></div>
+    ${note ? `<p class="note">${esc(note)}</p>` : ''}${rows.length ? chips(rows, () => 'overdue') : emptyNote('members')}</div>`;
+  const steps = `<div class="steps">
+    <div class="step"><div class="n">1</div><div><div class="t">Apply</div><div class="s">Every member needs a Government Travel Card. Apply through CitiDirect. A new card: verify it with CitiBank and update the card details in DTS. Moved: change your address in DTS.</div></div></div>
+    <div class="step"><div class="n">2</div><div><div class="t">Train</div><div class="s">Complete the GTC training and keep the certificate.</div></div></div>
+    <div class="step"><div class="n">3</div><div><div class="t">Turn in</div><div class="s">Hand the certificate <b>and</b> the Statement of Understanding to your supervisor — both go on Chief Cisek's desk.</div></div></div>
+  </div>`;
+  return chrome('Admin', 'Government Travel Card', steps
+    + `<div class="two-col">${list('Statement of Understanding owed', d.gtc.sou, d.gtc.souNote)}${list('GTC CBT certificate owed', d.gtc.cbt, d.gtc.cbtNote)}</div>`,
+    'roomy', `${d.gtc.sou.length + d.gtc.cbt.length} outstanding`);
 }
 
 // ── 16. EPBs / OPBs ───────────────────────────────────────────────────────
+// One row per evaluation — ratee, closeout, where it sits, what it needs — and the
+// ACA feedback sessions due this UTA beside them.
 function epbs(d) {
-  const list = (head, rows, cls) => `<div class="card"><div class="card-hd">${esc(head)}<span class="count">${rows.length}</span></div>${
-    rows.length ? rows.map(r =>
-      `<div class="p-row"><span class="p-name ${cls}">${person(r)}</span><span class="p-note">${esc(r.detail)}</span></div>`).join('')
-      : emptyNote('members')
-  }</div>`;
+  const table = (rows, cls) => `<table class="data-table"><thead><tr><th>Type</th><th>Ratee</th><th>Closeout</th><th>Sitting at</th><th>Needs</th></tr></thead><tbody>${
+    rows.map(r => `<tr><td>${esc(r.type)}</td><td class="b ${cls}" style="white-space:nowrap">${esc(r.ratee)}</td><td class="num">${esc(r.closeout || '—')}</td><td style="white-space:nowrap">${esc(r.sittingAt || '—')}</td><td class="muted">${esc(r.needs)}</td></tr>`).join('')
+  }</tbody></table>`;
+  const overdue = d.epbs.overdue.length
+    ? `<div class="card accent-urgent"><div class="card-hd">Overdue<span class="count">${d.epbs.overdue.length}</span></div>${table(d.epbs.overdue, 'overdue')}</div>` : '';
+  const routing = `<div class="card"><div class="card-hd">In routing<span class="count">${d.epbs.comingDue.length}</span></div>${
+    d.epbs.comingDue.length ? table(d.epbs.comingDue, '') : emptyNote('evaluations')}</div>`;
+  const aca = d.epbs.aca && d.epbs.aca.pairs.length
+    ? `<div class="card accent-info"><div class="card-hd">ACA feedback sessions due<span class="count">${d.epbs.aca.pairs.length}</span></div>
+        ${d.epbs.aca.note ? `<p class="note">${esc(d.epbs.aca.note)}</p>` : ''}
+        <div class="chips">${d.epbs.aca.pairs.map(p => `<span class="chip">${esc(p)}</span>`).join('')}</div></div>` : '';
   const intro = `<p class="intro">Check MyEval for anything sitting at your level for coordination.</p>`;
-  return chrome('Admin', 'EPBs / OPBs', intro + `<div class="two-col">
-    <div class="col">${list('Overdue', d.epbs.overdue, 'overdue')}</div>
-    <div class="col">${list('Coming Due', d.epbs.comingDue, '')}</div></div>`);
+  const n = d.epbs.overdue.length + d.epbs.comingDue.length;
+  return chrome('Admin', 'EPBs / OPBs', intro + `<div class="stack">${overdue}${routing}${aca}</div>`, 'roomy', `${n} in routing`);
 }
 
 // ── 17. Medical & Dental ──────────────────────────────────────────────────
+// One card per requirement with the names in it — "who still owes a PHAQ" is how
+// the slide is read — instead of a red line per member repeating the walk-in hours.
 function medical(d) {
-  const lines = d.medical.length ? d.medical.map(m =>
-    `<div class="med-line"><span class="b">${esc(m.rank)} ${esc(m.last)}</span> — <span class="red">${esc(m.items.join(' / '))}</span></div>`).join('')
-    : emptyNote('medical or dental requirements');
-  const steps = `<div class="med-steps"><div class="card"><div class="card-hd">Reminders</div><ul>
-    <li>Immunisations &amp; labs: walk-ins Saturday 0900–1400. Anyone IMR <b>red</b> for HIV or an immunisation must come during these times.</li>
-    <li>MHA: register at smp.qtcm.com, complete the DRHA, then call RHRP on 1-833-782-7477 to schedule.</li>
-    <li>GMI: bring your civilian optometry prescription to order gas-mask inserts.</li></ul></div></div>`;
-  return chrome('Medical', 'Medical & Dental Requirements',
-    `<div class="med-grid"><div class="med-list">${lines}</div>${steps}</div>`, '', `${d.medical.length} members`);
+  if (!d.medical.length) return chrome('Medical', 'Medical & Dental Requirements', emptyNote('medical or dental requirements'));
+  const cards = d.medical.map(g => `<div class="card${g.overdue ? ' accent-urgent' : ''}">
+      <div class="card-hd">${esc(g.service)}<span class="count">${g.members.length}</span></div>
+      ${g.note ? `<p class="note">${esc(g.note)}</p>` : ''}
+      ${chips(g.members, m => g.overdue || m.urgency === 'overdue' ? 'overdue' : '')}
+    </div>`).join('');
+  const people = new Set(d.medical.flatMap(g => g.members.map(m => m.rank + ' ' + m.last))).size;
+  const n = d.medical.reduce((a, g) => a + g.members.length, 0);
+  return chrome('Medical', 'Medical & Dental Requirements', `<div class="med-cols">${cards}</div>`, '',
+                `${n} requirements · ${people} members`);
 }
 
 // ── 19. PT Testing ────────────────────────────────────────────────────────
-// Tests booked for this drill lead, because that is what a member needs on Saturday
-// morning; the due-month buckets behind them are the year's planning view.
+// The tests due this UTA lead — that card carries the Saturday test time — with the
+// later months and the overdue list beside it.
 function pt(d) {
-  const booked = d.pt.scheduled.length
-    ? `<div class="pt-card pt-booked"><div class="pt-hd">Testing this UTA</div>${
-        d.pt.scheduled.map(m => `<div>${esc(m.rank)} ${esc(m.last)}${
-          m.detail ? ` <span class="p-note">${esc(m.detail)}</span>` : ''}</div>`).join('')}</div>`
-    : '';
-  const cards = d.pt.buckets.map(b =>
-    `<div class="pt-card"><div class="pt-hd">${esc(b.label)}</div>${b.members.map(m => `<div>${esc(m.rank)} ${esc(m.last)}</div>`).join('')}</div>`).join('');
-  const od = d.pt.overdue.map(r => `${esc(r.rank)} ${esc(r.last)}`).join(' · ');
-  const note = `<p class="intro">Schedule yourself in MyFitness — you can test early, never late.
-    ${od ? `<br><span class="overdue">Overdue: ${od}</span>` : ''}</p>`;
-  const grid = booked || cards ? `<div class="pt-grid">${booked}${cards}</div>` : emptyNote('scheduled tests');
-  return chrome('Fitness', 'PT Testing — Due Dates', note + grid);
+  const card = (head, rows, note, cls, sub) => `<div class="card${cls ? ' ' + cls : ''}"><div class="card-hd">${esc(head)}<span class="count">${rows.length}</span></div>
+    ${note ? `<p class="note">${esc(note)}</p>` : ''}${chips(rows, () => sub || '', true)}</div>`;
+  const buckets = [...d.pt.buckets].sort((a, b) => (b.thisUta - a.thisUta) || a.sort.localeCompare(b.sort));
+  const cards = [
+    ...buckets.map(b => card(b.thisUta ? `${b.label} — this UTA` : b.label, b.members, b.note, b.thisUta ? 'accent-info lead' : '', b.thisUta ? 'this' : 'next')),
+    d.pt.scheduled.length ? card('Testing this UTA', d.pt.scheduled, '', 'accent-info lead', 'this') : '',
+    d.pt.overdue.length ? card('Overdue', d.pt.overdue, '', 'accent-urgent', 'overdue') : '',
+  ].filter(Boolean).join('');
+  const note = `<p class="intro">Schedule yourself in MyFitness — you can test early, never late.</p>`;
+  const n = d.pt.overdue.length + d.pt.scheduled.length + d.pt.buckets.reduce((a, b) => a + b.members.length, 0);
+  return chrome('Fitness', 'PT Testing — Due Dates', note + (cards ? `<div class="pt-grid">${cards}</div>` : emptyNote('scheduled tests')),
+                'roomy', `${n} members`);
 }
 
-
 // ── 21. Inbound / Outbound Airmen ─────────────────────────────────────────
+// The accession pipeline in, TAP (transition assistance — members separating) out.
 function inbound(d) {
-  const line = (r) => `<div class="io-line"><span class="b">${esc(r.rank)} ${esc(r.last)}</span>
-    <span class="p-note">${esc(r.detail)}</span>${r.shop ? ` <span class="tl-shop">${esc(r.shop)}</span>` : ''}</div>`;
-  const bmt = d.inbound.bmt.length
-    ? `<div class="card"><div class="card-hd">BMT / Tech School / OTS<span class="count">${d.inbound.bmt.length}</span></div>${d.inbound.bmt.map(line).join('')}</div>`
-    : emptyNote('inbound or outbound airmen');
-  const pme = d.inbound.pme.length
-    ? `<div class="card"><div class="card-hd">PME<span class="count">${d.inbound.pme.length}</span></div>${d.inbound.pme.map(line).join('')}</div>` : '';
-  const intro = `<p class="intro">Members below should have received their TLN and BMT/Tech School dates. Tell us if you have not, and work with your supervisor on out-processing.</p>`;
-  return chrome('People', 'Inbound / Outbound Airmen', intro + bmt + pme);
+  const card = (head, rows, note, cls) => `<div class="card${cls ? ' ' + cls : ''}"><div class="card-hd">${esc(head)}<span class="count">${rows.length}</span></div>
+    ${note ? `<p class="note">${esc(note)}</p>` : ''}${chips(rows, () => '', true)}</div>`;
+  const tap = d.tap || { members: [], note: '' };
+  const cards = [
+    d.inbound.bmt.length ? card('BMT / Tech School / OTS', d.inbound.bmt, d.inbound.bmtNote, '') : '',
+    d.inbound.pme.length ? card('PME', d.inbound.pme, d.inbound.pmeNote, '') : '',
+    tap.members.length ? card('Separating — TAP training', tap.members, tap.note, 'accent-warn') : '',
+  ].filter(Boolean).join('');
+  const intro = `<p class="intro">Members below should have their TLN and school dates in hand. Tell leadership if you do not, and work with your supervisor on out-processing.</p>`;
+  return chrome('People', 'Inbound / Outbound Airmen', intro + (cards ? `<div class="stack">${cards}</div>` : emptyNote('inbound or outbound airmen')),
+                'roomy', `${d.inbound.bmt.length + d.inbound.pme.length + tap.members.length} members`);
 }
 
 // ── 22. Upgrade Training ──────────────────────────────────────────────────
+// A table per level: where each trainee stands, with a bar for task completion.
 function upgrade(d) {
-  const card = (r) => `<div class="ug-card"><div class="b">${esc(r.rank)} ${esc(r.last)}
-    ${r.shop ? `<span class="p-note">${esc(r.shop)}</span>` : ''}</div>
-    <div class="p-note">${esc(r.detail)}</div></div>`;
-  const col = (head, rows) => `<div class="ug-col"><div class="col-hd">${esc(head)} (${rows.length})</div>${
-    rows.length ? rows.map(card).join('') : emptyNote('members')}</div>`;
-  const waiting = d.upgrade.waiting.length
-    ? `<p class="intro" style="margin-top:10px"><b>Waiting on SSgt to start 7-level UGT:</b> ${d.upgrade.waiting.map(esc).join(', ')}</p>` : '';
-  return chrome('Training', 'Upgrade Training — Projected Completion',
-    `<div class="ug-cols">${col('5-Level', d.upgrade.fiveLevel)}${col('7-Level', d.upgrade.sevenLevel)}</div>${waiting}`);
+  const u = d.upgrade;
+  const bar = (pct) => pct == null ? '—' : `<div class="bar"><i><b style="width:${Math.max(0, Math.min(100, pct))}%"></b></i><span>${pct}%</span></div>`;
+  const table = (rows) => `<table class="data-table ug-table"><thead><tr><th>Trainee</th><th>Shop</th><th>Started</th><th>Months</th><th>CDC</th><th>Tasks</th><th>Notes</th></tr></thead><tbody>${
+    rows.map(r => `<tr><td class="who">${esc(r.rank)} ${esc(r.last)}</td><td>${esc(r.shop || '—')}</td><td>${esc(r.started || '—')}</td><td class="num">${r.months == null ? '—' : r.months}</td><td class="num">${esc(r.cdc || '—')}</td><td>${bar(r.tasks)}</td><td class="muted">${esc(r.status || '')}</td></tr>`).join('')
+  }</tbody></table>`;
+  const level = (head, rows) => rows.length
+    ? `<div class="card"><div class="card-hd">${esc(head)}<span class="count">${rows.length}</span></div>${table(rows)}</div>` : '';
+  const waiting = u.waiting.length
+    ? `<div class="card accent-warn"><div class="card-hd">Waiting on SSgt to start 7-level UGT<span class="count">${u.waiting.length}</span></div>
+        <div class="chips">${u.waiting.map(w => `<span class="chip">${esc(w)}</span>`).join('')}</div></div>` : '';
+  const cards = [level('5-Level', u.fiveLevel), level('7-Level', u.sevenLevel), level('Upgrade training', u.unlevelled || []), waiting].filter(Boolean).join('');
+  const intro = u.note ? `<p class="intro">${esc(u.note)}</p>` : '';
+  const n = u.fiveLevel.length + u.sevenLevel.length + (u.unlevelled || []).length;
+  return chrome('Training', 'Upgrade Training — Projected Completion', intro + (cards ? `<div class="stack">${cards}</div>` : emptyNote('upgrade training')),
+                'roomy', `${n} in training · ${u.waiting.length} waiting`);
 }
 
 // ── 9. Additional Duties ──────────────────────────────────────────────────
@@ -329,9 +419,9 @@ function additionalDuties(d) {
   const rows = d.duties || [];
   const half = Math.ceil(rows.length / 2);
   const cell = (v) => esc(v || '—');
-  const table = (list) => `<table class="duties-table"><thead><tr><th>Additional Duty</th><th>Primary</th><th>Alternate</th></tr></thead><tbody>${
+  const table = (list) => `<div class="card"><table class="duties-table"><thead><tr><th>Additional Duty</th><th>Primary</th><th>Alternate</th></tr></thead><tbody>${
     list.map(r => `<tr${r.primary_owner ? '' : ' class="red"'}><td>${esc(r.duty)}</td><td>${cell(r.primary_owner)}</td><td>${cell(r.alternate_owner)}</td></tr>`).join('')
-  }</tbody></table>`;
+  }</tbody></table></div>`;
   const body = rows.length
     ? `<div class="duties-cols">${table(rows.slice(0, half))}${table(rows.slice(half))}</div>`
     : '<p class="empty">No additional duties recorded in the tracker.</p>';
@@ -339,39 +429,64 @@ function additionalDuties(d) {
 }
 
 // ── 23. RSD Schedule ──────────────────────────────────────────────────────
-// The calendar year as lib/drill-calendar.js derives it, relative to the cycle
-// being printed: past drills struck through, this UTA bold, gaps spelled out.
+// The calendar year as twelve cards, from lib/drill-calendar.js, relative to the
+// cycle being printed: past drills struck through, this UTA outlined, No-UTA
+// months said so. A drill that starts in one month and ends in the next (31 Jan–1
+// Feb) is listed where it starts and pointed to from the month it runs into.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 function rsdSchedule(d) {
   const cal = d.calendar || { year: new Date().getUTCFullYear(), entries: [] };
-  const line = (e) => {
-    if (e.kind === 'no_uta') return `<li>NO UTA ${esc(e.label.toUpperCase())} ${cal.year}</li>`;
-    const text = `${esc(e.label)} ${cal.year}${e.threeDay ? ' (3-Day Drill)' : ''}${e.note ? ` (${esc(e.note)})` : ''}`;
-    return `<li>${e.past ? `<s>${text}</s>` : e.next ? `<b>${text}</b>` : text}</li>`;
-  };
+  const drills = cal.entries.filter(e => e.kind === 'drill');
+  const noUta = new Set(cal.entries.filter(e => e.kind === 'no_uta').map(e => e.month));
+  const monthOf = (iso) => Number(String(iso).slice(5, 7));
+  // The dates carry the mark; the 3-day tag and any note go on their own line so a
+  // long label does not wrap mid-parenthesis at display size.
+  const text = (e) => `${esc(e.label)} ${cal.year}`;
+  const mark = (e) => e.past ? `<s>${text(e)}</s>` : e.next ? `<b>${text(e)}</b>` : text(e);
+  const tags = (e) => [e.threeDay ? '3-Day Drill' : '', e.note ? esc(e.note) : ''].filter(Boolean).join(' · ');
+
+  const cards = MONTHS.map((name, i) => {
+    const m = i + 1;
+    const starts = drills.filter(e => monthOf(e.start_date) === m);
+    const runsIn = drills.filter(e => monthOf(e.start_date) !== m && monthOf(e.end_date) === m);
+    const cls = ['month'];
+    let body;
+    if (starts.length) {
+      if (starts.every(e => e.past)) cls.push('past');
+      if (starts.some(e => e.next)) cls.push('next');
+      body = starts.map(e => `<div class="d">${mark(e)}</div>${tags(e) ? `<div class="x">${tags(e)}</div>` : ''}`).join('');
+    } else if (runsIn.length) {
+      if (runsIn.every(e => e.past)) cls.push('past');
+      body = runsIn.map(e => `<div class="x">Runs into ${name} — see ${esc(e.label)}</div>`).join('');
+    } else if (noUta.has(m)) {
+      cls.push('nouta');
+      body = `<div class="d">NO UTA ${name.toUpperCase()} ${cal.year}</div>`;
+    } else {
+      body = `<div class="x">—</div>`;
+    }
+    return `<li class="${cls.join(' ')}"><div class="mo">${name}</div>${body}</li>`;
+  }).join('');
+
   // buildYear() fills every uncovered month with a no_uta entry, so cal.entries is
   // never empty on its own — a year with no drills entered would otherwise print
-  // twelve "NO UTA <month>" lines instead of the honest empty note. Check for an
-  // actual drill instead.
-  const hasDrills = cal.entries.some(e => e.kind === 'drill');
+  // twelve "NO UTA <month>" cards instead of the honest empty note.
+  const hasDrills = drills.length > 0;
   // `dated` is false when the cycle carries no start_date, in which case nothing is
-  // struck or bolded — so the intro must not promise marking that is not there, and
-  // the reason is worth one muted line rather than an unexplained absence.
+  // struck or outlined — so the intro must not promise marking that is not there.
   const intro = cal.dated === false
     ? `<p class="intro">The squadron's drill weekends for CY ${cal.year}.
        <span class="p-note">This UTA's dates are not set, so no weekend is marked.</span></p>`
-    : `<p class="intro">Completed drills are struck through; this UTA is in bold.</p>`;
-  const body = hasDrills
-    ? `${intro}<ul class="rsd-list">${cal.entries.map(line).join('')}</ul>`
-    : emptyNote('drill dates');
-  return chrome('Calendar', `RSD Schedule — CY ${cal.year}`, body);
+    : `<p class="intro">Completed drills are struck through; this UTA is outlined.</p>`;
+  const body = hasDrills ? `${intro}<ul class="rsd-list">${cards}</ul>` : emptyNote('drill dates');
+  return chrome('Calendar', `RSD Schedule — CY ${cal.year}`, body, 'roomy');
 }
 
 // Wrap an editable static partial's body in standard slide chrome.
-function staticSlide(eyebrow, title, bodyHtml) {
-  return chrome(eyebrow, title, `<div class="static-body">${bodyHtml}</div>`);
+function staticSlide(eyebrow, title, bodyHtml, extraClass = '') {
+  return chrome(eyebrow, title, `<div class="static-body">${bodyHtml}</div>`, extraClass);
 }
 
 module.exports = {
-  beginDeck, cover, orgSlide, timeline, workSchedule, gtc, cbts,
+  beginDeck, cover, orgSlide, timeline, workSchedule, awards, gtc, cbts, additional,
   orders, epbs, medical, pt, inbound, upgrade, additionalDuties, rsdSchedule, staticSlide, esc,
 };

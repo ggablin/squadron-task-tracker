@@ -147,8 +147,12 @@ async function buildFromDb(pool, utaId) {
     orders: shape.shapeOrders(tasksByCat.admin),
     epbs: shape.shapeEpbs(tasksByCat.admin),
     medical: shape.shapeMedical(tasksByCat.medical),
-    pt: shape.shapePt(tasksByCat.medical),
+    // Next month's PT tests are filed under Upcoming ('PT Test - due October 26'),
+    // this month's under Medical; the slide wants both.
+    pt: shape.shapePt([...tasksByCat.medical, ...tasksByCat.upcoming]),
     inbound: shape.shapeInbound(tasksByCat.upcoming),
+    tap: shape.shapeTap(tasksByCat.admin),
+    awards: shape.shapeAwards(tasksByCat.admin),
     upgrade: shape.shapeUpgrade(tasksByCat.upgrade),
     duties: dutyRows,
     calendar,

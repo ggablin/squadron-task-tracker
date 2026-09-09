@@ -100,8 +100,8 @@ test('the airmen slide takes school and PME dates, not squadron-wide notices', (
     task({ last: 'Brown', title: 'FY26 DFT', details: 'Camp Murray', urgency: 'info' }),
   ]);
 
-  assert.deepStrictEqual(io.bmt.map(r => r.last), ['Kadiri', 'Deguzman'],
-    'BMT, tech school and OTS are the accession pipeline');
+  assert.deepStrictEqual(io.bmt.map(r => r.last), ['Deguzman', 'Kadiri'],
+    'BMT, tech school and OTS are the accession pipeline, by name');
   assert.deepStrictEqual(io.pme.map(r => r.last), ['Santos'], 'NCOA is PME');
   assert.deepStrictEqual(io.other.map(r => r.title).sort(), ['FY26 DFT', 'Family Day', 'Family Day'],
     'what this slide will not print is returned rather than silently discarded');

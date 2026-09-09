@@ -122,9 +122,9 @@ test('the duties and RSD slides render from the tables, relative to the cycle be
   assert.match(html, /<tr class="red"><td>Records Management \/ FARM<\/td><td>—<\/td><td>—<\/td>/,
     'a duty with no primary owner prints red');
   assert.match(html, /RSD Schedule — CY 2026/);
-  assert.match(html, /<s>5–7 Jun 2026 \(3-Day Drill\)<\/s>/, 'a drill that ended before this cycle is struck through');
+  assert.match(html, /<s>5–7 Jun 2026<\/s>/, 'a drill that ended before this cycle is struck through');
   assert.match(html, /<b>8–9 Aug 2026<\/b>/, "this cycle's own drill is bold");
-  assert.match(html, /<li>11–13 Sep 2026 \(3-Day Drill\)<\/li>/, 'a later drill is plain');
+  assert.match(html, /<div class="d">11–13 Sep 2026<\/div><div class="x">3-Day Drill<\/div>/, 'a later drill is plain, its 3-day tag on its own line');
   assert.match(html, /NO UTA JULY 2026/);
   assert.strictEqual((html.match(/<section class="slide/g) || []).length, 23);
   assert.ok(!/(?:src|href)="(?!data:)/.test(html), 'still self-contained');

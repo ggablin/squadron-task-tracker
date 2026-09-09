@@ -304,6 +304,12 @@ The same family runs in reverse. `shapeInbound` took the **whole** `upcoming` ca
 
 `test/newsletter-shape.test.js` holds the guard: `LIVE_ADMIN_TITLES` is the real August 2026 title inventory, and the deck must either route each title to a slide or name it in `NO_SLIDE_YET`. A title that is neither fails the suite instead of emptying a page. **Re-read that list against production when the import changes** — it is a snapshot, and a snapshot goes stale exactly the way the filters did.
 
+**It went stale in one cycle.** The September 2026 import rewrote every title format (§11, 2026-09-09): `shapeUpgrade` still matched `'7-Level UGT'` / `startsWith('5-Level')` and the live titles were `'Upgrade training progress'` / `'7-level UGT - waiting on SSgt to start'`, so slide 22 printed empty over 21 rows; next month's PT tests moved to the `upcoming` category as `'PT Test - due October 26'` and reached nothing. `test/newsletter-print.test.js` now carries the **September inventory across all five categories** (`SEP`), not just admin, and asserts every title reaches a slide. Add the next cycle's titles there when the wording moves again.
+
+Two more rules from the same print, both in `shape.js`:
+4. **A sentence most of a group shares is the group's note, not each member's** (`liftCommon`). All 134 CBT rows ended in the same 100-character instruction; printed per member it pushed the slide off the page. A sentence that is *nothing but* a status ("3 Months Overdue", "Due This Month", "Due Sep 2026") is never lifted, so a group of one keeps its status.
+5. **A title held by ≥ `BROADCAST` (15) members is a notice, not a table.** `Sign any RUTA / RMP days in AROWS` sits on 73 of 73 members; the orders slide prints it as one strip with the count.
+
 ```
 grep -rnE "title (===|!==) '|\.includes\(t\.title\)|title\.startsWith\(" newsletter lib
 ```
@@ -394,24 +400,26 @@ longer true, and the working copy has been synced to `origin/master` with a clea
   created before that guard and are still there.
 - **No September cycle exists** as of 2026-08-28. The drill is 11–13 Sep (3-day).
 
-**Newsletter export — open after the 2026-08-28 audit (§11)**
-- **The six hand-edited partials in `newsletter/static/` are the weak link, and four have
-  drifted.** Nothing in the deck signals that a partial is a cycle old, so it prints as
-  confidently as the live pages beside it. **MEETs/RADR** is a full cycle behind (FY26 with
-  COMPLETE/CANCELLED markers and the June 2026 Camp Murray DFT roster; the August newsletter
-  is on FY27, Apr–Jul 2027) — `calendar_events` already models this, so retiring the partial
-  is the real fix. **Dental Status** shares no overdue names with the newsletter (partial:
-  Hill/Geant/Reneau/Bernard/Cabbler; newsletter: Maramba/Veal) and needs a months-since-exam
-  field to go live. **Additional Training** is missing four AFI 10-210 courses. **Safety**
-  carries an Ops row the newsletter lacks, drops its C2 row, and has Cabbler at the wrong rank.
-- **194 of 222 admin tasks reach no slide:** `Form 55's` (56) and `JSTO` (42) are named on the
-  hand-written Safety slide and `Quarterly Award 1206's` (26) on the hand-written Awards slide,
-  but as prose — neither slide reads the tasks. `AtHoc` (50) has no slide anywhere. Giving them
-  slides is a product decision; `NO_SLIDE_YET` in `test/newsletter-shape.test.js` keeps the
-  omission deliberate rather than silent.
-- **Two AFI 10-210 Percipio courses are miscategorised as `cbt`** (`Rapid Damage Assessment CBT`,
-  `Engineering Contingency Responsibilities CBT`), so they print on slide 12 while the static
-  slide 13 lists RDA again by hand — Maramba appears under it twice.
+**Newsletter export — open after the 2026-09-09 print pass (§11)**
+- **Five hand-edited partials remain in `newsletter/static/`** (Additional Training went live
+  on 2026-09-09 — it is the Percipio half of the `cbt` category). Nothing in the deck signals
+  that a partial is a cycle old, so it prints as confidently as the live pages beside it.
+  **MEETs/RADR** is now *two* cycles behind (FY26 classes, all past; the June 2026 DFT roster)
+  — `calendar_events` already models this, so retiring the partial is the real fix. **Dental
+  Status** needs a months-since-exam field to go live; its overdue names (Hill/Geant/Reneau/
+  Bernard/Cabbler) do not match the tracker's five `Dental exam OVERDUE` rows (De La Cruz/
+  Huertas/Maitima/Rodriguez/Santos). **Safety** could go live from the `other` category — the
+  September cycle holds `Form 55 / Safety - …` (20 rows across seven variants), `Lockout Tagout`
+  (6) and `Additional training plan - needs to be redone` (2), which is exactly what the
+  hand-written per-shop chip cards say. `from-db.js` does not read `other` at all yet.
+- **Admin tasks with no slide:** `AtHoc` (August only so far). `Quarterly Award 1206's` /
+  `Submit a 1206 for 3rd Quarter awards` now reaches the awards slide (`shapeAwards`), `TAP`
+  the inbound/outbound slide (`shapeTap`), `ACA due - …` the EPB slide. `NO_SLIDE_YET` in
+  `test/newsletter-shape.test.js` still names Form 55's / JSTO / AtHoc for the August set.
+- **The CBT category is split by the platform named in the title** (`CBT:` → slide 12,
+  `Percipio:` → slide 13). A Percipio course entered as `CBT: …` prints on the wrong slide —
+  the two miscategorised August courses (RDA, Engineering Contingency Responsibilities) were
+  fixed in the September import, but the split is only as good as the prefix.
 - **The CBT slide's colour contradicts its own text.** Colour comes from `urgency`, the words
   from `details`, and on the August cycle they disagree for roughly half the first block of
   every group (e.g. Ebbert's DAF Ops Security: `urgency: 'overdue'`, details `"15 min — Due
@@ -452,6 +460,54 @@ longer true, and the working copy has been synced to `origin/master` with a clea
 ---
 
 ## 11. Recent work
+
+### 2026-09-09 — Newsletter: slides 7–23 rebuilt for print (white page, cream boxes)
+
+Second half of the September pass, on top of the org/timeline branch (#96 left open by
+request; this PR is based on it). Every slide from 7 on was reviewed against production
+screenshots and rebuilt; renderer + shapers only, the SQL is unchanged.
+
+- **Page is white, boxes are cream** — the reverse of the app (`theme.js` header comment
+  says why: the deck gets photocopied). `.card` is cream with a `--bm` border; a new `--hair`
+  token rules tables *inside* cream, since `--border` vanishes there. `print-color-adjust:
+  exact` is set on `*`, or Chrome's default print settings drop every background and the
+  whole organisation of the deck with it. The cover is white too (ink top rule, cream stat
+  boxes). New components: `.chips`/`.chip` (name lists), `.notice` (squadron-wide strip),
+  `.steps`, `.bar` (progress), `.masonry-N`, `.roomy` (sparse slides set 14px type instead
+  of leaving half a page white).
+- **`shape.js` grew two generic rules** (§8a rules 4–5): `liftCommon` moves a sentence most
+  of a group shares up to the group's note (used by CBTs at two levels — slide-wide, then per
+  course — and by medical, PT, GTC, orders, EPB/ACA, upgrade, inbound, TAP, awards); a title on
+  ≥ 15 members becomes a notice (`shapeOrders`). Members carry only their own `status`.
+- **Per slide.** 7 Safety: intro card, requirements table in a card, eight per-shop chip
+  cards (static, restyled). 8 Work Schedule: one cream card per shop, three across, one
+  summarised line of details. 9 Duties: the two half-tables in cards. 10 Awards: quarter
+  cards (past struck) + **the 25 supervisors who owe a 1206, live** (`shapeAwards`). 11
+  MEETs/RADR: table with status badges + DFT chips (static, restyled, still stale). **12 CBTs:
+  the cut-off slide** — MyLearning courses only, one card per course, name | status, two
+  sub-columns past 12 names, the blanket sentence once in the intro; 100 rows and 7 courses
+  fit with room. **13 Additional Training went live** — the Percipio rows of the same
+  category (34 rows, 13 courses); `static/additional-training.html` deleted. **14 Orders:**
+  the 73-row `Sign any RUTA / RMP days in AROWS` collapsed to one notice; DTS and AROWS
+  tables side by side with the shared instruction as the card note. 15 GTC: three-step strip
+  + two chip cards. **16 EPBs:** one row per evaluation (type, ratee, closeout, sitting at,
+  needs — parsed from `EPB - SrA Blake - Closeout 31Mar2026 (sitting at …)`, which is
+  assigned to everyone in the chain and used to print twice) + an ACA sessions card. **17
+  Medical:** one card per requirement with the names inside (was a red line per member
+  repeating the walk-in hours), appointments from the title stay on the member. 18 Dental:
+  overdue strip + ten month cards (static). **19 PT:** due-month from the title (`PT Test -
+  due September 26`), this UTA's bucket leads with the test time, **October's tests found in
+  `upcoming`** — `shapePt` now takes medical + upcoming. 20 Measurements: four big slot
+  cards (static). 21 Inbound: chips with shop, + **TAP (separating) card** from admin. **22
+  Upgrade: was empty** (§8a) — a table per level with started/months/CDC/tasks bar, waiting
+  list as chips. 23 RSD: twelve month cards, a drill spilling into the next month pointed to
+  from it.
+- Tests: `test/newsletter-print.test.js` (16, incl. the September inventory guard across
+  five categories); older expectations updated where the markup changed (RSD tags on their
+  own line, sorted inbound). **448 total.**
+- Preview tooling: `preview-full.mjs` in the scratchpad renders the *whole* deck from the
+  API (73 members via `/api/roster` — `/api/squadron/members` returned only 10), dumps
+  `tasks-dump.json`; `capture-deck.mjs` screenshots slides by index.
 
 ### 2026-09-09 — Newsletter: org charts redrawn as charts; timeline coloured and de-cluttered
 
