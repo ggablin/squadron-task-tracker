@@ -453,6 +453,38 @@ longer true, and the working copy has been synced to `origin/master` with a clea
 
 ## 11. Recent work
 
+### 2026-09-09 — Newsletter: org charts redrawn as charts; timeline coloured and de-cluttered
+
+Both changes are renderer-only (`newsletter/shape.js`, `slides.js`, `theme.js`); the data
+feeds are unchanged. Previewed against **live September data** without a database via
+`preview-live.mjs` in the session scratchpad: it logs in, pulls `/api/squadron/org-chart`
+and `/api/squadron/timeline`, stubs the other slides, renders, and `capture-deck.mjs`
+screenshots individual `.slide`s with headless Chrome (`captureBeyondViewport` + document
+coordinates — a viewport-relative clip after `scrollIntoView` captures page background).
+
+- **Org charts (slides 2–5)** now match the source newsletter's shape: staff row on a rule
+  beside the Commander (five-column grid, Commander centred so the spine hangs from the page
+  centre, CEM left, 1SG + Admin right); the spine Commander → BCE OIC → Flight OIC → Flight
+  Superintendent; a bar fanning out to shop NCOICs plus flight-level peers (the R&O UTM);
+  two-column member grids per shop. **Connectors are CSS pseudo-elements** — no script, so
+  the emailed/printed single file is unchanged in kind. An empty rung prints **"Vacant"**
+  (dashed) rather than vanishing, as the source does for an open OIC billet — Infrastructure
+  is vacant since Deguzman left for OTS. Member tiles are rank + name only: the tracker has no
+  Craftsman/Journeyman data and the chart must not invent it; supervisors keep their label.
+  Shop colour is a muted tint on tiles + a full-hue accent edge (deck palette kept, user's
+  call). Tests: `test/newsletter-org.test.js` (5).
+- **Roster fix on production (user-approved):** 2LT Maramba was filed as a second
+  `BCE/Engineering OIC` on Squadron Staff and printed in every flight's staff row; he is
+  the **Construction Flight OIC** (`PATCH /api/roster/members/71` with `placement:
+  flight_leader`). The MCP `tracker_update_member` deliberately cannot change placement —
+  use the roster API or /roster. The user also re-seated EM (Banks OIC, Long SNCOIC) himself.
+- **Timeline (slide 6):** bars are colour-coded by a `cat` derived from `kind` with a
+  title fallback (ten of September's 27 events have no kind); details are cut to a ≤64-char
+  `summary` at a word/slash boundary; every bar is **drawn at least 60 min wide** and lanes
+  are packed on the *drawn* end, so a label always has room and nothing overlaps — the
+  0800 Formation / 0830 Reenlistment collision is gone. Titles clamp at 3 lines, summaries
+  at 2. A legend prints only the categories in use. Tests: 4 more in `newsletter-shape.test.js`.
+
 ### 2026-08-28 — Newsletter export audited against the real newsletter
 
 The generated deck was compared page by page against MSgt McNaughton's **August 2026

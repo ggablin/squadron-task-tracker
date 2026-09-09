@@ -63,35 +63,78 @@ function cover(d) {
 }
 
 // ── 2–5. Flight ORG charts ────────────────────────────────────────────────
+// Drawn as the source newsletter draws them: a real chart with chain-of-command
+// lines. Staff row on a rule beside the Commander; the spine Commander → BCE OIC →
+// Flight OIC → Flight Superintendent; a bar fanning out to each shop's NCOIC (and any
+// flight-level peer such as the UTM); a two-column grid of members under each shop.
+// Connectors are CSS only, so the deck stays a single self-contained HTML file that
+// prints identically with no script — see .org-* in theme.js.
+//
+// A rung with nobody in it prints "Vacant" rather than disappearing: the source
+// chart does exactly that for an empty OIC slot, and a chart that quietly drops a
+// level misreads as "there is no OIC" rather than "the OIC billet is open".
+//
+// Member tiles carry rank and name only. The source labels every tile Journeyman /
+// Craftsman / Supervisor #N; the tracker knows supervisor vs member and nothing
+// about skill level, and a chart must not invent one. Supervisors keep their label.
 const SHOP_CLASS = {
   'WFSM': 'sh-red', 'HVAC': 'sh-green', 'Electrical': 'sh-gray', 'Power Pro': 'sh-blue',
   'Heavy Equipment': 'sh-orange', 'Structures': 'sh-teal', 'Operations': 'sh-cyan',
   'EA': 'sh-yellow', 'EM': 'sh-purple',
 };
-function staffBox(p) {
-  const cls = { 'Commander': 'b-cmd', 'Chief Enlisted Manager': 'b-chief', 'First Sergeant': 'b-1sg',
-    'Admin Support Technician': 'b-admin', 'BCE/Engineering OIC': 'b-oic' }[p.position] || 'b-admin';
-  return `<div class="org-box ${cls}"><div class="org-pos">${esc(p.position || '')}</div><div class="org-name">${person(p)}</div></div>`;
+const STAFF_CLASS = { 'Commander': 'b-cmd', 'Chief Enlisted Manager': 'b-chief', 'First Sergeant': 'b-1sg',
+  'Admin Support Technician': 'b-admin', 'BCE/Engineering OIC': 'b-oic' };
+
+function orgBox(p, cls, pos, extra = '') {
+  const name = p ? person(p) : 'Vacant';
+  return `<div class="org-box ${cls}${p ? '' : ' b-vacant'}"${extra}><div class="org-pos">${esc(pos)}</div><div class="org-name">${name}</div></div>`;
 }
+
 function orgSlide(flightName, d) {
   const flight = d.org.flights.find(f => f.name === flightName);
   if (!flight) return '';
-  const banner = `<div class="org-staff">${d.org.staff.map(staffBox).join('')}</div>`;
-  const leaders = flight.leaders.length
-    ? `<div class="org-leaders">${flight.leaders.map(p =>
-        `<div class="org-box b-supt"><div class="org-pos">${esc(flight.name)} ${esc(p.position)}</div><div class="org-name">${person(p)}</div></div>`).join('')}</div>`
-    : '';
-  const count = flight.shops.reduce((n, s) => n + s.supervisors.length + s.members.length + (s.ncoic ? 1 : 0), 0);
-  const shops = `<div class="org-shops">${flight.shops.map(s => {
-    const cls = SHOP_CLASS[s.name] || 'sh-gray';
-    const ncoic = s.ncoic ? `<div class="org-box b-ncoic"><div class="org-pos">${esc(s.name)} ${esc(s.ncoic.position)}</div><div class="org-name">${person(s.ncoic)}</div></div>` : '';
-    const tile = (p, role) => `<div class="org-tile ${cls}"><div class="org-role">${esc(role)}</div><div class="org-name">${person(p)}</div></div>`;
-    const sups = s.supervisors.map(p => tile(p, 'Supervisor')).join('');
-    const mems = s.members.map(p => tile(p, 'Member')).join('');
-    return `<div class="org-col">${ncoic}<div class="org-tiles">${sups}${mems}</div></div>`;
-  }).join('')}</div>`;
-  return chrome('Organisation', `${flightName} Flight`, banner + leaders + shops, 'org',
-                `${count} assigned`);
+  const staff = d.org.staff;
+  const find = (re) => staff.find(p => re.test(p.position || ''));
+  const cmd = find(/^Commander$/i), cem = find(/Chief Enlisted/i), fsg = find(/First Sergeant/i),
+        adm = find(/Admin Support/i);
+  const bces = staff.filter(p => /BCE/i.test(p.position || ''));
+
+  // Staff row: five equal columns, Commander in the middle so the spine hangs from
+  // the page centre; CEM to the left, First Sergeant and Admin to the right, as the
+  // source lays it out. The rule behind them runs CEM → Admin (theme: .org-top::before).
+  const cell = (p, cls, pos, col) => p ? orgBox(p, cls, pos, ` style="grid-column:${col}"`) : '';
+  const top = `<div class="org-top">
+    ${cell(cem, 'b-chief', 'Chief Enlisted Manager', 2)}
+    ${cell(cmd, 'b-cmd', 'Commander', 3)}
+    ${cell(fsg, 'b-1sg', 'First Sergeant', 4)}
+    ${cell(adm, 'b-admin', 'Admin Support Technician', 5)}
+  </div>`;
+
+  const oic = flight.leaders.find(p => /\bOIC\b/i.test(p.position || ''));
+  const supt = flight.leaders.find(p => /Superintendent/i.test(p.position || ''));
+  const peers = flight.leaders.filter(p => p !== oic && p !== supt);
+
+  const rung = (html, last = false) => `<div class="org-rung${last ? ' org-rung-last' : ''}">${html}</div>`;
+  const spine = `<div class="org-spine">
+    ${bces.map(p => rung(orgBox(p, 'b-oic', 'BCE/Engineering OIC'))).join('')}
+    ${rung(orgBox(oic, 'b-oic', `${flightName} Flight OIC`))}
+    ${rung(orgBox(supt, 'b-supt', `${flightName} Flight Superintendent`), true)}
+  </div>`;
+
+  const tile = (p, role) => `<div class="org-tile">${role ? `<div class="org-role">${esc(role)}</div>` : ''}<div class="org-name">${person(p)}</div></div>`;
+  const shopBranch = (sh) => {
+    const cls = SHOP_CLASS[sh.name] || 'sh-gray';
+    const head = orgBox(sh.ncoic, 'b-ncoic', `${sh.name} ${sh.ncoic ? sh.ncoic.position : 'NCOIC'}`);
+    const tiles = sh.supervisors.map(p => tile(p, 'Supervisor')).concat(sh.members.map(p => tile(p, '')));
+    return `<div class="org-branch ${cls}">${head}${tiles.length ? `<div class="org-grid">${tiles.join('')}</div>` : ''}</div>`;
+  };
+  const peerBranch = (p) => `<div class="org-branch org-peer">${orgBox(p, 'b-peer', p.position || '')}</div>`;
+  const branches = `<div class="org-branches">${flight.shops.map(shopBranch).join('')}${peers.map(peerBranch).join('')}</div>`;
+
+  const count = flight.shops.reduce((n, sh) => n + sh.supervisors.length + sh.members.length + (sh.ncoic ? 1 : 0), 0)
+              + flight.leaders.length;
+  return chrome('Organisation', `${flightName} Flight`, `<div class="org-chart">${top}${spine}${branches}</div>`,
+                'org', `${count} assigned`);
 }
 
 // ── 6. UTA Timeline ───────────────────────────────────────────────────────
@@ -111,15 +154,17 @@ function timeline(d) {
     const hours = g.ticks.map((t, i) =>
       `<div class="tl-hour" style="grid-column:${i * perHour + 1}/span ${perHour}">${esc(t)}</div>`).join('');
 
+    // The box is the DRAWN span (never under an hour, so a title always fits and
+    // wraps rather than clipping); the time label is the true one. Colour comes
+    // from the category shape.js derived, one line of summary from the details.
     const bars = day.events.map(e => {
       const col = (e.startMin - g.from) / g.slot + 1;
-      const span = (e.endMin - e.startMin) / g.slot;
+      const span = (e.drawEnd - e.startMin) / g.slot;
       const who = e.shop && e.shop !== 'ALL' ? `<span class="tl-shop">${esc(e.shop)}</span>` : '';
-      const det = e.details ? `<span class="tl-det">${esc(e.details)}</span>` : '';
-      const cls = ['tl-bar', e.type === 'emphasis' ? 'tl-emph' : '', span <= 2 ? 'tl-narrow' : ''].filter(Boolean).join(' ');
-      return `<div class="${cls}" style="grid-column:${col}/span ${span};grid-row:${e.lane + 2}">
+      const det = e.summary ? `<span class="tl-det">${esc(e.summary)}</span>` : '';
+      return `<div class="tl-bar tl-c-${esc(e.cat)}" style="grid-column:${col}/span ${span};grid-row:${e.lane + 2}">
         <span class="tl-t">${esc(e.start)}${e.end ? `–${esc(e.end)}` : ''}</span>
-        <span class="tl-n">${esc(e.title)}${who}${det}</span>
+        <span class="tl-n">${esc(e.title)}${who}</span>${det}
       </div>`;
     }).join('');
 
@@ -136,7 +181,15 @@ function timeline(d) {
     </div>`;
   }).join('');
 
-  return chrome('Schedule', 'UTA Timeline', `<div class="tl-wrap">${body}</div>`, '',
+  // Legend for whatever categories this UTA actually uses, in a fixed order.
+  const LEGEND = [['formation', 'Formation'], ['training', 'Training'], ['meeting', 'Meeting / Briefing'],
+    ['medical', 'Medical'], ['fitness', 'PT'], ['ceremony', 'Ceremony'], ['meal', 'Meals'],
+    ['cleanup', 'Cleanup'], ['other', 'Other']];
+  const used = new Set(d.timeline.flatMap(day => day.events.map(e => e.cat)));
+  const legend = `<div class="tl-legend">${LEGEND.filter(([k]) => used.has(k))
+    .map(([k, l]) => `<span><i class="tl-sw tl-c-${k}"></i>${l}</span>`).join('')}</div>`;
+
+  return chrome('Schedule', 'UTA Timeline', `<div class="tl-body"><div class="tl-wrap">${body}</div>${legend}</div>`, '',
                 'Squadron-wide unless a shop is named');
 }
 

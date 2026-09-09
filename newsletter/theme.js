@@ -147,16 +147,20 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .cover-stat .n{font-size:34px;font-weight:700;line-height:1;}
 .cover-stat .l{font-size:10.5px;color:#a9ab9e;margin-top:5px;letter-spacing:.05em;text-transform:uppercase;}
 
-/* ── Org chart ───────────────────────────────────────────────────────────── */
-.org .slide-body{font-size:10px;display:flex;flex-direction:column;justify-content:center;}
-.org-staff{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:9px;}
-.org-leaders{display:flex;justify-content:center;gap:8px;margin:0 0 10px;}
+/* ── Org chart ───────────────────────────────────────────────────────────
+   A real chart, connectors in CSS so no script is needed to print it.
+   Vertical rhythm: staff row → 14px stub → rung → 14px → rung → 14px → rung
+   → 16px bar → NCOIC → 12px → member grid. The lines are borders and
+   pseudo-elements; boxes have opaque backgrounds so a rule can run behind a
+   row and show only in the gaps. */
+.org .slide-body{display:flex;flex-direction:column;justify-content:center;}
+.org-chart{display:flex;flex-direction:column;align-items:stretch;}
 .org-box{
-  border:1.5px solid var(--bm);border-radius:var(--rs);padding:5px 10px;text-align:center;
-  min-width:112px;background:var(--bg);
+  border:1.5px solid var(--bm);border-radius:var(--rs);padding:9px 14px;text-align:center;
+  min-width:150px;background:var(--bg);position:relative;z-index:1;
 }
-.org-pos{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);}
-.org-name{font-size:11px;font-weight:600;margin-top:1px;}
+.org-pos{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);}
+.org-name{font-size:14px;font-weight:600;margin-top:2px;}
 .b-cmd,.b-oic{background:var(--text);color:var(--cream);border-color:var(--text);}
 .b-cmd .org-pos,.b-oic .org-pos,.b-chief .org-pos,.b-1sg .org-pos,.b-supt .org-pos{color:rgba(246,247,237,.72);}
 .b-chief{background:#3d4036;color:var(--cream);border-color:#3d4036;}
@@ -165,20 +169,59 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .b-admin{background:var(--s2);}
 .b-supt{background:var(--text);color:var(--cream);border-color:var(--text);}
 .b-ncoic{background:var(--cream);border-color:var(--t3);}
-.org-shops{display:flex;gap:6px;justify-content:center;align-items:flex-start;flex-wrap:wrap;}
-.org-col{display:flex;flex-direction:column;gap:4px;width:143px;}
-.org-tiles{display:flex;flex-direction:column;gap:2.5px;}
-.org-tile{
-  border:1px solid var(--border);border-radius:7px;padding:3px 6px;text-align:center;background:var(--bg);
-}
-.org-tile .org-name{font-size:10px;}
-.org-role{font-size:7px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3-nav);}
-/* Shop accents: one muted hue per shop rather than nine saturated fills. */
-.sh-red{border-left:3px solid #a8472f;} .sh-green{border-left:3px solid #55704f;}
-.sh-gray{border-left:3px solid #8d8e84;} .sh-blue{border-left:3px solid #2f5c8a;}
-.sh-orange{border-left:3px solid #b3702c;} .sh-teal{border-left:3px solid #3f7d78;}
-.sh-cyan{border-left:3px solid #4a8f93;} .sh-yellow{border-left:3px solid #8a7326;}
-.sh-purple{border-left:3px solid #6b5382;}
+.b-peer{background:var(--wrn-bg);border-color:#d9c9a3;}
+/* An open billet: same footprint, dashed, quiet. */
+.b-vacant,.b-vacant.b-oic,.b-vacant.b-supt,.b-vacant.b-ncoic{
+  background:var(--s2);color:var(--t2);border:1.5px dashed var(--t3);}
+.b-vacant .org-pos{color:var(--t2);}
+.b-vacant .org-name{font-style:italic;font-weight:500;}
+
+/* Staff row: five equal columns, Commander in column 3 so the spine is centred.
+   The rule runs from the CEM's centre (col 2 → 30%) to Admin's (col 5 → 90%). */
+.org-top{display:grid;grid-template-columns:repeat(5,1fr);position:relative;}
+.org-top .org-box{justify-self:center;min-width:0;width:88%;}
+.org-top::before{content:'';position:absolute;left:30%;right:10%;top:50%;border-top:2.5px solid var(--t3);}
+
+/* The spine: each rung hangs from the one above on a 14px stub. */
+.org-spine{display:flex;flex-direction:column;align-items:center;}
+.org-rung{position:relative;padding-top:20px;}
+.org-rung::before{content:'';position:absolute;top:0;left:50%;width:2.5px;height:20px;margin-left:-1px;background:var(--t3);}
+.org-rung .org-box{width:270px;}
+.org-rung-last::after{content:'';position:absolute;left:50%;bottom:-22px;width:2.5px;height:22px;margin-left:-1px;background:var(--t3);}
+
+/* Fan-out: a bar across the top of the branches, a stub down into each. Branches
+   sit flush (padding, no gap) so the bar is continuous; the first and last child
+   start and stop at their own centres, and an only child draws no bar at all. */
+.org-branches{display:flex;justify-content:center;align-items:flex-start;position:relative;padding-top:22px;}
+.org-branch{position:relative;padding:0 6px;flex:0 1 auto;min-width:230px;max-width:300px;}
+.org-branch.org-peer{min-width:190px;}
+.org-branch::before{content:'';position:absolute;top:-22px;left:50%;width:2.5px;height:22px;margin-left:-1px;background:var(--t3);}
+.org-branch::after{content:'';position:absolute;top:-22px;left:0;right:0;height:2.5px;background:var(--t3);}
+.org-branch:first-child::after{left:50%;}
+.org-branch:last-child::after{right:50%;}
+.org-branch:only-child::after{display:none;}
+.org-branch .org-box{width:100%;min-width:0;}
+
+/* Members: two columns under the NCOIC, on a 12px stub. */
+.org-grid{position:relative;margin-top:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}
+.org-grid::before{content:'';position:absolute;top:-16px;left:50%;width:2.5px;height:16px;margin-left:-1px;background:var(--t3);}
+.org-tile{border:1px solid var(--border);border-radius:8px;padding:8px 7px;text-align:center;background:var(--bg);}
+.org-tile .org-name{font-size:11.5px;margin-top:0;}
+.org-role{font-size:7.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3-nav);}
+
+/* Shop colour: the source fills each shop's boxes with a saturated hue. The deck
+   keeps its own palette — a muted tint of the same hue on the tiles, and the full
+   hue as an accent edge on the NCOIC box and every tile — so the shops still read
+   as colour-coded without the page looking pasted in from another document. */
+.sh-red .org-tile{background:#f5ece9;border-color:#e6d1c9;} .sh-red .org-tile,.sh-red .b-ncoic{border-left:3px solid #a8472f;}
+.sh-green .org-tile{background:#edf2eb;border-color:#d3dfd0;} .sh-green .org-tile,.sh-green .b-ncoic{border-left:3px solid #55704f;}
+.sh-gray .org-tile{background:#efefeb;border-color:#d9d9d2;} .sh-gray .org-tile,.sh-gray .b-ncoic{border-left:3px solid #8d8e84;}
+.sh-blue .org-tile{background:#e9f0f7;border-color:#c9d8e6;} .sh-blue .org-tile,.sh-blue .b-ncoic{border-left:3px solid #2f5c8a;}
+.sh-orange .org-tile{background:#f5eedf;border-color:#e6d8bd;} .sh-orange .org-tile,.sh-orange .b-ncoic{border-left:3px solid #b3702c;}
+.sh-teal .org-tile{background:#e6f0ef;border-color:#c6dbd9;} .sh-teal .org-tile,.sh-teal .b-ncoic{border-left:3px solid #3f7d78;}
+.sh-cyan .org-tile{background:#e7f1f2;border-color:#c7dcde;} .sh-cyan .org-tile,.sh-cyan .b-ncoic{border-left:3px solid #4a8f93;}
+.sh-yellow .org-tile{background:#f4f0e0;border-color:#e2dab8;} .sh-yellow .org-tile,.sh-yellow .b-ncoic{border-left:3px solid #8a7326;}
+.sh-purple .org-tile{background:#eee9f3;border-color:#d6cbe0;} .sh-purple .org-tile,.sh-purple .b-ncoic{border-left:3px solid #6b5382;}
 
 /* ── Timeline ─────────────────────────────────────────────────────────────
    A horizontal time grid per day: hour ticks in row 1, event bars in rows 2+,
@@ -211,23 +254,34 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 }
 .tl-bar{
   min-width:0;overflow:hidden;
-  background:var(--s2);border-left:2px solid var(--t3);border-radius:3px;
-  padding:2px 4px;margin-top:2px;
-  display:flex;flex-direction:column;gap:0;
+  background:var(--s2);border-left:3px solid var(--t3);border-radius:3px;
+  padding:3px 5px 4px;margin-top:2px;
+  display:flex;flex-direction:column;gap:1px;
 }
 .tl-t{font-size:7px;font-weight:700;color:var(--t2);font-variant-numeric:tabular-nums;line-height:1.2;}
-.tl-n{font-size:8.5px;font-weight:600;line-height:1.2;overflow-wrap:anywhere;}
-.tl-det{display:block;font-size:7.5px;font-weight:400;color:var(--t2);line-height:1.2;}
-/* A half-hour bar is ~45px wide — too narrow for a wrapped title, so the label runs
-   on past the bar instead of wrapping to shreds. It is deliberately NOT raised above
-   the bars beside it: where the lane is free the title reads in full, and where the
-   next event starts immediately that event's own bar covers the overrun, which reads
-   as clean truncation rather than two labels smeared over each other. The detail line
-   is dropped — a narrow slot can carry a title and its position, not a sentence. */
-.tl-narrow{overflow:visible;}
-.tl-narrow .tl-n{white-space:nowrap;}
-.tl-narrow .tl-det{display:none;}
-.tl-emph{background:var(--wrn-bg);border-left-color:var(--warn);}
+/* Two lines for a title, two for its summary, then it stops: every bar is drawn at
+   least an hour wide, so anything longer than that is the description, not the name. */
+.tl-n{font-size:8.5px;font-weight:600;line-height:1.2;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+.tl-det{font-size:7.5px;font-weight:400;color:var(--t2);line-height:1.2;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+/* One muted tint per category — the deck's own tokens, so the grid colour-codes the
+   day without turning into the source newsletter's rainbow. Formations are the
+   anchors of the day and print in ink so the eye finds them first. */
+.tl-c-formation{background:var(--text);border-left-color:var(--text);color:var(--cream);}
+.tl-c-formation .tl-t,.tl-c-formation .tl-det{color:rgba(246,247,237,.75);}
+.tl-c-training{background:var(--info-bg);border-left-color:var(--info);}
+.tl-c-meeting,.tl-c-emphasis{background:var(--wrn-bg);border-left-color:var(--warn);}
+.tl-c-medical{background:var(--urg-bg);border-left-color:var(--urgent);}
+.tl-c-fitness{background:var(--ok-bg);border-left-color:var(--ok);}
+.tl-c-ceremony{background:#eee9f3;border-left-color:#6b5382;}
+.tl-c-meal{background:var(--s2);border-left-color:var(--t3);}
+.tl-c-cleanup{background:var(--bm);border-left-color:var(--t3-nav);}
+.tl-c-other{background:var(--s2);border-left-color:var(--t3);}
+.tl-body{display:flex;flex-direction:column;height:100%;}
+.tl-body .tl-wrap{flex:0 0 auto;height:auto;gap:8px;}
+.tl-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:8px;color:var(--t2);padding:7px 2px 0;margin-top:auto;}
+.tl-sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;border-left-width:3px;border-left-style:solid;}
 .tl-shop{font-size:7px;background:var(--bg);color:var(--t2);padding:0 4px;border-radius:999px;font-weight:700;margin-left:3px;}
 .tl-notes{display:flex;flex-wrap:wrap;gap:6px;padding:4px 2px 0;}
 .tl-note{font-size:8.5px;font-weight:600;background:var(--wrn-bg);color:var(--warn);padding:2px 7px;border-radius:999px;}
