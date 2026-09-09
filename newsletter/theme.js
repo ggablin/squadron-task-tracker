@@ -2,8 +2,10 @@
 //
 // Replaces the previous navy/serif "PowerPoint" look. Every token here is copied
 // from public/design.css so the printed newsletter and the web app read as one
-// product: same cream page, same card treatment, same urgency colours, same
-// typeface. General Sans is inlined as base64 so the HTML is a single portable
+// product: same card treatment, same urgency colours, same typeface. One deliberate
+// departure (Sep 2026): the PAGE is white and the BOXES are cream, the reverse of
+// the app. This deck gets photocopied — a cream page is a grey page on paper and a
+// toner bill on 70 copies — so white carries the page and cream marks the boxes. General Sans is inlined as base64 so the HTML is a single portable
 // file — a newsletter that only looks right on a machine with the fonts
 // installed is not much use for something emailed to 70 people.
 
@@ -37,10 +39,13 @@ ${FONTS}
   --warn:#7d5f2a;   --wrn-bg:#f5eedf;
   --ok:#55704f;     --ok-bg:#edf2eb;
   --info:#2f5c8a;   --info-bg:#e9f0f7; --info-bd:#c2d6e8;
+  --hair:#dfe0d6;   /* a rule that still shows on a cream box, on paper */
   --r:14px; --rs:10px;
 }
 
-*{box-sizing:border-box;}
+/* Without this Chrome's default print settings drop every background, and the
+   cream boxes, colour bars and shop tints this deck is organised by vanish. */
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 html,body{margin:0;padding:0;}
 body{
   background:var(--bm);
@@ -76,7 +81,7 @@ body{
 
 /* ── Slide = one landscape page ──────────────────────────────────────────── */
 .slide{
-  background:var(--cream);
+  background:#fff;
   width:11in;height:8.5in;
   padding:.46in .55in .4in;
   position:relative;display:flex;flex-direction:column;overflow:hidden;
@@ -93,14 +98,39 @@ body{
 .slide-title{font-size:27px;font-weight:700;line-height:1.1;margin:0;color:var(--text);}
 .slide-hd-right{font-size:10.5px;color:var(--t2);font-weight:500;white-space:nowrap;text-align:right;}
 .slide-body{flex:1;font-size:12px;line-height:1.45;min-height:0;overflow:hidden;}
+/* A sparse slide sets type larger rather than leaving half a page white. */
+.roomy .slide-body{font-size:14px;}
+.two-col > .card{flex:1;margin:0;}
+.roomy .notice-t{font-size:17px;}
+.roomy .step .t{font-size:14px;}
+.roomy .step .s{font-size:12px;}
+.roomy .intro{font-size:13px;max-width:none;}
+.roomy .card-hd{font-size:10.5px;}
+.roomy .note{font-size:12px;}
 .slide-ft{
   margin-top:auto;padding-top:9px;display:flex;justify-content:space-between;
   font-size:9.5px;color:var(--t3-nav);border-top:1.5px solid var(--bm);
 }
 
 /* ── Card: the single repeated motif, straight from the app ──────────────── */
-.card{background:var(--bg);border:2px solid var(--border);border-radius:var(--r);padding:13px 15px;}
-.card + .card{margin-top:9px;}
+.card{background:var(--cream);border:1.5px solid var(--bm);border-radius:var(--r);padding:12px 14px;}
+.card + .card{margin-top:10px;}
+.card.accent-urgent{background:var(--urg-bg);border-color:#e3c9bf;}
+.card.accent-urgent .card-hd{color:var(--urgent);}
+.card.accent-info{background:var(--info-bg);border-color:var(--info-bd);}
+.card.accent-info .card-hd{color:var(--info);}
+.card.accent-warn{background:var(--wrn-bg);border-color:#e3d3ae;}
+.card.accent-warn .card-hd{color:var(--warn);}
+.card.accent-ok{background:var(--ok-bg);border-color:#cfdccb;}
+.card.accent-ok .card-hd{color:var(--ok);}
+/* A squadron-wide notice: one cream strip with an ink edge, not a 73-row table. */
+.card.notice{border-left:5px solid var(--text);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+.notice-t{font-size:13px;font-weight:700;}
+.notice-n{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);}
+.notice .note{margin:0;flex-basis:100%;}
+/* The sentence a whole card shares, printed once under its heading. */
+.note{font-size:10.5px;color:var(--t2);margin:-2px 0 8px;line-height:1.45;}
+.card > .note:last-child{margin-bottom:0;}
 .card-hd{
   font-size:9.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
   color:var(--t2);margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline;
@@ -126,26 +156,28 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .red{color:var(--urgent);}
 
 /* ── Person rows ─────────────────────────────────────────────────────────── */
-.p-row{display:flex;align-items:baseline;gap:7px;padding:3.5px 0;border-bottom:1px solid var(--border);}
+.p-row{display:flex;align-items:baseline;gap:7px;padding:3.5px 0;border-bottom:1px solid var(--hair);}
 .p-row:last-child{border-bottom:0;}
 .p-name{font-weight:600;font-size:11.5px;}
 .p-note{color:var(--t2);font-size:10.5px;overflow-wrap:anywhere;}
 .p-spacer{flex:1;}
 
 /* ── Cover ───────────────────────────────────────────────────────────────── */
-.cover{background:#26281f;color:var(--cream);justify-content:center;padding:.9in 1in;position:relative;}
-.cover-eyebrow{font-size:12px;font-weight:700;letter-spacing:.22em;color:#a9ab9e;text-transform:uppercase;}
+.cover{background:#fff;color:var(--text);justify-content:center;padding:.9in 1in;position:relative;
+  border-top:.22in solid var(--text);}
+.cover-eyebrow{font-size:12px;font-weight:700;letter-spacing:.22em;color:var(--t2);text-transform:uppercase;}
 .cover-title{font-size:82px;font-weight:700;line-height:1;margin:16px 0 0;letter-spacing:-.015em;}
-.cover-sub{font-size:20px;color:#a9ab9e;margin-top:18px;font-weight:500;}
+.cover-sub{font-size:20px;color:var(--t2);margin-top:18px;font-weight:500;}
 .cover-meta{
   position:absolute;left:1in;right:1in;bottom:.85in;
   display:flex;justify-content:space-between;align-items:flex-end;
-  font-size:11px;color:#a9ab9e;
+  font-size:11px;color:var(--t2);
 }
-.cover-url{font-size:15px;font-weight:600;color:var(--cream);}
-.cover-stats{display:flex;gap:34px;margin-top:40px;}
+.cover-url{font-size:15px;font-weight:600;color:var(--text);}
+.cover-stats{display:flex;gap:14px;margin-top:40px;}
+.cover-stat{background:var(--cream);border:1.5px solid var(--bm);border-radius:var(--r);padding:16px 26px 14px;min-width:150px;}
 .cover-stat .n{font-size:34px;font-weight:700;line-height:1;}
-.cover-stat .l{font-size:10.5px;color:#a9ab9e;margin-top:5px;letter-spacing:.05em;text-transform:uppercase;}
+.cover-stat .l{font-size:10.5px;color:var(--t2);margin-top:6px;letter-spacing:.05em;text-transform:uppercase;}
 
 /* ── Org chart ───────────────────────────────────────────────────────────
    A real chart, connectors in CSS so no script is needed to print it.
@@ -157,7 +189,7 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .org-chart{display:flex;flex-direction:column;align-items:stretch;}
 .org-box{
   border:1.5px solid var(--bm);border-radius:var(--rs);padding:9px 14px;text-align:center;
-  min-width:150px;background:var(--bg);position:relative;z-index:1;
+  min-width:150px;background:var(--cream);position:relative;z-index:1;
 }
 .org-pos{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);}
 .org-name{font-size:14px;font-weight:600;margin-top:2px;}
@@ -166,9 +198,9 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .b-chief{background:#3d4036;color:var(--cream);border-color:#3d4036;}
 .b-1sg{background:var(--urgent);color:#fff;border-color:var(--urgent);}
 .b-1sg .org-pos{color:rgba(255,255,255,.8);}
-.b-admin{background:var(--s2);}
+.b-admin{background:var(--cream);}
 .b-supt{background:var(--text);color:var(--cream);border-color:var(--text);}
-.b-ncoic{background:var(--cream);border-color:var(--t3);}
+.b-ncoic{background:#fff;border-color:var(--t3);}
 .b-peer{background:var(--wrn-bg);border-color:#d9c9a3;}
 /* An open billet: same footprint, dashed, quiet. */
 .b-vacant,.b-vacant.b-oic,.b-vacant.b-supt,.b-vacant.b-ncoic{
@@ -205,7 +237,7 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 /* Members: two columns under the NCOIC, on a 12px stub. */
 .org-grid{position:relative;margin-top:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}
 .org-grid::before{content:'';position:absolute;top:-16px;left:50%;width:2.5px;height:16px;margin-left:-1px;background:var(--t3);}
-.org-tile{border:1px solid var(--border);border-radius:8px;padding:8px 7px;text-align:center;background:var(--bg);}
+.org-tile{border:1px solid var(--bm);border-radius:8px;padding:8px 7px;text-align:center;background:var(--cream);}
 .org-tile .org-name{font-size:11.5px;margin-top:0;}
 .org-role{font-size:7.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3-nav);}
 
@@ -239,8 +271,8 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
   grid-template-columns:repeat(var(--cols),1fr);
   gap:2px;
   align-content:start;
-  border:2px solid var(--border);border-top:0;border-radius:0 0 var(--r) var(--r);
-  background:var(--bg);
+  border:1.5px solid var(--bm);border-top:0;border-radius:0 0 var(--r) var(--r);
+  background:#fff;
   /* One hairline per hour, so a bar can be read against the clock. */
   background-image:linear-gradient(to right,var(--bm) 0 1px,transparent 1px);
   background-size:var(--hourw) 100%;
@@ -249,7 +281,7 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 }
 .tl-hour{
   font-size:8.5px;font-weight:700;color:var(--t2);font-variant-numeric:tabular-nums;
-  grid-row:1;padding:3px 0 3px 4px;border-bottom:1px solid var(--border);
+  grid-row:1;padding:3px 0 3px 4px;border-bottom:1px solid var(--bm);
   letter-spacing:.02em;
 }
 .tl-bar{
@@ -275,91 +307,163 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
 .tl-c-medical{background:var(--urg-bg);border-left-color:var(--urgent);}
 .tl-c-fitness{background:var(--ok-bg);border-left-color:var(--ok);}
 .tl-c-ceremony{background:#eee9f3;border-left-color:#6b5382;}
-.tl-c-meal{background:var(--s2);border-left-color:var(--t3);}
+.tl-c-meal{background:var(--cream);border-left-color:var(--t3);}
 .tl-c-cleanup{background:var(--bm);border-left-color:var(--t3-nav);}
-.tl-c-other{background:var(--s2);border-left-color:var(--t3);}
+.tl-c-other{background:var(--cream);border-left-color:var(--t3-nav);}
 .tl-body{display:flex;flex-direction:column;height:100%;}
 .tl-body .tl-wrap{flex:0 0 auto;height:auto;gap:8px;}
 .tl-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:8px;color:var(--t2);padding:7px 2px 0;margin-top:auto;}
 .tl-sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;border-left-width:3px;border-left-style:solid;}
-.tl-shop{font-size:7px;background:var(--bg);color:var(--t2);padding:0 4px;border-radius:999px;font-weight:700;margin-left:3px;}
+.tl-shop{font-size:7px;background:#fff;color:var(--t2);padding:0 4px;border-radius:999px;font-weight:700;margin-left:3px;border:1px solid var(--bm);}
 .tl-notes{display:flex;flex-wrap:wrap;gap:6px;padding:4px 2px 0;}
 .tl-note{font-size:8.5px;font-weight:600;background:var(--wrn-bg);color:var(--warn);padding:2px 7px;border-radius:999px;}
 
-/* ── Work schedule ───────────────────────────────────────────────────────── */
-.ws-wrap{columns:2;column-gap:16px;}
-.ws-shop{break-inside:avoid;margin-bottom:9px;}
-.ws-shop h3{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--t2);margin-bottom:4px;}
-.ws-row{display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);font-size:10.5px;}
-.ws-wo{color:var(--warn);font-weight:700;white-space:nowrap;font-size:10px;}
+/* ── Work schedule: one cream card per shop, three across ───────────────── */
+.ws-wrap{columns:3;column-gap:10px;}
+.ws-shop{break-inside:avoid;display:inline-block;width:100%;margin:0 0 10px;
+  background:var(--cream);border:1.5px solid var(--bm);border-radius:var(--rs);padding:10px 12px;}
+.ws-shop h3{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t2);margin:0 0 4px;
+  display:flex;justify-content:space-between;}
+.ws-shop h3 .count{letter-spacing:0;text-transform:none;color:var(--t3-nav);font-weight:600;}
+.ws-row{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid var(--hair);font-size:11px;align-items:baseline;}
+.ws-row:last-child{border-bottom:0;padding-bottom:1px;}
+.ws-wo{color:var(--warn);font-weight:700;white-space:nowrap;font-size:8.5px;flex:0 0 auto;min-width:0;
+  max-width:88px;overflow:hidden;text-overflow:ellipsis;}
+.ws-t{font-weight:600;line-height:1.3;}
+.ws-d{color:var(--t2);font-size:9.5px;line-height:1.35;}
 
 /* ── Generic columns / grids ─────────────────────────────────────────────── */
 .two-col{display:flex;gap:26px;}
 .col{flex:1;}
 .col-hd{font-size:9.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--t2);margin-bottom:6px;}
-.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
-.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;}
-.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+[class^="grid-"] > .card,[class*=" grid-"] > .card{margin:0;}
+/* Masonry columns of cards: each card whole, never split across a column. */
+.masonry-2{columns:2;column-gap:10px;} .masonry-3{columns:3;column-gap:10px;} .masonry-4{columns:4;column-gap:10px;}
+[class^="masonry-"] > .card{break-inside:avoid;display:inline-block;width:100%;margin:0 0 10px;}
+.stack > * + *{margin-top:10px;}
 
-/* CBT / training blocks */
-.cbt-cols{columns:3;column-gap:14px;}
-.cbt-block{break-inside:avoid;margin-bottom:10px;background:var(--bg);
-  border:2px solid var(--border);border-radius:var(--rs);padding:9px 11px;}
-.cbt-type{font-size:10.5px;font-weight:700;margin-bottom:5px;line-height:1.25;}
-.cbt-line{font-size:10.5px;padding:1.5px 0;}
-.cbt-status{color:var(--t2);font-size:9.5px;}
+/* ── Chips: a name each, so a list of people reads as people, not a paragraph ── */
+.chips{display:flex;flex-wrap:wrap;gap:5px 6px;}
+.chip{display:inline-flex;align-items:baseline;gap:5px;background:#fff;border:1px solid var(--bm);
+  border-radius:999px;padding:3px 10px;font-size:10.5px;font-weight:600;line-height:1.3;}
+.chip .sub{font-weight:500;color:var(--t2);font-size:9px;}
+.chip.overdue{background:var(--urg-bg);border-color:#e3c9bf;color:var(--urgent);}
+.chip.this{background:var(--wrn-bg);border-color:#e3d3ae;color:var(--warn);}
+.chip.next{background:var(--ok-bg);border-color:#cfdccb;color:var(--ok);}
+.roomy .chip,.chips-lg .chip{font-size:12.5px;padding:5px 13px;}
+.roomy .chip .sub,.chips-lg .chip .sub{font-size:10px;}
+
+/* ── Steps: a numbered strip for a how-to (GTC) ── */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;}
+.step{background:var(--cream);border:1.5px solid var(--bm);border-radius:var(--rs);padding:10px 13px;display:flex;gap:11px;}
+.step .n{font-size:24px;font-weight:700;color:var(--t3);line-height:1;}
+.step .t{font-size:12px;font-weight:700;margin-bottom:2px;}
+.step .s{font-size:10.5px;color:var(--t2);line-height:1.4;}
+
+/* ── Progress bar (upgrade training) ── */
+.bar{display:flex;align-items:center;gap:6px;min-width:90px;}
+.bar i{flex:1;height:6px;background:#fff;border:1px solid var(--bm);border-radius:4px;overflow:hidden;display:block;}
+.bar i b{display:block;height:100%;background:var(--ok);}
+.bar span{font-size:9.5px;font-variant-numeric:tabular-nums;color:var(--t2);min-width:28px;text-align:right;}
+
+/* ── RSD: the year as twelve cards ── */
+.rsd-list{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.rsd-list li{background:var(--cream);border:1.5px solid var(--bm);border-radius:var(--rs);padding:14px 16px;min-height:168px;}
+.rsd-list .mo{font-size:9.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--t2);margin-bottom:5px;}
+.rsd-list .d{font-size:21px;font-weight:700;line-height:1.2;}
+.rsd-list .d s{color:var(--t3-nav);font-weight:600;}
+.rsd-list .x{font-size:12px;color:var(--t2);margin-top:3px;}
+.rsd-list li.next{border:2.5px solid var(--text);}
+.rsd-list li.nouta .d{font-size:15px;font-weight:600;color:var(--t3-nav);letter-spacing:.08em;}
+.rsd-list li.past{background:#fff;}
+.rsd-list li.past .mo{color:var(--t3);}
+
+/* CBT / training blocks. Each course is a cream card; a course with more than a
+   dozen names runs them in two sub-columns so the tallest card is still short of
+   the page. Name left, status right, so the eye can run down either side. */
+.cbt-cols{columns:3;column-gap:10px;}
+.cbt-block{break-inside:avoid;display:inline-block;width:100%;margin:0 0 9px;background:var(--cream);
+  border:1.5px solid var(--bm);border-radius:var(--rs);padding:8px 10px 6px;}
+.cbt-type{font-size:10.5px;font-weight:700;line-height:1.25;display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
+.cbt-dur{font-size:9px;font-weight:600;color:var(--t3-nav);white-space:nowrap;}
+.cbt-meta{font-size:8.5px;color:var(--t2);margin:1px 0 4px;}
+.cbt-block .note{font-size:8.5px;margin:2px 0 4px;}
+.cbt-members{margin-top:3px;}
+.cbt-members.two{columns:2;column-gap:10px;}
+.cbt-line{font-size:9.5px;padding:1px 0;display:flex;justify-content:space-between;gap:6px;
+  border-bottom:1px solid var(--hair);break-inside:avoid;}
+.cbt-line:last-child{border-bottom:0;}
+.cbt-members.two .cbt-line{border-bottom:1px solid var(--hair);}
+.cbt-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cbt-status{color:var(--t2);font-size:8.5px;white-space:nowrap;}
+.cbt-line .overdue + .cbt-status{color:var(--urgent);}
 
 /* Data table */
 .data-table{width:100%;border-collapse:collapse;font-size:10.5px;}
 .data-table th{
   text-align:left;padding:4px 8px;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;
-  color:var(--t2);border-bottom:1.5px solid var(--bm);font-weight:700;
+  color:var(--t2);border-bottom:1.5px solid var(--t3);font-weight:700;
 }
-.data-table td{padding:3.5px 8px;border-bottom:1px solid var(--border);vertical-align:top;}
+.data-table td{padding:4px 8px;border-bottom:1px solid var(--hair);vertical-align:top;}
+.data-table tr:last-child td{border-bottom:0;}
+.data-table td.num{font-variant-numeric:tabular-nums;white-space:nowrap;}
+.roomy .data-table{font-size:12px;}
+.roomy .data-table th{font-size:9.5px;}
 
-/* EPB / medical / inbound lines */
-.epb-line,.med-line,.io-line{font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);}
-.med-grid{display:flex;gap:18px;}
-.med-list{flex:1.55;columns:2;column-gap:16px;}
-.med-steps{flex:1;}
-.med-steps ul{margin:0;padding-left:16px;font-size:10.5px;color:var(--t2);line-height:1.5;}
-.med-steps li{margin-bottom:5px;}
+/* Medical: the requirement with the most names leads, and takes two columns of the
+   masonry when it is the biggest thing on the page. */
+.med-cols{columns:3;column-gap:10px;}
+.med-cols > .card{break-inside:avoid;display:inline-block;width:100%;margin:0 0 10px;padding:10px 12px;}
+.med-cols .card-hd{margin-bottom:6px;}
+.med-cols .note{font-size:9.5px;margin:0 0 7px;}
 
-/* PT / upgrade cards */
-.pt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;}
-.pt-card{background:var(--bg);border:2px solid var(--border);border-radius:var(--rs);padding:9px 11px;font-size:10.5px;}
-.pt-hd{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);margin-bottom:6px;}
-.pt-card div{padding:1.5px 0;}
-/* Tests booked for this drill are the only thing on this slide anyone acts on today,
-   so the card leads and takes two columns — it carries appointment times, not just names. */
-.pt-booked{grid-column:span 2;background:var(--info-bg);border-color:var(--info-bd);}
-.pt-booked .pt-hd{color:var(--info);}
-.ug-cols{display:flex;gap:16px;}
-.ug-col{flex:1;}
-.ug-card{background:var(--bg);border:2px solid var(--border);border-radius:var(--rs);
-  padding:7px 10px;margin-bottom:6px;font-size:10.5px;}
+/* PT: the tests booked for THIS drill lead and take two columns — that card carries
+   the test time, which is the one thing anyone needs off this page on Saturday. */
+.pt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.pt-grid > .card{margin:0;}
+.pt-grid .lead{grid-column:span 2;}
+
+/* Upgrade training: one table per level. */
+.ug-table td.who{font-weight:600;white-space:nowrap;}
 
 /* Static partials keep the app's rhythm */
 .static-body{font-size:11px;line-height:1.5;}
 .static-body h3{margin-top:10px;}
-.static-body table{width:100%;border-collapse:collapse;font-size:10px;}
-.static-body th{text-align:left;padding:4px 7px;font-size:8.5px;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--t2);border-bottom:1.5px solid var(--bm);}
-.static-body td{padding:3px 7px;border-bottom:1px solid var(--border);vertical-align:top;}
+.static-body table{width:100%;border-collapse:collapse;font-size:10.5px;}
+.static-body th{text-align:left;padding:5px 8px;font-size:8.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--t2);border-bottom:1.5px solid var(--t3);}
+.static-body td{padding:4.5px 8px;border-bottom:1px solid var(--hair);vertical-align:top;}
+.static-body tr:last-child td{border-bottom:0;}
+.static-body .card table{font-size:11px;}
+.static-body .big{font-size:22px;font-weight:700;line-height:1.1;}
+.static-body .mid{font-size:14px;font-weight:600;}
+.static-body .mil-exam{color:var(--info);font-weight:600;}
+.static-body .chips-sm .chip{font-size:9.5px;padding:2px 8px;}
+.static-body .chips-sm .chip .sub{font-size:8px;}
+.static-body .chips-sm .card{padding:9px 11px;}
+.static-body .chips-sm .card-hd{margin-bottom:6px;}
+.static-body .slots .card{padding:18px 20px;}
+.static-body .slots .big{font-size:40px;}
+.static-body .slots .mid{font-size:17px;margin-top:10px;}
+.static-body .slots .note{font-size:12.5px;}
 .static-body ul{margin:4px 0;padding-left:17px;}
 .static-body li{margin-bottom:3px;}
 
 .empty{color:var(--t3-nav);font-size:11px;font-style:italic;padding:10px 0;}
 
-/* Additional duties: two half-tables side by side at 8.5px, as the old partial */
-.duties-cols{display:flex;gap:14px;align-items:flex-start;}
-.duties-table{flex:1;width:100%;border-collapse:collapse;font-size:8.5px;}
-.duties-table th{text-align:left;padding:4px 7px;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);border-bottom:1px solid var(--border);}
-.duties-table td{padding:3px 7px;border-bottom:1px solid var(--border);vertical-align:top;}
+/* Additional duties: two half-tables side by side, each in its own card, so ~50
+   rows fit one printed page. */
+.duties-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}
+.duties-cols .card{margin:0;padding:8px 10px;}
+.duties-table{width:100%;border-collapse:collapse;font-size:8.6px;}
+.duties-table th{text-align:left;padding:4px 7px;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);border-bottom:1.5px solid var(--t3);}
+.duties-table td{padding:2.5px 7px;border-bottom:1px solid var(--hair);vertical-align:top;}
+.duties-table tr:last-child td{border-bottom:0;}
 .duties-table tr.red td{color:var(--urgent);}
-/* RSD schedule */
-.rsd-list{list-style:none;padding:0;margin:0;font-size:15px;line-height:1.9;}
-.rsd-list s{color:var(--t3-nav);}
 
 /* ── Phones ───────────────────────────────────────────────────────────────────
    The deck is authored at 11in for print. Below that width the slides reflow
@@ -378,15 +482,17 @@ h3{font-size:13px;font-weight:700;margin:0 0 7px;color:var(--text);}
   .cover-title{font-size:44px;}
   .cover-meta{position:static;margin-top:26px;flex-direction:column;align-items:flex-start;gap:10px;}
   .cover-stats{flex-wrap:wrap;gap:18px;margin-top:24px;}
-  .two-col,.ug-cols,.med-grid,.tl-wrap,.duties-cols{flex-direction:column;gap:14px;}
+  .two-col,.tl-wrap{flex-direction:column;gap:14px;}
+  .duties-cols,.steps,.pt-grid,.rsd-list{grid-template-columns:1fr 1fr;}
   .tl-wrap{height:auto;}
   /* A ten-hour grid cannot compress to a phone; scroll it instead of crushing the
      bars into unreadable slivers. The day heading stays put above the scroller. */
   .tl-day{overflow-x:auto;}
   .tl-grid{min-width:660px;}
   .tl-n{font-size:9.5px;}
-  .ws-wrap,.cbt-cols,.med-list{columns:1;}
-  .grid-3,.grid-4,.pt-grid{grid-template-columns:1fr 1fr;}
+  .ws-wrap,.cbt-cols,.med-cols,.masonry-2,.masonry-3,.masonry-4{columns:1;}
+  .grid-3,.grid-4,.grid-5{grid-template-columns:1fr 1fr;}
+  .pt-grid .lead{grid-column:span 2;}
   .org-col{width:calc(50% - 3px);}
   .data-table,.static-body table,.duties-table{display:block;overflow-x:auto;}
   .intro{max-width:none;}

@@ -2,8 +2,9 @@
 //
 // Section order mirrors the August 2026 RSD newsletter page for page, so anyone
 // used to the PDF finds the same thing in the same place. Live sections are built
-// from Postgres; six remaining partials in static/ are editable by hand, because
-// the tracker has no field for them yet.
+// from Postgres; five remaining partials in static/ are editable by hand, because
+// the tracker has no field for them yet. (Additional Training went live in
+// September 2026: it is the Percipio half of the CBT category.)
 
 const fs = require('fs');
 const path = require('path');
@@ -16,20 +17,24 @@ const STATIC_SLIDES = {
   safety:     { file: 'safety.html',            eyebrow: 'Safety',   title: 'Monthly Safety Review' },
   awards:     { file: 'awards.html',            eyebrow: 'Squadron', title: 'CE / Wing Quarterly Awards' },
   meetsRadr:  { file: 'meets-radr.html',        eyebrow: 'Training', title: 'MEETs / RADR / Silver Flag' },
-  addlTrain:  { file: 'additional-training.html', eyebrow: 'Training', title: 'Additional Training — AFI 10-210' },
   measure:    { file: 'measurements.html',      eyebrow: 'Fitness',  title: 'Height / Waist / Weight' },
   dental:     { file: 'dental-buckets.html',    eyebrow: 'Medical',  title: 'Dental Status' },
 };
 
+function partial(key) {
+  const def = STATIC_SLIDES[key];
+  try {
+    return fs.readFileSync(path.join(STATIC_DIR, def.file), 'utf8');
+  } catch {
+    return `<p class="empty">Maintained by hand — edit <code>newsletter/static/${def.file}</code> to populate this page.</p>`;
+  }
+}
+
+// Sparse partials set larger type (roomy) rather than leaving half a page white.
+const ROOMY = new Set(['awards', 'meetsRadr', 'measure', 'dental']);
 function staticSlide(key) {
   const def = STATIC_SLIDES[key];
-  let body;
-  try {
-    body = fs.readFileSync(path.join(STATIC_DIR, def.file), 'utf8');
-  } catch {
-    body = `<p class="empty">Maintained by hand — edit <code>newsletter/static/${def.file}</code> to populate this page.</p>`;
-  }
-  return S.staticSlide(def.eyebrow, def.title, body);
+  return S.staticSlide(def.eyebrow, def.title, partial(key), ROOMY.has(key) ? 'roomy' : '');
 }
 
 // The deck, in reference order. Each entry is a thunk so beginDeck() can count
@@ -45,10 +50,10 @@ function sections(data) {
     () => staticSlide('safety'),                  //  7  Monthly Safety
     () => S.workSchedule(data),                   //  8  UTA Work Schedule
     () => S.additionalDuties(data),               //  9  Additional Duties
-    () => staticSlide('awards'),                  // 10  Quarterly Awards
+    () => S.awards(data, partial('awards')),      // 10  Quarterly Awards — prose by hand, the 1206 list live
     () => staticSlide('meetsRadr'),               // 11  MEETs / RADR / Silver Flag
     () => S.cbts(data),                           // 12  CBTs
-    () => staticSlide('addlTrain'),               // 13  Additional Training (AFI 10-210) — no field in the tracker
+    () => S.additional(data),                     // 13  Additional Training (AFI 10-210) — the Percipio CBTs
     () => S.orders(data),                         // 14  Orders / DTS / AROWS
     () => S.gtc(data),                            // 15  Government Travel Card (ref p15)
     () => S.epbs(data),                           // 16  EPBs / OPBs
