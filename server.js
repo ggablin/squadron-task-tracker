@@ -2225,17 +2225,27 @@ app.get('/api/shop/attendance', requireAuth, requireRole('supervisor'), async (r
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+// One member, one status. Pass all_periods:true to stamp every period of the
+// drill in one write — for the member who is at tech school or on orders the
+// whole weekend, where tapping through six periods is pure friction. The whole-
+// weekend write overwrites any period already marked, because the supervisor
+// asked for the weekend; the response is then { rows: [...] } instead of a row.
 app.put('/api/shop/attendance', requireAuth, requireRole('supervisor'), requireOnboarded, async (req, res) => {
   try {
     const { member_id, period, status } = req.body;
     const note = (req.body.note || '').trim() || null;
+    const allPeriods = req.body.all_periods === true;
     if (!attendance.isValidStatus(status)) return res.status(400).json({ error: 'Invalid status' });
 
     const cycle = await loadCurrentCycle();
     if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
     if (cycle.status !== 'live') return res.status(403).json({ error: 'This cycle is not live' });
-    if (!attendance.isValidPeriod(period, attendance.periodCountFor(cycle))) {
+    const periodCount = attendance.periodCountFor(cycle);
+    if (!allPeriods && !attendance.isValidPeriod(period, periodCount)) {
       return res.status(400).json({ error: 'Period is outside this drill' });
+    }
+    if (allPeriods && !attendance.isValidPeriod(periodCount, periodCount)) {
+      return res.status(400).json({ error: 'This cycle has no periods configured' });
     }
 
     // Authorize against the MEMBER's shop, not a client-supplied one.
@@ -2244,6 +2254,18 @@ app.put('/api/shop/attendance', requireAuth, requireRole('supervisor'), requireO
     if (!mr.length) return res.status(404).json({ error: 'Member not found' });
     if (req.session.role !== 'leadership' && mr[0].shop_id !== req.session.shopId) {
       return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (allPeriods) {
+      const { rows } = await pool.query(
+        `INSERT INTO attendance (uta_cycle_id, member_id, shop_id, period, status, note, marked_by_id, updated_at)
+         SELECT $1, $2, $3, p, $4, $5, $6, NOW() FROM generate_series(1, $7::int) AS p
+         ON CONFLICT (uta_cycle_id, member_id, period) DO UPDATE
+           SET status = EXCLUDED.status, note = EXCLUDED.note,
+               marked_by_id = EXCLUDED.marked_by_id, updated_at = NOW()
+         RETURNING member_id, period, status, note, updated_at`,
+        [cycle.id, member_id, mr[0].shop_id, status, note, req.session.memberId, periodCount]);
+      return res.json({ rows });
     }
 
     const { rows } = await pool.query(

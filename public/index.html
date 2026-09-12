@@ -1209,6 +1209,16 @@
     .modal-field textarea:focus,
     .modal-field select:focus { border-color: var(--text); }
     .modal-field textarea { resize: none; min-height: 60px; }
+    .modal-toggle {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px; margin-bottom: 16px;
+      border: 2px solid var(--border); border-radius: 10px;
+      font-size: 14px; color: var(--text); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .modal-toggle input { width: 20px; height: 20px; margin: 0; accent-color: var(--text); flex: none; }
+    .modal-toggle span { flex: 1; }
+    .modal-toggle small { display: block; font-size: 12px; color: var(--t2); margin-top: 2px; }
 
     /* Shop switcher (My Shop header — leadership) */
     .shop-switch-bar { align-items: center; gap: 10px; margin-bottom: 14px; padding-left: 4px; }
@@ -3889,7 +3899,11 @@
       <label>Note (optional)</label>
       <input type="text" id="att-modal-note" placeholder="e.g. released early by supervisor">
     </div>
-    <button class="modal-submit" onclick="attSaveStatus()">Save</button>
+    <label class="modal-toggle" id="att-modal-all-wrap">
+      <input type="checkbox" id="att-modal-all">
+      <span>Apply to all periods<small id="att-modal-all-hint"></small></span>
+    </label>
+    <button class="modal-submit" id="att-modal-save" onclick="attSaveStatus()">Save</button>
   </div>
 </div>
 
@@ -6938,33 +6952,54 @@ function attOpenStatus(memberId) {
     `${attTarget.name} · ${attData.periods[attPeriod - 1]?.label || ''}`;
   document.getElementById('att-modal-status').value = row ? row.status : 'present';
   document.getElementById('att-modal-note').value = row && row.note ? row.note : '';
+  const n = attData.periods.length;
+  const all = document.getElementById('att-modal-all');
+  all.checked = false;
+  document.getElementById('att-modal-all-hint').textContent =
+    `Same status and note for all ${n} periods this drill`;
+  // A one-period drill has nothing to spread across.
+  document.getElementById('att-modal-all-wrap').style.display = n > 1 ? '' : 'none';
+  attSyncSaveLabel();
   openModal('att-status-modal');
 }
+function attSyncSaveLabel() {
+  const all = document.getElementById('att-modal-all').checked;
+  document.getElementById('att-modal-save').textContent =
+    all ? `Save for all ${attData.periods.length} periods` : 'Save';
+}
+document.getElementById('att-modal-all').addEventListener('change', attSyncSaveLabel);
 
 async function attSaveStatus() {
   if (!attTarget) return;
   const status = document.getElementById('att-modal-status').value;
   const note = document.getElementById('att-modal-note').value.trim();
+  const allPeriods = document.getElementById('att-modal-all').checked
+    && attData.periods.length > 1;
   const memberId = attTarget.memberId;
   const period = attPeriod;
+  const periods = allPeriods ? attData.periods.map(p => p.period) : [period];
   closeModal('att-status-modal');
 
   // Optimistic: paint it, then reconcile. Writes are idempotent upserts, so a
   // retry after a dropped connection is always safe.
   const prev = JSON.parse(JSON.stringify(attData.rows));
-  attUpsertLocal({ member_id: memberId, period, status, note: note || null });
+  periods.forEach(p => attUpsertLocal({ member_id: memberId, period: p, status, note: note || null }));
   renderAttendance();
 
   try {
     const res = await fetch('/api/shop/attendance', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ member_id: memberId, period, status, note }),
+      body: JSON.stringify({ member_id: memberId, period, status, note, all_periods: allPeriods }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Save failed');
-    attUpsertLocal(await res.json());
+    const out = await res.json();
+    (allPeriods ? out.rows : [out]).forEach(attUpsertLocal);
     attRecount();
     renderAttendance();
+    if (allPeriods) {
+      showToast(`${attTarget.name} marked ${ATT_LABEL[status]} for all ${periods.length} periods`, 'success');
+    }
   } catch (e) {
     attData.rows = prev;             // roll back the optimistic paint
     attRecount();
