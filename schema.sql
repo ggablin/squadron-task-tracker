@@ -231,7 +231,7 @@ CREATE TABLE IF NOT EXISTS attendance (
   shop_id       INTEGER REFERENCES shops(id),
   period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 12),
   status        VARCHAR(20) NOT NULL CHECK (status IN
-                  ('agr_at_orders','present','ruta_excused','unexcused','awol','maternity','transfer','separated','equiv_training')),
+                  ('agr_at_orders','orders_away','present','ruta_excused','unexcused','awol','maternity','transfer','separated','equiv_training')),
   note          TEXT,
   marked_by_id  INTEGER REFERENCES members(id),
   updated_at    TIMESTAMP DEFAULT NOW(),

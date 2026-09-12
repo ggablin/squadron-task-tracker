@@ -186,3 +186,22 @@ test('present-scoped criticals: away members leave, members on orders stay', asy
   // a's task stays because orders count as at drill. 4 - 1 = 3.
   assert.strictEqual(critPresent, 3);
 });
+
+test('Orders / School – Away pays like orders but leaves the at-drill scope', async () => {
+  const w = await seedWorld();
+  const cookie = await login('leadtest');
+
+  // a is at tech school: X on the pay sheet, but physically not at drill.
+  await pool.query(
+    `INSERT INTO attendance (uta_cycle_id, member_id, shop_id, period, status)
+     VALUES ($1,$2,$3,1,'orders_away')`,
+    [w.live, w.a, w.shop]);
+
+  const shops = await (await get('/api/squadron', cookie)).json();
+  const present = shops.reduce((s, r) => s + parseInt(r.present_count), 0);
+  const total   = shops.reduce((s, r) => s + parseInt(r.member_count), 0);
+  assert.strictEqual(present, total - 1, 'the away member drops out of the present count');
+  const critPresent = shops.reduce((s, r) => s + parseInt(r.crit_tasks_present), 0);
+  // All-scope criticals are 4; a's one critical task leaves with them.
+  assert.strictEqual(critPresent, 3);
+});
