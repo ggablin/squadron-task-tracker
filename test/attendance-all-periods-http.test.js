@@ -17,6 +17,9 @@ const app = require('../server');
 let server, baseUrl;
 
 test.before(async () => {
+  // The boot migration takes AccessExclusive locks and is fire-and-forget;
+  // let it finish before applySchema() or the seed can collide with it.
+  await app.ready;
   await applySchema();
   await new Promise((resolve, reject) => {
     server = app.listen(0, err => (err ? reject(err) : resolve()));

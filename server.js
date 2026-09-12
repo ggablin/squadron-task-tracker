@@ -2207,17 +2207,42 @@ function attendanceShopId(req, requested) {
 
 async function loadCurrentCycle() {
   const { rows } = await pool.query(
-    `SELECT id, name, start_date, end_date, period_count, status
+    `SELECT id, name, start_date, end_date, period_count, status, is_current
      FROM uta_cycles WHERE is_current = true LIMIT 1`);
   return rows[0] || null;
+}
+
+// A past cycle a reader may look at. Live or archived only: a draft has never
+// had attendance marked, and answering 404 for it keeps the picker honest.
+async function loadReadableCycle(id) {
+  const n = parseInt(id, 10);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  const { rows } = await pool.query(
+    `SELECT id, name, start_date, end_date, period_count, status, is_current
+     FROM uta_cycles WHERE id = $1 AND status IN ('live','archived')`, [n]);
+  return rows[0] || null;
+}
+
+// Every cycle attendance could exist for, newest first — the picker's options.
+async function listReadableCycles() {
+  const { rows } = await pool.query(
+    `SELECT id, name, status, is_current FROM uta_cycles
+     WHERE status IN ('live','archived') ORDER BY created_at DESC, id DESC`);
+  return rows;
 }
 
 app.get('/api/shop/attendance', requireAuth, requireRole('supervisor'), async (req, res) => {
   try {
     const shopId = attendanceShopId(req, req.query.shop_id);
     if (!shopId) return res.status(403).json({ error: 'Forbidden' });
-    const cycle = await loadCurrentCycle();
-    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+    // ?cycle_id reads a past drill; the response is the same shape, just not
+    // editable. Writes stay pinned to the current cycle (the PUT/POST below).
+    const cycle = req.query.cycle_id
+      ? await loadReadableCycle(req.query.cycle_id)
+      : await loadCurrentCycle();
+    if (!cycle) {
+      return res.status(404).json({ error: req.query.cycle_id ? 'That cycle has no attendance' : 'No current UTA cycle' });
+    }
 
     const { rows: shopRows } = await pool.query('SELECT name FROM shops WHERE id = $1', [shopId]);
     const { rows: members } = await pool.query(
@@ -2231,10 +2256,11 @@ app.get('/api/shop/attendance', requireAuth, requireRole('supervisor'), async (r
     const periodCount = attendance.periodCountFor(cycle);
     const memberIds = members.map(m => m.id);
     res.json({
-      cycle: { id: cycle.id, name: cycle.name, status: cycle.status, period_count: periodCount },
+      cycle: { id: cycle.id, name: cycle.name, status: cycle.status, is_current: cycle.is_current === true, period_count: periodCount },
+      cycles: await listReadableCycles(),
       shop_id: shopId,
       shop_name: shopRows[0]?.name || '',
-      editable: cycle.status === 'live',
+      editable: cycle.status === 'live' && cycle.is_current === true,
       periods: attendance.periodLabels(cycle.start_date, periodCount),
       members,
       rows,
@@ -2353,8 +2379,12 @@ app.get('/api/squadron/attendance', requireAuth, requireRole('leadership'), asyn
 // See lib/drill-roster.js for why the sheet names and typos are preserved.
 app.get('/api/squadron/attendance/xlsx', requireAuth, requireRole('leadership'), async (req, res) => {
   try {
-    const cycle = await loadCurrentCycle();
-    if (!cycle) return res.status(404).json({ error: 'No current UTA cycle' });
+    const cycle = req.query.cycle_id
+      ? await loadReadableCycle(req.query.cycle_id)
+      : await loadCurrentCycle();
+    if (!cycle) {
+      return res.status(404).json({ error: req.query.cycle_id ? 'That cycle has no attendance' : 'No current UTA cycle' });
+    }
 
     const { rows: members } = await pool.query(
       `SELECT m.id, m.rank, m.first_name, m.last_name, m.position, s.name AS shop

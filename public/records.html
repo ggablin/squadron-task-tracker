@@ -146,6 +146,31 @@ input { font-family:inherit; }
 
 .hist-empty { padding:40px 24px; text-align:center; color:var(--t2); font-size:13px; line-height:1.6; }
 
+/* ── drill attendance strip: one chip per period, the pay code the admin
+      keys, colored the way the marking sheet colors it ── */
+.cycle-summary .cs-att {
+  font-size:11.5px; font-weight:700; color:var(--t2); letter-spacing:.12em;
+  font-variant-numeric:tabular-nums; flex-shrink:0; white-space:nowrap;
+}
+.hist-att {
+  display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:10px 14px;
+  border-bottom:1px solid var(--border); background:var(--bg);
+}
+.hist-att .ha-lbl {
+  width:100%; font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  color:var(--t2); margin-bottom:2px;
+}
+.ha-chip {
+  display:inline-flex; align-items:baseline; gap:5px; padding:4px 9px; border-radius:999px;
+  font-size:11.5px; font-weight:700; border:1px solid transparent; white-space:nowrap;
+}
+.ha-chip .ha-p { font-weight:600; opacity:.7; font-variant-numeric:tabular-nums; }
+.ha-chip.ok   { background:var(--ok-bg);  color:var(--ok); }
+.ha-chip.warn { background:var(--wrn-bg); color:var(--warn); }
+.ha-chip.bad  { background:var(--urg-bg); color:var(--urgent); }
+.ha-chip.none { background:transparent; color:var(--t3); border-color:var(--border); border-style:dashed; }
+.hist-att-note { width:100%; font-size:12px; color:var(--t2); font-style:italic; line-height:1.5; }
+
 .foot-note { margin-top:34px; font-size:11.5px; color:var(--t3); line-height:1.6; text-align:center; }
 </style>
 </head>
@@ -225,7 +250,7 @@ async function init() {
 
   const subEl = document.getElementById('top-sub');
   const roleLabel = ME.role === 'leadership' ? 'Leadership' : ME.role === 'supervisor' ? 'Supervisor' : 'Member';
-  subEl.textContent = `${roleLabel} · ${ME.rank || ''} ${ME.last_name || ''}`.trim() + ' · viewing task history';
+  subEl.textContent = `${roleLabel} · ${ME.rank || ''} ${ME.last_name || ''}`.trim() + ' · viewing task and attendance history';
 
   await loadRoster();
   MEMBERS = ROSTER.flatMap(g => g.members.map(m => ({ ...m, shop_name: g.shop })));
@@ -344,7 +369,7 @@ function renderMemberHistory(memberId, name, hist) {
   detailCard.innerHTML = `
     <div class="hist-header">
       <div class="hist-name">${escapeHtml(name)}</div>
-      <div class="hist-sub">${hist.length} cycle${hist.length === 1 ? '' : 's'} of task history</div>
+      <div class="hist-sub">${hist.length} cycle${hist.length === 1 ? '' : 's'} of task and attendance history</div>
     </div>
     ${cyclesHtml}`;
 }
@@ -359,12 +384,47 @@ function cycleHTML(h, idx) {
         <span class="cs-chev">&#9656;</span>
         <span class="cs-name">${escapeHtml(h.cycle.name)}</span>
         <span class="cs-badge${badgeCls}">${escapeHtml(badgeText)}</span>
+        ${attCodesHTML(h)}
         <span class="cs-count">${h.done}/${h.total} done</span>
       </button>
       <div class="cycle-tasks">
+        ${attHistHTML(h)}
         ${(h.tasks || []).map(taskHistHTML).join('') || '<div class="hist-task"><div class="hist-task-body">No tasks recorded for this cycle.</div></div>'}
       </div>
     </div>`;
+}
+
+// Present or constructively present reads green; a problem to chase reads red;
+// everything else amber. Mirrors the marking sheet in index.html.
+function attChipClass(status) {
+  if (!status) return 'none';
+  if (status === 'present' || status === 'agr_at_orders') return 'ok';
+  if (status === 'unexcused' || status === 'awol') return 'bad';
+  return 'warn';
+}
+
+// The collapsed line: the run of pay codes, one per period, unmarked as a dot.
+function attCodesHTML(h) {
+  const periods = h.periods || [];
+  if (!periods.length) return '';
+  const byP = new Map((h.attendance || []).map(a => [a.period, a]));
+  const codes = periods.map(p => { const a = byP.get(p.period); return a ? (a.pay || '?') : '·'; });
+  return `<span class="cs-att" title="Drill attendance by period">${escapeHtml(codes.join(''))}</span>`;
+}
+
+function attHistHTML(h) {
+  const periods = h.periods || [];
+  if (!periods.length) return '';
+  const byP = new Map((h.attendance || []).map(a => [a.period, a]));
+  const chips = periods.map(p => {
+    const a = byP.get(p.period);
+    const title = a ? `${p.label}: ${a.label}${a.note ? ' — ' + a.note : ''}` : `${p.label}: not marked`;
+    return `<span class="ha-chip ${attChipClass(a && a.status)}" title="${escapeHtml(title)}">` +
+      `<span class="ha-p">U${p.period}</span>${a ? escapeHtml(a.label) : 'Not marked'}</span>`;
+  }).join('');
+  const notes = (h.attendance || []).filter(a => a.note)
+    .map(a => `<div class="hist-att-note">U${a.period} · ${escapeHtml(a.note)}</div>`).join('');
+  return `<div class="hist-att"><span class="ha-lbl">Drill attendance</span>${chips}${notes}</div>`;
 }
 
 function taskHistHTML(t) {

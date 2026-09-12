@@ -2021,7 +2021,16 @@
     }
     .att-back:hover { color: var(--text); }
     .att-back svg { width: 14px; height: 14px; }
-    .att-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+    .att-hd { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    /* Past drills are read-only, so the picker is the only control that
+       changes what the sheet shows rather than what it records. */
+    .att-cycle {
+      flex-shrink: 0; max-width: 48%;
+      font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--text);
+      background: var(--cream); border: 1px solid var(--border); border-radius: 10px;
+      padding: 8px 10px; outline: none;
+    }
+    .att-cycle:focus { border-color: var(--text); }
     .att-title { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
     .att-sub { font-size: 12.5px; color: var(--t2); margin-top: 2px; }
 
@@ -2886,6 +2895,7 @@
             <div class="att-title">Attendance</div>
             <div class="att-sub" id="att-sub"></div>
           </div>
+          <select class="att-cycle" id="att-cycle" onchange="attPickCycle(this.value)" aria-label="Drill weekend" style="display:none"></select>
         </div>
 
         <div class="att-banner" id="att-banner" style="display:none"></div>
@@ -6833,6 +6843,7 @@ const ATT_SHORT = ATT_PAY;
 let attData = null;      // last payload from GET /api/shop/attendance
 let attPeriod = 1;       // period currently being marked
 let attTarget = null;    // {memberId, name} while the status sheet is open
+let attCycleId = null;   // null = the current drill; an id = a past drill being read
 
 function attRowsFor(period) {
   return (attData?.rows || []).filter(r => Number(r.period) === Number(period));
@@ -6843,8 +6854,15 @@ function attStatusOf(memberId, period) {
 }
 
 async function openAttendance() {
+  attCycleId = null;     // always reopen on the current drill
   document.getElementById('view-supervisor').classList.add('att-open');
   await loadAttendance();
+}
+function attPickCycle(value) {
+  const id = Number(value);
+  const picked = (attData?.cycles || []).find(c => c.id === id);
+  attCycleId = picked && picked.is_current ? null : id;
+  loadAttendance();
 }
 function closeAttendance() {
   document.getElementById('view-supervisor').classList.remove('att-open');
@@ -6852,7 +6870,9 @@ function closeAttendance() {
 
 async function loadAttendance() {
   try {
-    const res = await fetch('/api/shop/attendance' + shopQ());
+    const q = [shopQ().replace(/^\?/, ''), attCycleId ? 'cycle_id=' + attCycleId : '']
+      .filter(Boolean).join('&');
+    const res = await fetch('/api/shop/attendance' + (q ? '?' + q : ''));
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
       showToast(b.error || 'Could not load attendance', 'error');
@@ -6875,10 +6895,18 @@ function renderAttendance() {
   document.getElementById('att-sub').textContent =
     `${attData.shop_name || ''}${attData.shop_name ? ' · ' : ''}${cycle.name} · ${total} periods`;
 
+  // The picker only appears once there is more than one drill to choose from.
+  const sel = document.getElementById('att-cycle');
+  const list = attData.cycles || [];
+  sel.innerHTML = list.map(c =>
+    `<option value="${c.id}"${c.id === cycle.id ? ' selected' : ''}>${escapeHtml(c.name)}${c.is_current ? ' · current' : ''}</option>`
+  ).join('');
+  sel.style.display = list.length > 1 ? '' : 'none';
+
   const banner = document.getElementById('att-banner');
   if (!editable) {
     banner.style.display = '';
-    banner.textContent = 'This cycle is archived — attendance is read-only. You can still copy or download it.';
+    banner.textContent = 'This drill is in the past — attendance is read-only. You can still copy or download it.';
   } else if (!periods.length) {
     banner.style.display = '';
     banner.textContent = 'This cycle has no periods configured.';
