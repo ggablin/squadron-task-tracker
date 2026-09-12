@@ -101,8 +101,8 @@ test('label count is clamped to the ceiling', () => {
 
 // ── validation ─────────────────────────────────────────────────────────────
 
-test('the nine statuses are accepted and nothing else is', () => {
-  for (const s of ['present', 'agr_at_orders', 'ruta_excused', 'unexcused', 'awol',
+test('the ten statuses are accepted and nothing else is', () => {
+  for (const s of ['present', 'agr_at_orders', 'orders_away', 'ruta_excused', 'unexcused', 'awol',
                    'maternity', 'transfer', 'separated', 'equiv_training']) {
     assert.ok(a.isValidStatus(s), s);
   }

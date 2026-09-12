@@ -2076,6 +2076,7 @@
     /* Amber = counted but not in formation; red = a problem to chase. */
     .att-c-ruta_excused,
     .att-c-agr_at_orders,
+    .att-c-orders_away,
     .att-c-equiv_training,
     .att-c-maternity,
     .att-c-transfer,
@@ -3886,6 +3887,7 @@
       <select id="att-modal-status">
         <option value="present">Present</option>
         <option value="agr_at_orders">AGR / AT / Orders</option>
+        <option value="orders_away">Orders / School – Away (not at drill)</option>
         <option value="ruta_excused">RUTA / Excused</option>
         <option value="unexcused">Unexcused</option>
         <option value="awol">AWOL</option>
@@ -6225,9 +6227,10 @@ function renderSquadronStats() {
     const away = totalMems - presentMems;
     note.hidden = !present;
     // The away list must match lib/presence.js: AGR/AT/Orders is a PRESENT
-    // status, so it must never be described as away here.
+    // status, so it must never be described as away here; Orders/School – Away
+    // is the status that exists to say the member is physically elsewhere.
     note.textContent = away
-      ? 'Excluding ' + away + ' member' + (away === 1 ? '' : 's') + ' marked away by attendance (RUTA, unexcused, AWOL, maternity, equivalent training, transfer or separation). Members on AGR, AT or orders count as at drill.'
+      ? 'Excluding ' + away + ' member' + (away === 1 ? '' : 's') + ' marked away by attendance (Orders/School – Away, RUTA, unexcused, AWOL, maternity, equivalent training, transfer or separation). Members on AGR, AT or orders at drill count as at drill.'
       : 'No one is marked away yet — the numbers match "All members" until attendance is marked in My Shop.';
   }
 
@@ -6810,7 +6813,8 @@ function applyDeepLink(url) {
    A row's absence means UNMARKED — never "present" — so a shop that was
    never opened is visibly incomplete rather than silently perfect. */
 const ATT_LABEL = {
-  present: 'Present', agr_at_orders: 'AGR / AT / Orders', ruta_excused: 'RUTA / Excused',
+  present: 'Present', agr_at_orders: 'AGR / AT / Orders', orders_away: 'Orders / School – Away',
+  ruta_excused: 'RUTA / Excused',
   unexcused: 'Unexcused', awol: 'AWOL', equiv_training: 'Equivalent Training',
   maternity: 'Maternity Leave', transfer: 'Transfer', separated: 'Separated / Retired',
 };
@@ -6819,7 +6823,7 @@ const ATT_LABEL = {
 // spreadsheet without keeping the mapping in their head. Mirrors STATUS_DEFS in
 // lib/attendance.js — the export and the screen must never disagree.
 const ATT_PAY = {
-  present: '/', agr_at_orders: 'X', ruta_excused: 'R', unexcused: 'R', awol: 'A',
+  present: '/', agr_at_orders: 'X', orders_away: 'X', ruta_excused: 'R', unexcused: 'R', awol: 'A',
   maternity: 'P', transfer: 'T', separated: 'S', equiv_training: 'Q',
 };
 // Compact form for the summary grid: the pay code itself, since that is the

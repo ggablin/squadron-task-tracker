@@ -201,7 +201,7 @@ app.ready = (async () => {
         shop_id       INTEGER REFERENCES shops(id),
         period        SMALLINT NOT NULL CHECK (period BETWEEN 1 AND 12),
         status        VARCHAR(20) NOT NULL CHECK (status IN
-                        ('agr_at_orders','present','ruta_excused','unexcused','awol','maternity','transfer','separated','equiv_training')),
+                        ('agr_at_orders','orders_away','present','ruta_excused','unexcused','awol','maternity','transfer','separated','equiv_training')),
         note          TEXT,
         marked_by_id  INTEGER REFERENCES members(id),
         updated_at    TIMESTAMP DEFAULT NOW(),
@@ -294,6 +294,25 @@ app.ready = (async () => {
           ALTER TABLE attendance ADD CONSTRAINT attendance_status_check
             CHECK (status IN ('agr_at_orders','present','ruta_excused','unexcused',
                               'awol','maternity','transfer','separated','equiv_training'));
+        END IF;
+      END $$;
+    `));
+
+    // Orders / School – Away joined the set (Sep 2026): same X pay code as
+    // AGR/AT/Orders, but not a present status, so leadership can exclude a
+    // member at tech school from the "At drill" rollups. Pure widening — no
+    // rows to remap — guarded on the constraint text so it runs once.
+    await withDeadlockRetry('attendance orders_away migration', () => pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+           WHERE conrelid = 'attendance'::regclass
+             AND conname  = 'attendance_status_check'
+             AND pg_get_constraintdef(oid) LIKE '%orders_away%'
+        ) THEN
+          ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_status_check;
+          ALTER TABLE attendance ADD CONSTRAINT attendance_status_check
+            CHECK (status IN ('agr_at_orders','orders_away','present','ruta_excused','unexcused','awol','maternity','transfer','separated','equiv_training'));
         END IF;
       END $$;
     `));

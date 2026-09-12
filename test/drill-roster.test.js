@@ -149,7 +149,7 @@ test('rosterName upper-cases the surname and drops nothing', () => {
 // ── The mapping the whole feature exists for ──────────────────────────────
 test('every status maps to the pay code the admin enters', () => {
   const expected = {
-    agr_at_orders: 'X', present: '/', ruta_excused: 'R', unexcused: 'R',
+    agr_at_orders: 'X', orders_away: 'X', present: '/', ruta_excused: 'R', unexcused: 'R',
     awol: 'A', maternity: 'P', transfer: 'T', separated: 'S', equiv_training: 'Q',
   };
   for (const [status, code] of Object.entries(expected)) {
