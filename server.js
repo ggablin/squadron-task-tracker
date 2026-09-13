@@ -43,6 +43,7 @@ const schedule = require('./lib/schedule');
 const events = require('./lib/events');
 const batches = require('./lib/batches');
 const records = require('./lib/records');
+const brief = require('./lib/brief');
 const roster = require('./lib/roster');
 const activity = require('./lib/activity');
 const app = express();
@@ -2717,6 +2718,16 @@ app.get('/api/squadron/away', requireAuth, requireRole('leadership'), async (req
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+// The Leadership Brief dashboard (/brief): every shop's tasks, work orders
+// and attendance for the current cycle in one payload. See lib/brief.js.
+app.get('/api/brief', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const data = await brief.loadBrief(pool);
+    if (!data) return res.status(404).json({ error: 'No current UTA cycle' });
+    res.json(data);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 // Fetches 10 of each flavor: the "most behind" ranking changes when members
 // marked away are excluded, so the present-only list is its own top-10 rather
 // than a client-side filter that could leave 3 rows standing.
@@ -3233,6 +3244,13 @@ function requireLeadershipPage(req, res, next) {
 app.get('/build', requireLeadershipPage, (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'build.html'))
 );
+
+// Leadership Brief: the briefing-room dashboard. Leadership only, decided
+// server-side — /api/brief 403s anyone else anyway, so the shell would be blank.
+app.get('/brief', requireLeadershipPage, (req, res) => {
+  if (req.session.role !== 'leadership') return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'brief.html'));
+});
 
 // Records page shell (leadership + supervisor member browser / history review).
 // Gated the same way as /build; must sit before the SPA catch-all.
