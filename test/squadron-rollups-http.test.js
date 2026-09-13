@@ -187,6 +187,24 @@ test('present-scoped criticals: away members leave, members on orders stay', asy
   assert.strictEqual(critPresent, 3);
 });
 
+test('Equivalent Training is points-only pay but the member is at drill', async () => {
+  const w = await seedWorld();
+  const cookie = await login('leadtest');
+
+  // c is on equivalent training every period: no drill pay, but on site.
+  await pool.query(
+    `INSERT INTO attendance (uta_cycle_id, member_id, shop_id, period, status)
+     VALUES ($1,$2,$3,1,'equiv_training'), ($1,$2,$3,2,'equiv_training')`,
+    [w.live, w.c, w.shop]);
+
+  const shops = await (await get('/api/squadron', cookie)).json();
+  const present = shops.reduce((s, r) => s + parseInt(r.present_count), 0);
+  const total   = shops.reduce((s, r) => s + parseInt(r.member_count), 0);
+  assert.strictEqual(present, total, 'nobody leaves the at-drill scope');
+  const critPresent = shops.reduce((s, r) => s + parseInt(r.crit_tasks_present), 0);
+  assert.strictEqual(critPresent, 4, "c's overdue blood draw stays in the present-scoped count");
+});
+
 test('Orders / School – Away pays like orders but leaves the at-drill scope', async () => {
   const w = await seedWorld();
   const cookie = await login('leadtest');
