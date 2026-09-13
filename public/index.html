@@ -107,6 +107,7 @@
   <script src="/offline.js" defer></script>
   <script src="/duties.js" defer></script>
   <script src="/calendar.js" defer></script>
+  <script src="/promotion-package.js" defer></script>
   <style>
     /* Self-hosted General Sans — survives base-network blocking of api.fontshare.com */
     @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
@@ -1946,6 +1947,50 @@
        Department of Defense and its Major Components" — nowrap chips would
        overflow, so these are rows that wrap. Entries with a published URL are
        anchors; the rest are plain rows. */
+    /* ── Promotion package checklist (promotion-package.js) ─────────────── */
+    .pp-host { max-width: 760px; margin-top: 18px; }
+    .pp-card .pf-of { font-size: 12px; font-weight: 500; color: var(--t2); text-transform: none; letter-spacing: 0; }
+    .pp-intro { font-size: 13px; color: var(--t2); line-height: 1.5; margin: -4px 0 16px; }
+    .pp-sub { margin: 14px 0 8px; }
+    .pp-reqs, .pp-items, .pp-checks { list-style: none; margin: 0; padding: 0; }
+    .pp-reqs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+    .pp-req { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+    .pp-circle {
+      width: 16px; height: 16px; flex-shrink: 0; border-radius: 50%;
+      border: 1.5px solid var(--t3); background: var(--bg);
+    }
+    .pp-circle.sm { width: 12px; height: 12px; }
+    .pp-item { display: flex; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
+    .pp-items > :first-child { border-top: 0; }
+    .pp-n {
+      width: 24px; height: 24px; flex-shrink: 0; border-radius: 7px; margin-top: 1px;
+      background: var(--cream); color: var(--t2);
+      font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pp-body { flex: 1; min-width: 0; }
+    .pp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .pp-title { font-size: 14px; font-weight: 600; }
+    .pp-checks { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+    .pp-checks li { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--t2); }
+    .pp-act {
+      flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+      text-decoration: none; white-space: nowrap;
+    }
+    .pp-act svg { width: 11px; height: 11px; }
+    .pp-act-open { background: var(--ok-bg); color: var(--ok); }
+    .pp-act-pull { background: var(--cream); color: var(--t2); }
+    .pp-act-missing { background: transparent; color: var(--t3-nav-text); border: 1px dashed var(--bm); }
+    .pp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+    .pp-foot .add-btn { text-decoration: none; }
+    @media (max-width: 560px) {
+      .pp-reqs { grid-template-columns: 1fr; }
+      .pp-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
+    /* The calculator's fixed score bar (.pf-mobilebar) sits over the bottom of
+       the pane on phones; give the section's footer room to scroll clear. */
+    @media (max-width: 940px) { .pp-host { padding-bottom: 72px; } }
     .pm-refs { margin-top: 2px; }
     .pm-ref {
       display: flex; gap: 9px; align-items: flex-start;
@@ -3702,6 +3747,10 @@
           </div>
 
         </div><!-- /#pm-root -->
+        <!-- Package checklist: what to hand in, drawn by promotion-package.js
+             the first time the tab opens (pmInit). Forms link through to
+             Resources → Forms uploads by title. -->
+        <div id="promo-pkg" class="pp-host"></div>
       </div><!-- /#res-pane-promo -->
       </div><!-- /#res-pane-calc -->
 
@@ -7546,7 +7595,10 @@ function setCalcView(mode) {
   document.getElementById('calc-vt-promo').setAttribute('aria-pressed', String(promo));
   document.getElementById('res-pane-pfra').classList.toggle('active', !promo);
   document.getElementById('res-pane-promo').classList.toggle('active', promo);
-  if (promo) { if (window.pmInit) window.pmInit(); }
+  if (promo) {
+    if (window.pmInit) window.pmInit();
+    if (window.promoPackageInit) window.promoPackageInit();
+  }
   else if (window.pfInit) window.pfInit();
 }
 
@@ -7665,6 +7717,7 @@ async function uploadDocument() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Upload failed');
     showToast('Form uploaded', 'success');
+    if (window.promoPackageRefresh) window.promoPackageRefresh();
     cachedDocuments = null;   // the task-helper form pickers refetch next open
     ['doc-title', 'doc-desc'].forEach(id => { document.getElementById(id).value = ''; });
     fileEl.value = '';
