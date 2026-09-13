@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FSS Promotion Package Checklist</title>
+<!-- Printable, blank copy of the checklist the Promotion tab renders live.
+     Same data file, so the two can't drift. No member data on this page. -->
+<link rel="stylesheet" href="/design.css">
+<style>
+  @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-500.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+  @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-600.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+  @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-700.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
+  .page { max-width: 820px; margin: 0 auto; padding: 28px 24px 48px; }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .bar a, .bar button {
+    font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
+    background: var(--cream); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 14px; text-decoration: none; cursor: pointer;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); margin: 18px 0 8px; }
+  .line { font-size: 13.5px; margin: 12px 0; display: flex; align-items: baseline; gap: 8px; }
+  .blank { flex: 1; border-bottom: 1px solid var(--text); min-width: 160px; height: 14px; }
+  .cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; align-items: start; }
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+  ol.order { list-style: decimal; padding-left: 22px; font-size: 13.5px; line-height: 1.7; }
+  .reqs li, .tracker li, .items > li { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; line-height: 1.5; margin: 5px 0; flex-wrap: wrap; }
+  .items > li { margin: 10px 0; }
+  .items ul { width: 100%; padding-left: 26px; }
+  .items ul li { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--t2); margin: 3px 0; }
+  .c { width: 15px; height: 15px; border: 1.5px solid var(--text); border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+  .c.sm { width: 11px; height: 11px; margin-top: 0; border-color: var(--t2); }
+  .box { height: 110px; border: 1px solid var(--bm); border-radius: 6px; }
+  small { color: var(--t2); font-weight: 500; }
+  @media print {
+    .bar { display: none; }
+    .page { padding: 0; max-width: none; }
+    .cols { gap: 20px; }
+    body { background: #fff; color: #000; }
+    .c { border-color: #000; }
+  }
+  @media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="bar">
+    <a href="/">&larr; Back to the tracker</a>
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  <div id="sheet">Loading&hellip;</div>
+</div>
+<script src="/promotion-package.js"></script>
+<script>
+  document.getElementById('sheet').innerHTML = window.PromoPackage.printableHTML();
+</script>
+</body>
+</html>
