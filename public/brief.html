@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Leadership Brief — 108th CES</title>
+<!-- The end-of-drill dashboard: one screen in the briefing room, driven from a
+     laptop or a remote. Everything comes from GET /api/brief in one read
+     (lib/brief.js) and is re-read quietly every minute, so a task ticked on a
+     phone during the meeting shows up without anyone touching the keyboard.
+     Type is sized from the viewport so a 1080p TV at three metres reads like
+     a phone at arm's length. -->
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<meta name="theme-color" id="theme-color" content="#f6f7ed">
+<script>
+(function(){try{
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  function stored(){try{return localStorage.getItem('theme');}catch(e){return null;}}
+  function paint(d){
+    if(d)document.documentElement.dataset.theme='dark';else delete document.documentElement.dataset.theme;
+    var m=document.getElementById('theme-color');
+    if(m)m.setAttribute('content',d?'#2a2724':'#f6f7ed');
+  }
+  var s=stored();paint(s==='dark'||(s!=='light'&&mq.matches));
+  var f=function(e){if(!stored())paint(e.matches);};
+  if(mq.addEventListener)mq.addEventListener('change',f);else if(mq.addListener)mq.addListener(f);
+  window.__setTheme=paint;
+}catch(e){}})();
+</script>
+<link rel="stylesheet" href="/design.css">
+<style>
+@font-face { font-family:'General Sans'; src:url('/fonts/general-sans-400.woff2') format('woff2'); font-weight:400; font-display:swap; }
+@font-face { font-family:'General Sans'; src:url('/fonts/general-sans-500.woff2') format('woff2'); font-weight:500; font-display:swap; }
+@font-face { font-family:'General Sans'; src:url('/fonts/general-sans-600.woff2') format('woff2'); font-weight:600; font-display:swap; }
+@font-face { font-family:'General Sans'; src:url('/fonts/general-sans-700.woff2') format('woff2'); font-weight:700; font-display:swap; }
+
+/* One knob for the whole screen: rem tracks the viewport so a 1080p TV
+   lands near 20px body text and a 4K wall near the cap. */
+html { font-size: clamp(15px, 1.04vw, 24px); }
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--cream); color: var(--text);
+  font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 1rem; line-height: 1.4; -webkit-font-smoothing: antialiased;
+  height: 100vh; overflow: hidden;
+}
+button { font: inherit; color: inherit; }
+.vh { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+
+/* ── frame: rail + stage ── */
+.app { display: grid; grid-template-columns: 17rem 1fr; height: 100vh; }
+.rail {
+  display: flex; flex-direction: column; gap: 0; min-height: 0;
+  background: var(--bg); border-right: 2px solid var(--border);
+  padding: 1.4rem 1rem 1rem;
+}
+.brand { font-size: 1.15rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
+.brand .screen-name { display: block; color: var(--t2); font-weight: 600; font-size: .95rem; margin-top: .15rem; }
+.cycle { margin: 1rem 0 1.1rem; font-size: .8rem; color: var(--t2); line-height: 1.45; }
+.cycle b { color: var(--text); font-weight: 600; display: block; font-size: .9rem; }
+.nav { display: flex; flex-direction: column; gap: .3rem; overflow-y: auto; min-height: 0; flex: 1; margin: 0 -.35rem; padding: 0 .35rem; }
+.nav-btn {
+  display: grid; grid-template-columns: 1.6rem 1fr auto; align-items: center; gap: .55rem;
+  width: 100%; text-align: left; padding: .55rem .7rem; border-radius: var(--rs);
+  border: 2px solid transparent; background: transparent; cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.nav-btn:hover { background: var(--cream); }
+.nav-btn.active { background: var(--text); color: var(--bg); }
+.nav-key { font-size: .7rem; font-weight: 700; color: var(--t3-nav-text); font-variant-numeric: tabular-nums; }
+.nav-btn.active .nav-key { color: var(--bg); opacity: .7; }
+.nav-name { font-size: .92rem; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-pct { font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.nav-btn.active .nav-pct { color: var(--bg); }
+.nav-sq { margin-bottom: .45rem; padding-bottom: .75rem; border-bottom: 1px solid var(--border); }
+.rail-foot { margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: .6rem; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--s2); border: 1px solid var(--border); border-radius: 10px; }
+.seg button { flex: 1; border: 0; background: none; color: var(--t2); cursor: pointer; font-size: .78rem; font-weight: 600; padding: .4rem .5rem; border-radius: 8px; }
+.seg button.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.rail-row { display: flex; gap: .45rem; }
+.icon-btn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  min-height: 2.3rem; border-radius: 999px; border: 2px solid var(--border); background: var(--bg);
+  color: var(--text); font-size: .78rem; font-weight: 700; cursor: pointer; text-decoration: none;
+}
+.icon-btn:hover { border-color: var(--text); }
+.icon-btn svg { width: 1rem; height: 1rem; }
+.icon-btn .icon-sun { display: none; }
+[data-theme="dark"] .icon-btn .icon-moon { display: none; }
+[data-theme="dark"] .icon-btn .icon-sun  { display: inline-flex; }
+.updated { font-size: .72rem; color: var(--t3-nav-text); text-align: center; }
+.updated.stale { color: var(--warn); }
+
+.stage { min-height: 0; overflow-y: auto; padding: 1.6rem 2rem 2.5rem; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
+.h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.h1 small { display: block; font-size: .95rem; font-weight: 500; color: var(--t2); letter-spacing: 0; margin-top: .3rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .45rem; }
+.chip {
+  border: 2px solid var(--border); background: var(--bg); color: var(--t2);
+  border-radius: 999px; padding: .45rem 1rem; font-size: .85rem; font-weight: 600; cursor: pointer;
+  min-height: 2.4rem; display: inline-flex; align-items: center; gap: .45rem;
+}
+.chip:hover { border-color: var(--bm); color: var(--text); }
+.chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chip .n { font-size: .75rem; font-weight: 700; opacity: .75; font-variant-numeric: tabular-nums; }
+
+/* ── tiles ── */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .9rem; margin-bottom: 1.3rem; }
+.tile { background: var(--bg); border: 2px solid var(--border); border-radius: var(--r); padding: 1rem 1.15rem .95rem; min-width: 0; }
+.tile-lbl { font-size: .72rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); margin-bottom: .35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-val { font-size: 2.6rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+.tile-val.hero { font-size: 3.4rem; }
+.tile-val small { font-size: 1rem; font-weight: 600; color: var(--t2); letter-spacing: 0; margin-left: .2rem; }
+.tile-sub { font-size: .8rem; color: var(--t2); margin-top: .45rem; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.dot { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--urgent); } .dot.mute { background: var(--t3); }
+
+/* ── cards & bars ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; align-items: start; }
+.grid2 > * { min-width: 0; }
+.card { background: var(--bg); border: 2px solid var(--border); border-radius: var(--r); padding: 1.1rem 1.25rem; margin-bottom: .9rem; }
+.card-hd { display: flex; align-items: baseline; justify-content: space-between; gap: .8rem; margin-bottom: .9rem; }
+.card-title { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); }
+.card-meta { font-size: .8rem; color: var(--t2); font-variant-numeric: tabular-nums; }
+.bars { display: flex; flex-direction: column; gap: .55rem; }
+.bar-row { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr 5.5rem; align-items: center; gap: .8rem; cursor: default; }
+.bar-row.link { cursor: pointer; }
+.bar-row.link:hover .bar-name { text-decoration: underline; }
+.bar-name { font-size: .92rem; font-weight: 600; line-height: 1.2; }
+.bar-name small { display: block; font-size: .72rem; color: var(--t2); font-weight: 500; }
+.track { height: 1.1rem; background: var(--s2); border-radius: 4px; overflow: hidden; position: relative; }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--text); border-radius: 0 4px 4px 0; transition: width .35s ease; }
+.fill.crit { background: var(--urgent); }
+.bar-val { font-size: .95rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.bar-val small { font-weight: 500; color: var(--t2); font-size: .75rem; margin-left: .25rem; }
+.empty { color: var(--t2); font-size: .9rem; padding: .6rem 0; }
+
+/* ── outstanding work list ── */
+.ow { display: flex; flex-direction: column; }
+.ow-row { display: grid; grid-template-columns: 1fr auto; gap: .6rem 1rem; padding: .7rem 0; border-top: 1px solid var(--border); align-items: start; }
+.ow > :first-child { border-top: 0; padding-top: 0; }
+.ow-title { font-size: 1rem; font-weight: 600; }
+.ow-title .cat { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--t2); margin-left: .5rem; }
+.ow-n { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ow-n small { font-size: .72rem; font-weight: 500; color: var(--t2); margin-left: .25rem; }
+.who { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .35rem; }
+.pill { font-size: .78rem; font-weight: 600; padding: .22rem .6rem; border-radius: 999px; background: var(--cream); color: var(--text); white-space: nowrap; }
+.pill.more { background: transparent; color: var(--t2); border: 1px dashed var(--bm); }
+.pill.crit { box-shadow: inset 0 0 0 2px var(--urgent); }
+.pill.away { color: var(--t2); text-decoration: line-through; text-decoration-color: var(--t3); }
+.pill .sh { color: var(--t2); font-weight: 500; }
+.flag { color: var(--urgent); font-weight: 700; margin-left: .2rem; }
+
+/* ── members table (shop view) ── */
+.mem { display: flex; flex-direction: column; }
+.mem-row { display: grid; grid-template-columns: 13rem 9rem 1fr; gap: 1rem; padding: .75rem 0; border-top: 1px solid var(--border); align-items: start; }
+.mem > :first-child { border-top: 0; padding-top: 0; }
+.mem-name { font-size: 1rem; font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.mem-rank { font-size: .78rem; color: var(--t2); font-weight: 500; display: block; width: 100%; }
+.badge { font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: .1rem .45rem; border-radius: 4px; background: var(--wrn-bg); color: var(--warn); }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.mem-prog { display: flex; flex-direction: column; gap: .3rem; }
+.mem-prog .track { height: .8rem; }
+.mem-prog .n { font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mem-prog .n small { color: var(--t2); font-weight: 500; }
+.mem-tasks { display: flex; flex-wrap: wrap; gap: .35rem; align-content: flex-start; }
+.mem-tasks .done-note { font-size: .82rem; color: var(--ok); font-weight: 600; display: inline-flex; align-items: center; gap: .3rem; }
+.mem-row.away { opacity: .72; }
+
+/* ── work orders ── */
+.wo { display: flex; flex-direction: column; }
+.wo-row { display: grid; grid-template-columns: 8.5rem 6.5rem 1fr 11rem; gap: .9rem; padding: .7rem 0; border-top: 1px solid var(--border); align-items: start; }
+.wo > :first-child { border-top: 0; padding-top: 0; }
+.wo-shop { font-size: .85rem; font-weight: 700; color: var(--t2); }
+.wo-num { font-size: .85rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--t2); }
+.wo-title { font-size: 1rem; font-weight: 600; }
+.wo-details { font-size: .82rem; color: var(--t2); margin-top: .2rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wo-when { font-size: .78rem; color: var(--t2); margin-top: .2rem; }
+.status { display: inline-flex; align-items: center; gap: .4rem; font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: .3rem .65rem; border-radius: 999px; white-space: nowrap; }
+.status.complete { background: var(--ok-bg); color: var(--ok); }
+.status.in_progress { background: var(--wrn-bg); color: var(--warn); }
+.status.open { background: var(--s2); color: var(--t2); }
+.wo-summary { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+.wo-summary .k { display: flex; align-items: baseline; gap: .4rem; }
+.wo-summary .k b { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; }
+.wo-summary .k span { font-size: .8rem; color: var(--t2); font-weight: 600; }
+
+/* ── attendance grid ── */
+.att-wrap { overflow-x: auto; }
+.att { border-collapse: collapse; width: 100%; font-size: .9rem; }
+.att th, .att td { padding: .45rem .4rem; text-align: center; white-space: nowrap; }
+.att th { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--t2); }
+.att th.nm, .att td.nm { text-align: left; font-weight: 600; }
+.att td.c { font-weight: 700; font-variant-numeric: tabular-nums; }
+.att td.c.ok { color: var(--ok); } .att td.c.warn { color: var(--warn); } .att td.c.bad { color: var(--urgent); } .att td.c.none { color: var(--t3); }
+.att tr { border-top: 1px solid var(--border); }
+.away-list { display: flex; flex-direction: column; gap: .4rem; }
+.away-shop { display: grid; grid-template-columns: 9rem 1fr; gap: .6rem; padding: .5rem 0; border-top: 1px solid var(--border); font-size: .9rem; }
+.away-list > :first-child { border-top: 0; }
+.away-shop b { color: var(--t2); font-weight: 700; }
+.away-m { display: flex; flex-wrap: wrap; gap: .4rem .9rem; }
+/* One member is one unit: name, reason, note stay together when the row wraps. */
+.away-one { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: nowrap; }
+.away-one .note { font-size: .78rem; color: var(--t2); font-style: italic; white-space: nowrap; }
+
+.err { padding: 2rem; color: var(--urgent); font-size: 1rem; }
+.kbd-hint { font-size: .72rem; color: var(--t3-nav-text); text-align: center; line-height: 1.5; }
+.kbd-hint kbd { font-family: inherit; font-weight: 700; color: var(--t2); }
+
+@media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } .app { grid-template-columns: 14rem 1fr; } }
+@media (max-width: 780px) {
+  body { overflow: auto; height: auto; }
+  .app { grid-template-columns: 1fr; height: auto; }
+  .rail { border-right: 0; border-bottom: 2px solid var(--border); }
+  .nav { flex-direction: row; flex-wrap: wrap; }
+  .nav-btn { width: auto; }
+  .mem-row, .wo-row { grid-template-columns: 1fr; gap: .4rem; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand">108th CES<span class="screen-name">Leadership Brief</span></div>
+    <div class="cycle" id="cycle">Loading&hellip;</div>
+    <nav class="nav" id="nav" aria-label="Shops"></nav>
+    <div class="rail-foot">
+      <div class="seg" role="group" aria-label="Completion scope">
+        <button id="scope-all" class="active" onclick="setScope('all')">All members</button>
+        <button id="scope-present" onclick="setScope('present')">At drill</button>
+      </div>
+      <div class="rail-row">
+        <button class="icon-btn" onclick="toggleFullscreen()" title="Full screen (F)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>Full screen
+        </button>
+        <button class="icon-btn" onclick="toggleTheme()" title="Dark mode" aria-label="Toggle dark mode" style="flex:0 0 2.6rem">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+      </div>
+      <a class="icon-btn" href="/?view=leadership">&larr; Tracker</a>
+      <div class="updated" id="updated">&nbsp;</div>
+      <div class="kbd-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> shops &middot; <kbd>0&ndash;9</kbd> jump &middot; <kbd>F</kbd> full screen &middot; <kbd>R</kbd> refresh</div>
+    </div>
+  </aside>
+  <main class="stage" id="stage"><div class="empty">Loading the brief&hellip;</div></main>
+</div>
+
+<script>
+/* ── state ─────────────────────────────────────────────────────────────── */
+let D = null;                 // last /api/brief payload
+let view = 'squadron';        // 'squadron' | shop id (number)
+let scope = 'all';            // 'all' | 'present'
+let filter = 'all';           // 'all' | category code | 'work_orders' | 'attendance'
+let lastOk = 0;
+const REFRESH_MS = 60000;
+
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const pct = (done, total) => total ? Math.round(done / total * 100) : 0;
+const health = (p) => p >= 80 ? 'ok' : p >= 40 ? 'warn' : 'bad';
+const $ = (id) => document.getElementById(id);
+const cnt = (roll) => roll[scope];
+const catCnt = (roll, code) => (roll.by_category[code] || { all: z(), present: z() })[scope];
+const z = () => ({ total: 0, done: 0, critical: 0, critical_done: 0 });
+const catLabel = (code) => (D.categories.find(c => c.code === code) || { label: code }).label;
+const WO_LABEL = { open: 'Open', in_progress: 'In progress', complete: 'Complete' };
+const isTaskFilter = () => filter !== 'work_orders' && filter !== 'attendance';
+
+function toggleTheme(){
+  var dark=document.documentElement.dataset.theme!=='dark';
+  var osDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  try{ if(dark===osDark) localStorage.removeItem('theme'); else localStorage.setItem('theme',dark?'dark':'light'); }catch(e){}
+  (window.__setTheme||function(){})(dark);
+}
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.();
+}
+function setScope(s) { scope = s; $('scope-all').classList.toggle('active', s === 'all'); $('scope-present').classList.toggle('active', s === 'present'); render(); }
+function setFilter(f) { filter = f; render(); }
+function setView(v) { view = v; $('stage').scrollTop = 0; render(); }
+
+/* ── data ──────────────────────────────────────────────────────────────── */
+async function load(quiet) {
+  try {
+    const res = await fetch('/api/brief', { cache: 'no-store' });
+    if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    D = await res.json();
+    lastOk = Date.now();
+    render();
+  } catch (e) {
+    console.error('brief', e);
+    if (!D) $('stage').innerHTML = '<div class="err">Could not load the brief. Check the connection and press R to retry.</div>';
+    markUpdated();
+  }
+}
+function markUpdated() {
+  const el = $('updated');
+  if (!lastOk) { el.textContent = 'Not loaded'; el.classList.add('stale'); return; }
+  const age = Math.round((Date.now() - lastOk) / 1000);
+  el.textContent = age < 5 ? 'Updated just now' : `Updated ${age < 90 ? age + 's' : Math.round(age / 60) + ' min'} ago`;
+  el.classList.toggle('stale', age > REFRESH_MS / 1000 * 2.5);
+}
+setInterval(() => load(true), REFRESH_MS);
+setInterval(markUpdated, 5000);
+
+/* ── render ────────────────────────────────────────────────────────────── */
+function render() {
+  if (!D) return;
+  renderRail();
+  const shop = view === 'squadron' ? null : D.shops.find(s => s.id === view);
+  $('stage').innerHTML = shop ? shopHTML(shop) : squadronHTML();
+  markUpdated();
+}
+
+function renderRail() {
+  const c = D.cycle;
+  const dates = c.start_date && c.end_date ? `${fmtDate(c.start_date)} – ${fmtDate(c.end_date)}` : '';
+  $('cycle').innerHTML = `<b>${esc(c.name)}</b>${dates ? esc(dates) + ' · ' : ''}${c.period_count} periods`;
+  const sq = cnt(D.squadron.tasks);
+  const rows = [{ key: 0, id: 'squadron', name: 'Squadron', p: pct(sq.done, sq.total), cls: 'nav-sq' }]
+    .concat(D.shops.map((s, i) => { const t = cnt(s.tasks); return { key: i + 1, id: s.id, name: s.name, p: pct(t.done, t.total), cls: '' }; }));
+  $('nav').innerHTML = rows.map(r => `
+    <button class="nav-btn ${r.cls} ${String(view) === String(r.id) ? 'active' : ''}" onclick="setView(${r.id === 'squadron' ? "'squadron'" : r.id})">
+      <span class="nav-key">${r.key < 10 ? r.key : ''}</span>
+      <span class="nav-name">${esc(r.name)}</span>
+      <span class="nav-pct">${r.p}%</span>
+    </button>`).join('');
+}
+
+function fmtDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function chipsHTML(rollup, woCounts, attendance) {
+  const items = [{ code: 'all', label: 'All work', n: cnt(rollup).total - cnt(rollup).done }]
+    .concat(D.categories.map(c => ({ code: c.code, label: c.label, n: catCnt(rollup, c.code).total - catCnt(rollup, c.code).done })))
+    .filter(c => c.code === 'all' || catCnt(rollup, c.code).total > 0);
+  const task = items.map(c => `<button class="chip ${filter === c.code ? 'active' : ''}" onclick="setFilter('${c.code}')">${esc(c.label)}<span class="n">${c.n}</span></button>`).join('');
+  return `<div class="chips">${task}
+    <button class="chip ${filter === 'work_orders' ? 'active' : ''}" onclick="setFilter('work_orders')">Work orders<span class="n">${woCounts.total - woCounts.complete}</span></button>
+    <button class="chip ${filter === 'attendance' ? 'active' : ''}" onclick="setFilter('attendance')">Attendance<span class="n">${pct(attendance.marked, attendance.total)}%</span></button>
+  </div>`;
+}
+
+function tile(label, value, sub, opts = {}) {
+  return `<div class="tile"><div class="tile-lbl">${esc(label)}</div>
+    <div class="tile-val ${opts.hero ? 'hero' : ''}">${value}</div>
+    ${sub ? `<div class="tile-sub">${sub}</div>` : ''}</div>`;
+}
+
+function tilesHTML(rollup, members, woCounts, att, awayCount) {
+  const t = cnt(rollup);
+  const p = pct(t.done, t.total);
+  const critLeft = t.critical - t.critical_done;
+  return `<div class="tiles">
+    ${tile('Completion', `${p}<small>%</small>`, `<span class="dot ${health(p)}"></span>${t.done} of ${t.total} tasks done${scope === 'present' ? ' · at drill' : ''}`, { hero: true })}
+    ${tile('Critical remaining', `${critLeft}`, `<span class="dot ${critLeft ? 'bad' : 'ok'}"></span>${critLeft ? 'due this drill or overdue' : 'nothing overdue'}`)}
+    ${tile('Members at drill', `${members.present}<small>/ ${members.total}</small>`, awayCount ? `<span class="dot warn"></span>${awayCount} not at drill` : `<span class="dot ok"></span>everyone here`)}
+    ${tile('Work orders', `${woCounts.complete}<small>/ ${woCounts.total}</small>`, woCounts.total ? `<span class="dot ${woCounts.complete === woCounts.total ? 'ok' : woCounts.in_progress ? 'warn' : 'mute'}"></span>${woCounts.in_progress} in progress · ${woCounts.open} open` : 'none this drill')}
+    ${tile('Attendance marked', `${pct(att.marked, att.total)}<small>%</small>`, `<span class="dot ${att.marked === att.total ? 'ok' : 'warn'}"></span>${att.marked} of ${att.total} periods`)}
+  </div>`;
+}
+
+function barRow(name, done, total, opts = {}) {
+  const p = pct(done, total);
+  return `<div class="bar-row ${opts.onclick ? 'link' : ''}" ${opts.onclick ? `onclick="${opts.onclick}"` : ''}>
+    <div class="bar-name">${esc(name)}${opts.sub ? `<small>${esc(opts.sub)}</small>` : ''}</div>
+    <div class="track"><div class="fill ${opts.crit ? 'crit' : ''}" style="width:${total ? p : 0}%"></div></div>
+    <div class="bar-val">${total ? p + '%' : '—'}<small>${done}/${total}</small></div>
+  </div>`;
+}
+
+/* Outstanding work, grouped by task title so the room hears "Cyber Awareness:
+   9 people" once, not nine times. Chips name who, with shop when squadron-wide. */
+function outstandingHTML(members, { withShop }) {
+  const groups = new Map();
+  for (const m of members) {
+    if (scope === 'present' && !m.present) continue;
+    for (const t of m.tasks) {
+      if (t.informational || t.state === 'done') continue;
+      if (filter !== 'all' && t.category_code !== filter) continue;
+      const key = t.category_code + '|' + t.title;
+      if (!groups.has(key)) groups.set(key, { title: t.title, code: t.category_code, critical: t.critical, who: [] });
+      groups.get(key).who.push(m);
+    }
+  }
+  const list = [...groups.values()].sort((a, b) => (b.critical - a.critical) || (b.who.length - a.who.length) || a.title.localeCompare(b.title));
+  if (!list.length) return `<div class="empty">Nothing outstanding${filter !== 'all' ? ' in ' + esc(catLabel(filter)) : ''}. </div>`;
+  const MAX = 14;
+  return `<div class="ow">${list.map(g => `
+    <div class="ow-row">
+      <div class="ow-title">${esc(g.title)}<span class="cat">${esc(catLabel(g.code))}</span></div>
+      <div class="ow-n">${g.who.length}<small>${g.who.length === 1 ? 'member' : 'members'}${g.critical ? ' · critical' : ''}</small></div>
+      <div class="who">${g.who.slice(0, MAX).map(m =>
+        `<span class="pill ${g.critical ? 'crit' : ''} ${m.present ? '' : 'away'}">${esc(m.rank)} ${esc(m.last_name)}${withShop ? ` <span class="sh">· ${esc(shopName(m.shop_id))}</span>` : ''}</span>`).join('')}
+        ${g.who.length > MAX ? `<span class="pill more">+${g.who.length - MAX} more</span>` : ''}</div>
+    </div>`).join('')}</div>`;
+}
+const shopName = (id) => (D.shops.find(s => s.id === id) || {}).name || '';
+
+function woListHTML(wos, { withShop }) {
+  if (!wos.length) return '<div class="empty">No work orders this drill.</div>';
+  const order = { in_progress: 0, open: 1, complete: 2 };
+  const list = wos.slice().sort((a, b) => (order[a.status] - order[b.status]) || (withShop ? a.shop_name.localeCompare(b.shop_name) : 0) || (a.wo_number || '').localeCompare(b.wo_number || ''));
+  return `<div class="wo">${list.map(w => `
+    <div class="wo-row">
+      <div class="wo-shop">${withShop ? esc(w.shop_name) : ''}</div>
+      <div class="wo-num">${esc(w.wo_number || '—')}</div>
+      <div><div class="wo-title">${esc(w.title)}</div>
+        ${w.details ? `<div class="wo-details">${esc(w.details)}</div>` : ''}
+        ${w.day || w.start_time ? `<div class="wo-when">${esc([w.day, [w.start_time, w.end_time].filter(Boolean).join('–')].filter(Boolean).join(' · '))}</div>` : ''}</div>
+      <div><span class="status ${w.status}">${WO_LABEL[w.status] || w.status}</span></div>
+    </div>`).join('')}</div>`;
+}
+
+function woSummaryHTML(c) {
+  return `<div class="wo-summary">
+    <div class="k"><b>${c.complete}</b><span>complete</span></div>
+    <div class="k"><b>${c.in_progress}</b><span>in progress</span></div>
+    <div class="k"><b>${c.open}</b><span>open</span></div>
+    <div class="k"><b>${c.total}</b><span>total</span></div>
+  </div>`;
+}
+
+function awayListHTML(away) {
+  if (!away.length) return '<div class="empty">Everyone is at drill.</div>';
+  const byShop = new Map();
+  for (const m of away) { const k = m.shop_name || 'Unassigned'; if (!byShop.has(k)) byShop.set(k, []); byShop.get(k).push(m); }
+  return `<div class="away-list">${[...byShop.keys()].sort().map(shop => `
+    <div class="away-shop"><b>${esc(shop)} · ${byShop.get(shop).length}</b>
+      <div class="away-m">${byShop.get(shop).map(m =>
+        `<span class="away-one"><span class="pill">${esc(m.rank)} ${esc(m.last_name)}</span><span class="badge">${esc(m.away_labels.join(' / '))}</span>${m.away_note ? `<span class="note">${esc(m.away_note)}</span>` : ''}</span>`).join('')}</div>
+    </div>`).join('')}</div>`;
+}
+
+/* ── squadron view ─────────────────────────────────────────────────────── */
+function squadronHTML() {
+  const S = D.squadron;
+  const allMembers = D.shops.flatMap(s => s.members);
+  let body;
+  if (filter === 'work_orders') {
+    body = `<div class="card"><div class="card-hd"><div class="card-title">Work orders · all shops</div><div class="card-meta">${woSummaryHTML(S.work_orders)}</div></div>${woListHTML(D.shops.flatMap(s => s.work_orders), { withShop: true })}</div>`;
+  } else if (filter === 'attendance') {
+    body = `<div class="grid2">
+      <div class="card"><div class="card-hd"><div class="card-title">Attendance marked by shop</div><div class="card-meta">${S.attendance.marked} of ${S.attendance.total} periods</div></div>
+        <div class="bars">${D.shops.map(s => barRow(s.name, s.attendance.marked, s.attendance.total, { onclick: `setView(${s.id})` })).join('')}</div></div>
+      <div class="card"><div class="card-hd"><div class="card-title">Not at drill</div><div class="card-meta">${S.away.length} of ${S.members.total} members</div></div>${awayListHTML(S.away)}</div>
+    </div>`;
+  } else {
+    const byShop = D.shops.map(s => { const c = filter === 'all' ? cnt(s.tasks) : catCnt(s.tasks, filter); return { s, c }; })
+      .filter(x => filter === 'all' || x.c.total > 0)
+      .sort((a, b) => pct(a.c.done, a.c.total) - pct(b.c.done, b.c.total));
+    const left = `<div class="card"><div class="card-hd"><div class="card-title">Completion by shop${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">least complete first</div></div>
+      <div class="bars">${byShop.map(({ s, c }) => barRow(s.name, c.done, c.total, { onclick: `setView(${s.id})`, sub: `${s.present_count} of ${s.member_count} at drill` })).join('')}</div></div>`;
+    const byCat = filter === 'all'
+      ? `<div class="card"><div class="card-hd"><div class="card-title">By category</div><div class="card-meta">tap a chip to drill in</div></div>
+          <div class="bars">${D.categories.filter(c => catCnt(S.tasks, c.code).total > 0).map(c => { const k = catCnt(S.tasks, c.code); return barRow(c.label, k.done, k.total, { onclick: `setFilter('${c.code}')` }); }).join('')}</div></div>`
+      : '';
+    const right = `${byCat}<div class="card"><div class="card-hd"><div class="card-title">Outstanding${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">grouped by task · critical first</div></div>${outstandingHTML(allMembers, { withShop: true })}</div>`;
+    body = `<div class="grid2"><div>${left}</div><div>${right}</div></div>`;
+  }
+  return `<div class="head">
+      <div class="h1">Squadron<small>${esc(D.cycle.name)} · ${D.shops.length} shops · ${S.members.total} members</small></div>
+      ${chipsHTML(S.tasks, S.work_orders, S.attendance)}
+    </div>
+    ${tilesHTML(S.tasks, S.members, S.work_orders, S.attendance, S.away.length)}
+    ${body}`;
+}
+
+/* ── shop view ─────────────────────────────────────────────────────────── */
+function shopHTML(s) {
+  const sups = s.supervisors.map(x => `${x.rank} ${x.last_name}`).join(', ');
+  const away = s.members.filter(m => !m.present);
+  let body;
+  if (filter === 'work_orders') {
+    body = `<div class="card"><div class="card-hd"><div class="card-title">Work orders</div><div class="card-meta">${woSummaryHTML(s.work_order_counts)}</div></div>${woListHTML(s.work_orders, { withShop: false })}</div>`;
+  } else if (filter === 'attendance') {
+    body = `<div class="card"><div class="card-hd"><div class="card-title">Weekend attendance</div><div class="card-meta">${s.attendance.marked} of ${s.attendance.total} periods marked</div></div>${attGridHTML(s)}</div>
+      <div class="card"><div class="card-hd"><div class="card-title">Not at drill</div><div class="card-meta">${away.length} of ${s.member_count}</div></div>${awayListHTML(away.map(m => ({ ...m, shop_name: s.name })))}</div>`;
+  } else {
+    const cats = D.categories.filter(c => catCnt(s.tasks, c.code).total > 0);
+    const catCard = `<div class="card"><div class="card-hd"><div class="card-title">By category</div><div class="card-meta">${scope === 'present' ? 'members at drill' : 'all members'}</div></div>
+      <div class="bars">${cats.map(c => { const k = catCnt(s.tasks, c.code); return barRow(c.label, k.done, k.total, { onclick: `setFilter('${c.code}')` }); }).join('') || '<div class="empty">No tasks this drill.</div>'}</div></div>`;
+    body = `${catCard}<div class="card"><div class="card-hd"><div class="card-title">Members${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">outstanding work per member · critical outlined</div></div>${membersHTML(s)}</div>`;
+  }
+  return `<div class="head">
+      <div class="h1">${esc(s.name)}<small>${sups ? 'Supervisor' + (s.supervisors.length > 1 ? 's' : '') + ': ' + esc(sups) + ' · ' : ''}${s.member_count} members</small></div>
+      ${chipsHTML(s.tasks, s.work_order_counts, s.attendance)}
+    </div>
+    ${tilesHTML(s.tasks, { total: s.member_count, present: s.present_count }, s.work_order_counts, s.attendance, away.length)}
+    ${body}`;
+}
+
+function membersHTML(s) {
+  const mems = s.members.slice().sort((a, b) => a.last_name.localeCompare(b.last_name));
+  return `<div class="mem">${mems.map(m => {
+    const tasks = m.tasks.filter(t => !t.informational && (filter === 'all' || t.category_code === filter));
+    const total = tasks.length, done = tasks.filter(t => t.state === 'done').length;
+    const open = tasks.filter(t => t.state !== 'done').sort((a, b) => (b.critical - a.critical) || a.title.localeCompare(b.title));
+    const p = pct(done, total);
+    return `<div class="mem-row ${m.present ? '' : 'away'}">
+      <div class="mem-name">${esc(m.last_name)}, ${esc((m.first_name || '').charAt(0))}.
+        ${m.present ? '' : `<span class="badge">Not at drill</span>`}
+        <span class="mem-rank">${esc(m.rank)}${m.away_labels.length ? ' · ' + esc(m.away_labels.join(' / ')) : ''}</span></div>
+      <div class="mem-prog"><div class="track"><div class="fill" style="width:${total ? p : 0}%"></div></div>
+        <div class="n">${total ? p + '%' : '—'} <small>${done}/${total}</small></div></div>
+      <div class="mem-tasks">${total && !open.length
+        ? '<span class="done-note"><span class="dot ok"></span>All done</span>'
+        : open.map(t => `<span class="pill ${t.critical ? 'crit' : ''}" title="${esc(catLabel(t.category_code))}">${esc(t.title)}${t.is_flagged ? '<span class="flag">⚑</span>' : ''}</span>`).join('') || '<span class="empty">No tasks</span>'}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function attGridHTML(s) {
+  const P = D.cycle.periods;
+  const cls = (st) => !st ? 'none' : (st === 'present' || st === 'agr_at_orders' || st === 'equiv_training') ? 'ok' : (st === 'unexcused' || st === 'awol') ? 'bad' : 'warn';
+  return `<div class="att-wrap"><table class="att">
+    <thead><tr><th class="nm">Member</th>${P.map(p => `<th title="${esc(p.label)}">${esc(p.day ? p.day.slice(0, 3) + ' ' + p.half : 'U' + p.period)}</th>`).join('')}</tr></thead>
+    <tbody>${s.members.map(m => {
+      const by = new Map(m.marks.map(x => [x.period, x]));
+      return `<tr><td class="nm">${esc(m.rank)} ${esc(m.last_name)}</td>${P.map(p => { const x = by.get(p.period); return `<td class="c ${cls(x && x.status)}">${x ? esc(x.pay) : '·'}</td>`; }).join('')}</tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+/* ── keys ──────────────────────────────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
+  if (!D) { if (e.key === 'r' || e.key === 'R') load(); return; }
+  const order = ['squadron'].concat(D.shops.map(s => s.id));
+  const i = order.findIndex(v => String(v) === String(view));
+  if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); setView(order[(i + 1) % order.length]); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); setView(order[(i - 1 + order.length) % order.length]); }
+  else if (e.key === 'Home') setView('squadron');
+  else if (/^[0-9]$/.test(e.key)) { const v = order[Number(e.key)]; if (v !== undefined) setView(v); }
+  else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  else if (e.key === 'r' || e.key === 'R') load();
+});
+
+load();
+</script>
+</body>
+</html>
