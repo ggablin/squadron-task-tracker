@@ -2092,6 +2092,7 @@ app.get('/api/shop/members', requireAuth, async (req, res) => {
       SELECT m.id, m.last_name, m.first_name, m.rank, m.role,
              NOT m.must_change_password AS activated,
              m.last_login_at,
+             ${presentExpr()} AS present,
              COUNT(t.id) FILTER (WHERE NOT ${informationalSql()})                    AS total_tasks,
              COUNT(tc.id) FILTER (WHERE tc.state = 'done' AND NOT ${informationalSql()})   AS done_tasks,
              COUNT(tc.id) FILTER (WHERE tc.state = 'partial' AND NOT ${informationalSql()}) AS partial_tasks
@@ -2100,9 +2101,10 @@ app.get('/api/shop/members', requireAuth, async (req, res) => {
         AND t.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
       LEFT JOIN task_categories icat ON icat.id = t.category_id
       LEFT JOIN task_completions tc ON tc.task_id = t.id
+      ${presenceJoinSql()}
       WHERE m.shop_id = $1 AND m.active = true
       GROUP BY m.id, m.last_name, m.first_name, m.rank, m.role,
-               m.must_change_password, m.last_login_at
+               m.must_change_password, m.last_login_at, att.any_present
       ORDER BY m.last_name
     `, [targetShopId]);
     // Every member can read their shop roster, but whether a peer has opened the
@@ -2690,6 +2692,29 @@ app.patch('/api/squadron/students/:id', requireAuth, requireRole('leadership'), 
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Everyone the "At drill" scope leaves out, with the statuses that put them
+// there. The rule is lib/presence.js's, not re-derived here: a member is listed
+// exactly when presentExpr() is false, so this list and the excluded count on
+// the stats pane cannot disagree. Grouping happens client-side by shop.
+app.get('/api/squadron/away', requireAuth, requireRole('leadership'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT m.id, m.rank, m.last_name, m.first_name, s.name AS shop,
+             array_agg(DISTINCT a.status ORDER BY a.status)              AS statuses,
+             array_remove(array_agg(DISTINCT a.note ORDER BY a.note), NULL) AS notes,
+             COUNT(a.id)::int AS marked_periods
+      FROM members m
+      LEFT JOIN shops s ON s.id = m.shop_id
+      ${presenceJoinSql()}
+      JOIN attendance a ON a.member_id = m.id
+        AND a.uta_cycle_id = (SELECT id FROM uta_cycles WHERE is_current = true LIMIT 1)
+      WHERE m.active = true AND NOT ${presentExpr()}
+      GROUP BY m.id, m.rank, m.last_name, m.first_name, s.name, att.any_present
+      ORDER BY s.name NULLS LAST, m.last_name, m.first_name`);
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // Fetches 10 of each flavor: the "most behind" ranking changes when members
