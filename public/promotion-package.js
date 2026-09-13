@@ -132,34 +132,60 @@
       </section>`;
   }
 
-  // Printable page body: the sheet as FSS lays it out, circles left blank.
+  // Printable page body: the sheet as FSS lays it out, circles left blank,
+  // built from the same cards, badges and microlabels the app uses so a
+  // printed copy reads as the tracker's, not a photocopy of the slide.
   function printableHTML() {
-    const reqs = REQUIREMENTS.map(r => `<li><span class="c"></span>${esc(r.label)}${r.note ? ` <small>(${esc(r.note)})</small>` : ''}</li>`).join('');
-    const left = ITEMS.map(it => `
-      <li class="it"><span class="c"></span><b>${esc(it.title)}${it.sub ? ` <small>(${esc(it.sub)})</small>` : ''}</b>
-        ${it.checks.length ? `<ul>${it.checks.map(c => `<li><span class="c sm"></span>${esc(c)}</li>`).join('')}</ul>` : ''}
-      </li>`).join('');
-    const order = ITEMS.map(it => `<li>${esc(it.title)}${it.sub ? ` <small>(${esc(it.sub)})</small>` : ''}</li>`).join('');
-    const tracker = TRACKER.map(t => `<li><span class="c"></span>${esc(t)}</li>`).join('');
-    return `
-      <h1>FSS Promotion Package Checklist</h1>
-      <div class="line">Member's Rank / Name: <span class="blank"></span></div>
-      <div class="cols">
-        <div>
-          <h2>Requirements to be promoted</h2>
-          <ul class="reqs">${reqs}</ul>
-          <ul class="items">${left}</ul>
-          <div class="line" style="margin-top:18px">Member's Supervisor: <span class="blank"></span></div>
+    const circle = (sm) => `<span class="pc-circle${sm ? ' sm' : ''}" aria-hidden="true"></span>`;
+    const sub = (t) => t ? ` <span class="pc-sub">· ${esc(t)}</span>` : '';
+    const reqs = REQUIREMENTS.map(r =>
+      `<li class="pc-row">${circle()}<span>${esc(r.label)}${sub(r.note)}</span></li>`).join('');
+    const items = ITEMS.map(it => `
+      <li class="pc-item">
+        <span class="pc-n" aria-hidden="true">${it.n}</span>
+        <div class="pc-body">
+          <div class="pc-title">${circle()}<span>${esc(it.title)}${sub(it.sub)}</span></div>
+          ${it.checks.length ? `<ul class="pc-checks">${it.checks.map(c =>
+            `<li>${circle(true)}${esc(c)}</li>`).join('')}</ul>` : ''}
         </div>
-        <div>
-          <h2>Package order</h2>
-          <ol class="order">${order}</ol>
-          <h2>Pending corrections</h2>
-          <div class="box"></div>
-          <h2>Remarks</h2>
-          <div class="box"></div>
-          <h2>Package tracker</h2>
-          <ul class="tracker">${tracker}</ul>
+      </li>`).join('');
+    const order = ITEMS.map(it =>
+      `<li class="pc-order"><span class="pc-n" aria-hidden="true">${it.n}</span><span>${esc(it.title)}${sub(it.sub)}</span></li>`).join('');
+    const tracker = TRACKER.map(t => `<li class="pc-row">${circle()}<span>${esc(t)}</span></li>`).join('');
+    return `
+      <div class="pc-grid">
+        <div class="pc-col">
+          <section class="pc-card">
+            <div class="pc-microlabel">Member</div>
+            <div class="pc-field"><span class="pc-field-lbl">Member's Rank / Name</span><span class="pc-blank"></span></div>
+            <div class="pc-field"><span class="pc-field-lbl">Member's Supervisor</span><span class="pc-blank"></span></div>
+          </section>
+          <section class="pc-card">
+            <div class="pc-microlabel">Requirements to be promoted</div>
+            <ul class="pc-list pc-reqs">${reqs}</ul>
+          </section>
+          <section class="pc-card">
+            <div class="pc-microlabel">Package</div>
+            <ol class="pc-list pc-items">${items}</ol>
+          </section>
+        </div>
+        <div class="pc-col">
+          <section class="pc-card">
+            <div class="pc-microlabel">Package order</div>
+            <ol class="pc-list pc-orders">${order}</ol>
+          </section>
+          <section class="pc-card">
+            <div class="pc-microlabel">Pending corrections</div>
+            <div class="pc-box"></div>
+          </section>
+          <section class="pc-card">
+            <div class="pc-microlabel">Remarks</div>
+            <div class="pc-box"></div>
+          </section>
+          <section class="pc-card">
+            <div class="pc-microlabel">Package tracker</div>
+            <ul class="pc-list pc-tracker">${tracker}</ul>
+          </section>
         </div>
       </div>`;
   }
