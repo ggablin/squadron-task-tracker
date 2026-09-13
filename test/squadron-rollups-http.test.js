@@ -187,6 +187,37 @@ test('present-scoped criticals: away members leave, members on orders stay', asy
   assert.strictEqual(critPresent, 3);
 });
 
+test('/api/squadron/away lists exactly the members the at-drill scope excludes, with why', async () => {
+  const w = await seedWorld();
+  const cookie = await login('leadtest');
+
+  // c: away all weekend on RUTA with a note. a: on orders (present). b: unmarked (present).
+  await pool.query(
+    `INSERT INTO attendance (uta_cycle_id, member_id, shop_id, period, status, note)
+     VALUES ($1,$2,$3,1,'ruta_excused','dental'), ($1,$2,$3,2,'ruta_excused',NULL),
+            ($1,$4,$3,1,'agr_at_orders',NULL)`,
+    [w.live, w.c, w.shop, w.a]);
+
+  const away = await (await get('/api/squadron/away', cookie)).json();
+  assert.deepStrictEqual(away.map(m => m.id), [w.c]);
+  assert.deepStrictEqual(away[0].statuses, ['ruta_excused']);
+  assert.deepStrictEqual(away[0].notes, ['dental']);
+  assert.strictEqual(away[0].marked_periods, 2);
+  assert.strictEqual(away[0].shop, 'HVAC');
+
+  // The count on the stats pane is total minus present; the list must match it.
+  const shops = await (await get('/api/squadron', cookie)).json();
+  const excluded = shops.reduce((s, r) => s + (parseInt(r.member_count) - parseInt(r.present_count)), 0);
+  assert.strictEqual(away.length, excluded);
+
+  // A supervisor's own roster carries the same flag for the badge.
+  const roster = await (await get('/api/shop/members', cookie)).json();
+  const flag = Object.fromEntries(roster.map(m => [m.id, m.present]));
+  assert.strictEqual(flag[w.c], false);
+  assert.strictEqual(flag[w.a], true);
+  assert.strictEqual(flag[w.b], true, 'unmarked is present');
+});
+
 test('Equivalent Training is points-only pay but the member is at drill', async () => {
   const w = await seedWorld();
   const cookie = await login('leadtest');

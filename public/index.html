@@ -2526,6 +2526,8 @@
     .drill-shop-n { font-weight: 500; color: var(--t3-nav-text); }
     .drill-shop-names { min-width: 0; color: var(--text); }
     .drill-nm { white-space: nowrap; }
+    .sq-away-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 4px; line-height: 1.6; }
+    .sq-away-note { font-size: 11.5px; color: var(--t2); font-style: italic; }
     .drill-sep { color: var(--t2); }   /* --t3 sat at 3.25:1 in dark mode — the one contrast miss in either theme */
     @media (max-width: 480px) {
       .drill-shop-row { flex-direction: column; gap: 0; }
@@ -3017,6 +3019,21 @@
           <button class="seg-btn" id="sq-scope-present" aria-pressed="false" onclick="setSqScope('present')">At drill</button>
         </div>
         <div class="seg-note" id="sq-scope-note" hidden></div>
+      </div>
+
+      <!-- Who the "At drill" scope leaves out, and why. Same rule as the
+           excluded count above (server-side, lib/presence.js), shown in both
+           scopes because "who is away this weekend" is useful either way. -->
+      <div class="card card-pad mb-md sq-breakdown" id="sq-away-card" hidden>
+        <h2 class="sq-collapse-wrap"><button class="sq-collapse-hd" id="sq-away-toggle" aria-expanded="false"
+                aria-controls="sq-away-panel" onclick="toggleSqAway()">
+          <div class="chart-label">Not at Drill</div>
+          <div class="chart-meta" id="sq-away-meta">—</div>
+          <svg class="chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+        </button></h2>
+        <div class="expand-panel" id="sq-away-panel">
+          <div style="padding-top:10px"><div id="sq-away-list"></div></div>
+        </div>
       </div>
 
       <!-- Mobile-only quick-stats (since the desk-only stats don't show on mobile) -->
@@ -5537,6 +5554,8 @@ async function refreshShopMembers() {
     const fracSub = item.querySelector('.mem-frac-sub');
     const dot     = item.querySelector('.dot');
     const rankEl  = item.querySelector('.mem-rank');
+    const nameEl  = item.querySelector('.mem-name');
+    if (nameEl)  nameEl.innerHTML = `${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.${memAwayBadge(m)}`;
     if (frac)    frac.textContent    = `${done}/${total}`;
     if (fracSub) fracSub.textContent = `${pct}%`;
     if (dot)     { dot.className = 'dot ' + dc; dot.title = pct===100?'Complete':pct>=50?'In progress':'Needs attention'; }
@@ -5578,7 +5597,7 @@ function buildMembers() {
     return `<div class="mem-item" id="memitem-${m.id}">
       <div ${rowAttrs}>
         <div class="avatar">${init}</div>
-        <div class="mem-meta"><div class="mem-name">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.</div><div class="mem-rank">${escapeHtml(m.rank)}${memActivityMark(m)}</div></div>
+        <div class="mem-meta"><div class="mem-name">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.${memAwayBadge(m)}</div><div class="mem-rank">${escapeHtml(m.rank)}${memActivityMark(m)}</div></div>
         <div><div class="mem-frac">${done}/${total}</div><div class="mem-frac-sub">${pct}%</div></div>
         <div class="dot ${dc}" title="${dt}"></div>
         ${chevron}
@@ -5595,6 +5614,11 @@ function buildMembers() {
   }));
   updateShopStats();
   updateShopActivityNote();
+}
+
+// Attendance has marked them and none of it is a present status (lib/presence.js).
+function memAwayBadge(m) {
+  return m.present === false ? '<span class="away-badge">Not at drill</span>' : '';
 }
 
 /* Roster marker for the two states worth interrupting a supervisor over: never
@@ -5816,7 +5840,7 @@ function buildShopCatView() {
 
 function sctMemHTML(t, isSup) {
   const isDone = t.state === 'done';
-  const away = t.present === false ? '<span class="away-badge">Away</span>' : '';
+  const away = t.present === false ? '<span class="away-badge">Not at drill</span>' : '';
   const label = `<span class="sct-tick">${isDone ? '✓' : '○'}</span>${escapeHtml(t.rank)} ${escapeHtml(t.last_name)}${away}`;
   if (!isSup) return `<span class="sct-mem readonly${isDone ? ' done' : ''}">${label}</span>`;
   return `<button type="button" class="sct-mem${isDone ? ' done' : ''}" id="sct-${t.id}"
@@ -5871,7 +5895,7 @@ async function renderShopMembers(shopId) {
       const done  = parseInt(m.done_tasks)||0;
       const total = parseInt(m.total_tasks)||0;
       const pct   = total ? Math.round(done/total*100) : 0;
-      const away  = m.present === false ? '<span class="away-badge">Away</span>' : '';
+      const away  = m.present === false ? '<span class="away-badge">Not at drill</span>' : '';
       return `<div class="shop-mem-row">
         <div class="shop-mem-rank-c">${escapeHtml(m.rank)}</div>
         <div class="shop-mem-name-c">${escapeHtml(m.last_name)}, ${escapeHtml(m.first_name[0])}.${away}</div>
@@ -6109,7 +6133,7 @@ let _sqLoaded = false, _sqInFlight = false;
 let sqMedData = null, sqStudentsData = null;
 
 async function fetchSquadronData() {
-  const [shops, cats, membersAll, membersPresent, med, students] = await Promise.all([
+  const [shops, cats, membersAll, membersPresent, med, students, away] = await Promise.all([
     fetch('/api/squadron').then(r => r.json()),
     fetch('/api/squadron/categories').then(r => r.json()),
     fetch('/api/squadron/members').then(r => r.json()),
@@ -6119,23 +6143,74 @@ async function fetchSquadronData() {
     fetch('/api/squadron/members?present=true').then(r => r.ok ? r.json() : null).catch(() => null),
     fetch('/api/squadron/medical').then(r => r.ok ? r.json() : MED_LOAD_FAILED).catch(() => MED_LOAD_FAILED),
     fetch('/api/squadron/students').then(r => r.ok ? r.json() : null).catch(() => null),
+    fetch('/api/squadron/away').then(r => r.ok ? r.json() : null).catch(() => null),
   ]);
   // The three core payloads make the pane; a 500 or an expired session gives
   // {error} objects here, and rendering must not quietly swallow that.
   if (!Array.isArray(shops) || !Array.isArray(cats) || !Array.isArray(membersAll)) {
     throw new Error('squadron stats payload was not usable');
   }
-  return { shops, cats, membersAll, membersPresent, med, students };
+  return { shops, cats, membersAll, membersPresent, med, students, away };
 }
 
 function applySquadronData(d) {
   sqData = { shops: d.shops, cats: d.cats, membersAll: d.membersAll, membersPresent: d.membersPresent };
   sqMedData = d.med;
   sqStudentsData = d.students;
+  sqAwayData = d.away;
   sqDrillCache = {};
   renderSquadronStats();
   renderMedical(sqMedData);
   renderStudents(sqStudentsData);
+  renderSqAway(sqAwayData);
+}
+
+let sqAwayData = null;   // rows from /api/squadron/away, or null when it failed
+
+// Grouped by shop, each member with the status(es) that mark them away and
+// any note the supervisor left. Hidden entirely when nobody is away — an
+// empty "Not at Drill" card would read as a bug, not as good news.
+function renderSqAway(rows) {
+  const card = document.getElementById('sq-away-card');
+  const list = document.getElementById('sq-away-list');
+  const meta = document.getElementById('sq-away-meta');
+  if (!card || !list) return;
+  if (!Array.isArray(rows) || !rows.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const open = document.getElementById('sq-away-panel')?.classList.contains('open');
+  meta.textContent = `${rows.length} member${rows.length === 1 ? '' : 's'}${open ? '' : ' · tap to expand'}`;
+
+  const byShop = new Map();
+  for (const m of rows) {
+    const shop = m.shop || 'Unassigned';
+    if (!byShop.has(shop)) byShop.set(shop, []);
+    byShop.get(shop).push(m);
+  }
+  list.innerHTML = `<div class="drill-shops">${
+    [...byShop.keys()].sort((a, b) => a.localeCompare(b)).map(shop => {
+      const mems = byShop.get(shop);
+      // One member per line: a status chip plus a note is too wide for the
+      // inline "name · name" run the not-done list uses.
+      const names = mems.map(m => {
+        const why = (m.statuses || []).map(s => ATT_LABEL[s] || s).join(' / ');
+        const note = (m.notes || []).join('; ');
+        return `<div class="sq-away-row"><span>${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}</span>` +
+          `<span class="away-badge">${escapeHtml(why)}</span>${note ? `<span class="sq-away-note">${escapeHtml(note)}</span>` : ''}</div>`;
+      }).join('');
+      return `<div class="drill-shop-row">
+        <div class="drill-shop-name" title="${escapeHtml(shop)}">${escapeHtml(shop)} <span class="drill-shop-n">· ${mems.length}</span></div>
+        <div class="drill-shop-names">${names}</div>
+      </div>`;
+    }).join('')}</div>`;
+}
+
+function toggleSqAway() {
+  const btn = document.getElementById('sq-away-toggle');
+  const panel = document.getElementById('sq-away-panel');
+  if (!btn || !panel) return;
+  const isOpen = panel.classList.toggle('open');
+  btn.setAttribute('aria-expanded', isOpen);
+  renderSqAway(sqAwayData);
 }
 
 function showSquadronError() {
@@ -6298,7 +6373,7 @@ function renderSquadronStats() {
       const total = parseInt(m.total_tasks || 0);
       const p     = total ? Math.round(done / total * 100) : 0;
       const color = healthColor(p);
-      const away  = m.present === false ? '<span class="away-badge">Away</span>' : '';
+      const away  = m.present === false ? '<span class="away-badge">Not at drill</span>' : '';
       return `<div class="alert-row">
         <div>
           <div class="alert-name">${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}${away}</div>
@@ -6405,7 +6480,7 @@ function renderCatDrill(rows) {
           const mems = byShop.get(shop);
           const names = mems.map(m =>
             `<span class="drill-nm">${escapeHtml(m.rank)} ${escapeHtml(m.last_name)}` +
-            `${m.present === false ? '<span class="away-badge">Away</span>' : ''}</span>`
+            `${m.present === false ? '<span class="away-badge">Not at drill</span>' : ''}</span>`
           ).join('<span class="drill-sep"> · </span>');
           return `<div class="drill-shop-row">
             <div class="drill-shop-name" title="${escapeHtml(shop)}">${escapeHtml(shop)} <span class="drill-shop-n">· ${mems.length}</span></div>
