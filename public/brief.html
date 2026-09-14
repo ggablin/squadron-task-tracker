@@ -147,7 +147,11 @@ button { font: inherit; color: inherit; }
 .ow-n small { font-size: .72rem; font-weight: 500; color: var(--t2); margin-left: .25rem; }
 .who { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .35rem; }
 .pill { font-size: .78rem; font-weight: 600; padding: .22rem .6rem; border-radius: 999px; background: var(--cream); color: var(--text); white-space: nowrap; }
-.pill.more { background: transparent; color: var(--t2); border: 1px dashed var(--bm); }
+.pill.more { background: transparent; color: var(--t2); border: 1px dashed var(--bm); cursor: pointer; font: inherit; font-size: .78rem; font-weight: 600; }
+.pill.more:hover { color: var(--text); border-color: var(--text); }
+/* Groups start folded; "+N more" opens them and stays open across the
+   minute refresh (expanded keys live in state, not the DOM). */
+.who:not(.open) .pill.hid { display: none; }
 .pill.crit { box-shadow: inset 0 0 0 2px var(--urgent); }
 .pill.away { color: var(--t2); text-decoration: line-through; text-decoration-color: var(--t3); }
 .pill .sh { color: var(--t2); font-weight: 500; }
@@ -256,6 +260,8 @@ let scope = 'all';            // 'all' | 'present'
 let filter = 'all';           // 'all' | category code | 'work_orders' | 'attendance'
 let lastOk = 0;
 const REFRESH_MS = 60000;
+const expanded = new Set();   // outstanding-work groups the presenter opened
+function toggleGroup(key) { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); render(); }
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -393,14 +399,17 @@ function outstandingHTML(members, { withShop }) {
   const list = [...groups.values()].sort((a, b) => (b.critical - a.critical) || (b.who.length - a.who.length) || a.title.localeCompare(b.title));
   if (!list.length) return `<div class="empty">Nothing outstanding${filter !== 'all' ? ' in ' + esc(catLabel(filter)) : ''}. </div>`;
   const MAX = 14;
-  return `<div class="ow">${list.map(g => `
+  return `<div class="ow">${list.map(g => {
+    const key = (view === 'squadron' ? 'sq' : 's' + view) + '|' + g.code + '|' + g.title;
+    const open = expanded.has(key);
+    return `
     <div class="ow-row">
       <div class="ow-title">${esc(g.title)}<span class="cat">${esc(catLabel(g.code))}</span></div>
       <div class="ow-n">${g.who.length}<small>${g.who.length === 1 ? 'member' : 'members'}${g.critical ? ' · critical' : ''}</small></div>
-      <div class="who">${g.who.slice(0, MAX).map(m =>
-        `<span class="pill ${g.critical ? 'crit' : ''} ${m.present ? '' : 'away'}">${esc(m.rank)} ${esc(m.last_name)}${withShop ? ` <span class="sh">· ${esc(shopName(m.shop_id))}</span>` : ''}</span>`).join('')}
-        ${g.who.length > MAX ? `<span class="pill more">+${g.who.length - MAX} more</span>` : ''}</div>
-    </div>`).join('')}</div>`;
+      <div class="who ${open ? 'open' : ''}">${g.who.map((m, i) =>
+        `<span class="pill ${g.critical ? 'crit' : ''} ${m.present ? '' : 'away'} ${i >= MAX ? 'hid' : ''}">${esc(m.rank)} ${esc(m.last_name)}${withShop ? ` <span class="sh">· ${esc(shopName(m.shop_id))}</span>` : ''}</span>`).join('')}
+        ${g.who.length > MAX ? `<button type="button" class="pill more" onclick="toggleGroup(${JSON.stringify(key).replace(/"/g, '&quot;')})">${open ? 'Show fewer' : '+' + (g.who.length - MAX) + ' more'}</button>` : ''}</div>
+    </div>`; }).join('')}</div>`;
 }
 const shopName = (id) => (D.shops.find(s => s.id === id) || {}).name || '';
 
