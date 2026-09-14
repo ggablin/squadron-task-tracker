@@ -147,7 +147,11 @@ button { font: inherit; color: inherit; }
 .ow-n small { font-size: .72rem; font-weight: 500; color: var(--t2); margin-left: .25rem; }
 .who { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .35rem; }
 .pill { font-size: .78rem; font-weight: 600; padding: .22rem .6rem; border-radius: 999px; background: var(--cream); color: var(--text); white-space: nowrap; }
-.pill.more { background: transparent; color: var(--t2); border: 1px dashed var(--bm); }
+.pill.more { background: transparent; color: var(--t2); border: 1px dashed var(--bm); cursor: pointer; font: inherit; font-size: .78rem; font-weight: 600; }
+.pill.more:hover { color: var(--text); border-color: var(--text); }
+/* Groups start folded; "+N more" opens them and stays open across the
+   minute refresh (expanded keys live in state, not the DOM). */
+.who:not(.open) .pill.hid { display: none; }
 .pill.crit { box-shadow: inset 0 0 0 2px var(--urgent); }
 .pill.away { color: var(--t2); text-decoration: line-through; text-decoration-color: var(--t3); }
 .pill .sh { color: var(--t2); font-weight: 500; }
@@ -205,6 +209,60 @@ button { font: inherit; color: inherit; }
 .away-one { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: nowrap; }
 .away-one .note { font-size: .78rem; color: var(--t2); font-style: italic; white-space: nowrap; }
 
+/* ── insight cards ── */
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem; align-items: start; }
+.grid3 > * { min-width: 0; }
+.grid3 .bar-row { grid-template-columns: minmax(5.5rem, 8.5rem) 1fr auto; }
+.sec-lbl { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t2); margin: .4rem 0 .8rem; }
+.delta { display: inline-flex; align-items: center; gap: .3rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.delta .arr { font-size: .75em; }
+.delta.up { color: var(--ok); } .delta.down { color: var(--urgent); } .delta.flat { color: var(--t2); }
+.hero-row { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.hero-num { font-size: 3rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+.hero-num small { font-size: 1rem; font-weight: 600; color: var(--t2); letter-spacing: 0; margin-left: .2rem; }
+.hero-cap { font-size: .85rem; color: var(--t2); }
+/* column chart: <=24px-thick marks would be too thin for a TV; columns are
+   capped by the slot, rounded at the data end, square at the baseline */
+.cols { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: .5rem; align-items: end; height: 9.5rem; padding-top: 1.4rem; }
+.col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; position: relative; }
+.col-v { font-size: .9rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: .3rem; line-height: 1; }
+.col-bar { width: min(100%, 2.6rem); background: var(--text); border-radius: 4px 4px 0 0; min-height: 2px; transition: height .35s ease; }
+.col-bar.mute { background: var(--bm); }
+.cols.tall { height: 15rem; }
+.col-x { font-size: .7rem; color: var(--t2); margin-top: .4rem; text-align: center; line-height: 1.15; max-width: 100%; }
+.col-x b { color: var(--text); font-weight: 600; }
+.spark { width: 100%; height: 2.4rem; display: block; overflow: visible; }
+.spark path, .spark line, .spark circle { vector-effect: non-scaling-stroke; }
+.spark path { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.spark .grid { stroke: var(--border); stroke-width: 1; }
+.spark circle { fill: var(--text); stroke: var(--bg); stroke-width: 2; }
+.spark-dot { fill: var(--text); }
+.spark-row { display: grid; grid-template-columns: 9rem 1fr 4.5rem; gap: .8rem; align-items: center; padding: .45rem 0; border-top: 1px solid var(--border); }
+.spark-rows > :first-child { border-top: 0; }
+.spark-row .spark { height: 2.4rem; }
+.spark-row .nm { font-size: .92rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spark-row .v { font-size: .95rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .6rem; }
+.stat { border: 2px solid var(--border); border-radius: var(--rs); padding: .7rem .8rem; cursor: pointer; text-align: left; background: var(--bg); min-width: 0; }
+.stat:hover { border-color: var(--bm); background: var(--cream); }
+.stat.open { border-color: var(--text); }
+.stat-n { font-size: 2rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+.stat-n small { font-size: .8rem; font-weight: 600; color: var(--t2); letter-spacing: 0; margin-left: .15rem; }
+.stat-l { font-size: .8rem; color: var(--t2); margin-top: .35rem; line-height: 1.25; font-weight: 600; }
+.stat-names { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .35rem; padding: .3rem 0 .2rem; }
+.list { display: flex; flex-direction: column; }
+.list-row { display: grid; grid-template-columns: 1fr auto; gap: .2rem .8rem; padding: .55rem 0; border-top: 1px solid var(--border); align-items: baseline; }
+.list > :first-child { border-top: 0; padding-top: 0; }
+.list-t { font-size: .95rem; font-weight: 600; }
+.list-s { font-size: .8rem; color: var(--t2); grid-column: 1 / -1; line-height: 1.4; }
+.list-r { font-size: .8rem; color: var(--t2); white-space: nowrap; font-weight: 600; }
+.delta-rows { display: flex; flex-direction: column; }
+.delta-row { display: grid; grid-template-columns: 1fr auto auto; gap: .8rem; padding: .4rem 0; border-top: 1px solid var(--border); align-items: baseline; font-size: .92rem; }
+.delta-rows > :first-child { border-top: 0; }
+.delta-row .nm { font-weight: 600; } .delta-row .was { color: var(--t2); font-size: .8rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 1400px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 1100px) { .grid3 { grid-template-columns: 1fr; } }
+
 .err { padding: 2rem; color: var(--urgent); font-size: 1rem; }
 .kbd-hint { font-size: .72rem; color: var(--t3-nav-text); text-align: center; line-height: 1.5; }
 .kbd-hint kbd { font-family: inherit; font-weight: 700; color: var(--t2); }
@@ -242,7 +300,7 @@ button { font: inherit; color: inherit; }
       </div>
       <a class="icon-btn" href="/?view=leadership">&larr; Tracker</a>
       <div class="updated" id="updated">&nbsp;</div>
-      <div class="kbd-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> shops &middot; <kbd>0&ndash;9</kbd> jump &middot; <kbd>F</kbd> full screen &middot; <kbd>R</kbd> refresh</div>
+      <div class="kbd-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> shops &middot; <kbd>&uarr;</kbd> <kbd>&darr;</kbd> scroll &middot; <kbd>0&ndash;9</kbd> jump &middot; <kbd>F</kbd> full screen &middot; <kbd>R</kbd> refresh</div>
     </div>
   </aside>
   <main class="stage" id="stage"><div class="empty">Loading the brief&hellip;</div></main>
@@ -256,6 +314,8 @@ let scope = 'all';            // 'all' | 'present'
 let filter = 'all';           // 'all' | category code | 'work_orders' | 'attendance'
 let lastOk = 0;
 const REFRESH_MS = 60000;
+const expanded = new Set();   // outstanding-work groups the presenter opened
+function toggleGroup(key) { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); render(); }
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -354,12 +414,21 @@ function tile(label, value, sub, opts = {}) {
     ${sub ? `<div class="tile-sub">${sub}</div>` : ''}</div>`;
 }
 
-function tilesHTML(rollup, members, woCounts, att, awayCount) {
+function deltaHTML(cur, prior, name) {
+  if (prior == null || cur == null) return '';
+  const d = cur - prior;
+  const cls = d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
+  const arr = d > 0 ? '▲' : d < 0 ? '▼' : '■';
+  return `<span class="delta ${cls}"><span class="arr">${arr}</span>${d === 0 ? 'level' : Math.abs(d) + (Math.abs(d) === 1 ? ' pt' : ' pts')}${name ? ` <span style="font-weight:500;color:var(--t2)">vs ${esc(name)}</span>` : ''}</span>`;
+}
+
+function tilesHTML(rollup, members, woCounts, att, awayCount, priorPct) {
   const t = cnt(rollup);
   const p = pct(t.done, t.total);
   const critLeft = t.critical - t.critical_done;
+  const delta = D.prior && priorPct != null ? deltaHTML(p, priorPct, D.prior.name) : '';
   return `<div class="tiles">
-    ${tile('Completion', `${p}<small>%</small>`, `<span class="dot ${health(p)}"></span>${t.done} of ${t.total} tasks done${scope === 'present' ? ' · at drill' : ''}`, { hero: true })}
+    ${tile('Completion', `${p}<small>%</small>`, `<span class="dot ${health(p)}"></span>${t.done} of ${t.total} done${scope === 'present' ? ' · at drill' : ''}${delta ? ' · ' + delta : ''}`, { hero: true })}
     ${tile('Critical remaining', `${critLeft}`, `<span class="dot ${critLeft ? 'bad' : 'ok'}"></span>${critLeft ? 'due this drill or overdue' : 'nothing overdue'}`)}
     ${tile('Members at drill', `${members.present}<small>/ ${members.total}</small>`, awayCount ? `<span class="dot warn"></span>${awayCount} not at drill` : `<span class="dot ok"></span>everyone here`)}
     ${tile('Work orders', `${woCounts.complete}<small>/ ${woCounts.total}</small>`, woCounts.total ? `<span class="dot ${woCounts.complete === woCounts.total ? 'ok' : woCounts.in_progress ? 'warn' : 'mute'}"></span>${woCounts.in_progress} in progress · ${woCounts.open} open` : 'none this drill')}
@@ -393,14 +462,17 @@ function outstandingHTML(members, { withShop }) {
   const list = [...groups.values()].sort((a, b) => (b.critical - a.critical) || (b.who.length - a.who.length) || a.title.localeCompare(b.title));
   if (!list.length) return `<div class="empty">Nothing outstanding${filter !== 'all' ? ' in ' + esc(catLabel(filter)) : ''}. </div>`;
   const MAX = 14;
-  return `<div class="ow">${list.map(g => `
+  return `<div class="ow">${list.map(g => {
+    const key = (view === 'squadron' ? 'sq' : 's' + view) + '|' + g.code + '|' + g.title;
+    const open = expanded.has(key);
+    return `
     <div class="ow-row">
       <div class="ow-title">${esc(g.title)}<span class="cat">${esc(catLabel(g.code))}</span></div>
       <div class="ow-n">${g.who.length}<small>${g.who.length === 1 ? 'member' : 'members'}${g.critical ? ' · critical' : ''}</small></div>
-      <div class="who">${g.who.slice(0, MAX).map(m =>
-        `<span class="pill ${g.critical ? 'crit' : ''} ${m.present ? '' : 'away'}">${esc(m.rank)} ${esc(m.last_name)}${withShop ? ` <span class="sh">· ${esc(shopName(m.shop_id))}</span>` : ''}</span>`).join('')}
-        ${g.who.length > MAX ? `<span class="pill more">+${g.who.length - MAX} more</span>` : ''}</div>
-    </div>`).join('')}</div>`;
+      <div class="who ${open ? 'open' : ''}">${g.who.map((m, i) =>
+        `<span class="pill ${g.critical ? 'crit' : ''} ${m.present ? '' : 'away'} ${i >= MAX ? 'hid' : ''}">${esc(m.rank)} ${esc(m.last_name)}${withShop ? ` <span class="sh">· ${esc(shopName(m.shop_id))}</span>` : ''}</span>`).join('')}
+        ${g.who.length > MAX ? `<button type="button" class="pill more" onclick="toggleGroup(${JSON.stringify(key).replace(/"/g, '&quot;')})">${open ? 'Show fewer' : '+' + (g.who.length - MAX) + ' more'}</button>` : ''}</div>
+    </div>`; }).join('')}</div>`;
 }
 const shopName = (id) => (D.shops.find(s => s.id === id) || {}).name || '';
 
@@ -439,15 +511,170 @@ function awayListHTML(away) {
     </div>`).join('')}</div>`;
 }
 
+/* ── charts ────────────────────────────────────────────────────────────── */
+// Column chart: one column per bucket, value on the cap, label under.
+function colChart(buckets, opts = {}) {
+  const max = opts.max || Math.max(1, ...buckets.map(b => b.value));
+  return `<div class="cols ${opts.tall ? 'tall' : ''}">${buckets.map(b => `
+    <div class="col" title="${esc(b.title || b.label)}">
+      <div class="col-v">${b.display != null ? b.display : b.value}</div>
+      <div class="col-bar ${b.mute ? 'mute' : ''}" style="height:${Math.round(b.value / max * 100)}%"></div>
+      <div class="col-x">${b.x || esc(b.label)}</div>
+    </div>`).join('')}</div>`;
+}
+
+// Sparkline over 0–100, oldest left, newest right, end dot + end label.
+// Row sparkline over 0–100, oldest left, newest right. The box stretches to
+// the row; strokes are non-scaling and the end marker is a tiny path so
+// nothing distorts. Values live in the HTML beside it, never in the SVG.
+function sparkHTML(points) {
+  const pts = points.filter(p => p.pct != null);
+  const W = 1000, H = 40, PADX = 8, PADY = 6;
+  if (pts.length < 2) return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="grid" x1="${PADX}" y1="${H / 2}" x2="${W - PADX}" y2="${H / 2}"/></svg>`;
+  const x = i => PADX + i * (W - 2 * PADX) / (pts.length - 1);
+  const y = v => PADY + (100 - v) * (H - 2 * PADY) / 100;
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.pct).toFixed(1)).join(' ');
+  const last = pts[pts.length - 1];
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(pts.map(p => p.name + ' ' + p.pct + '%').join(', '))}">
+    <line class="grid" x1="${PADX}" y1="${y(50).toFixed(1)}" x2="${W - PADX}" y2="${y(50).toFixed(1)}"/>
+    <path d="${d}"/>
+    <circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(last.pct).toFixed(1)}" r="3"/>
+  </svg>`;
+}
+
+// Trend as columns: one per drill plus the live number, value on the cap.
+function trendColsHTML(points) {
+  return colChart(points.map((p, i, a) => ({ label: p.name.replace(' (live)', ''), value: p.pct == null ? 0 : p.pct, display: p.pct == null ? '—' : p.pct + '%', x: i === a.length - 1 ? `<b>${esc(p.name.replace(' (live)', ''))}</b> · live` : esc(p.name), mute: i !== a.length - 1 })), { max: 100, tall: true });
+}
+
+// History points oldest → newest, then this drill's live number on the end.
+function trendPoints(shopId) {
+  const past = D.history.slice().reverse().map(h => ({ name: h.name, pct: shopId ? h.shops[shopId].pct : h.pct }));
+  const cur = shopId ? cnt(D.shops.find(s => s.id === shopId).tasks) : cnt(D.squadron.tasks);
+  return past.concat([{ name: D.cycle.name + ' (live)', pct: pct(cur.done, cur.total) }]);
+}
+
+/* ── insight cards ─────────────────────────────────────────────────────── */
+function card(title, meta, body) {
+  return `<div class="card"><div class="card-hd"><div class="card-title">${title}</div><div class="card-meta">${meta || ''}</div></div>${body}</div>`;
+}
+
+function changeCardHTML() {
+  if (!D.prior) return card('Change since last drill', '', '<div class="empty">No archived drill to compare with yet.</div>');
+  const cur = cnt(D.squadron.tasks);
+  const now = pct(cur.done, cur.total), was = D.prior.pct;
+  const rows = D.shops.map(s => { const c = cnt(s.tasks); return { s, now: pct(c.done, c.total), was: D.prior.shops[s.id].pct }; })
+    .filter(r => r.now != null && r.was != null)
+    .sort((a, b) => (b.now - b.was) - (a.now - a.was));
+  return card('Change since ' + esc(D.prior.name), scope === 'present' ? 'at drill now vs all members then' : 'all members', `
+    <div class="hero-row"><div class="hero-num">${now}<small>%</small></div>${deltaHTML(now, was)}<div class="hero-cap">${was == null ? '' : 'was ' + was + '% at the end of ' + esc(D.prior.name)}</div></div>
+    <div class="delta-rows">${rows.map(r => `<div class="delta-row"><span class="nm">${esc(r.s.name)}</span><span class="was">${r.was}% → ${r.now}%</span>${deltaHTML(r.now, r.was)}</div>`).join('')}</div>`);
+}
+
+function timelineCardHTML(shopId) {
+  const b = D.timeline.map(t => ({ label: t.label, value: shopId ? (t.by_shop[shopId] || 0) : t.count, x: t.key.startsWith('p') ? esc(t.label) : `<b>${esc(t.label)}</b>`, mute: !t.key.startsWith('p') }));
+  const total = b.reduce((n, x) => n + x.value, 0);
+  const during = b.filter(x => !x.mute).reduce((n, x) => n + x.value, 0);
+  return card('When the work got done', `${total} ticked · ${total ? Math.round(during / total * 100) : 0}% at drill`, colChart(b));
+}
+
+function criticalCardHTML() {
+  const rows = D.shops.map(s => { const c = cnt(s.tasks); return { s, left: c.critical - c.critical_done, done: c.critical_done, total: c.critical }; })
+    .filter(r => r.total > 0).sort((a, b) => b.left - a.left || a.s.name.localeCompare(b.s.name));
+  const totalLeft = rows.reduce((n, r) => n + r.left, 0);
+  return card('Critical work by shop', `${totalLeft} remaining · most first`, `<div class="bars">${rows.map(r => `
+    <div class="bar-row link" onclick="setView(${r.s.id})">
+      <div class="bar-name">${esc(r.s.name)}</div>
+      <div class="track"><div class="fill ${r.left ? 'crit' : ''}" style="width:${pct(r.left, r.total) || 0}%"></div></div>
+      <div class="bar-val">${r.left}<small>left of ${r.total}</small></div>
+    </div>`).join('') || '<div class="empty">No critical work this drill.</div>'}</div>`);
+}
+
+function flaggedCardHTML(members, withShop) {
+  const rows = [];
+  for (const m of members) for (const t of m.tasks) if (t.is_flagged) rows.push({ m, t });
+  rows.sort((a, b) => (a.t.state === 'done') - (b.t.state === 'done') || a.t.title.localeCompare(b.t.title));
+  return card('Flagged for leadership', `${rows.filter(r => r.t.state !== 'done').length} open · ${rows.length} flagged`, rows.length ? `<div class="list">${rows.map(({ m, t }) => `
+    <div class="list-row"><div class="list-t">${esc(t.title)} <span class="flag">⚑</span></div><div class="list-r">${t.state === 'done' ? '<span class="dot ok"></span> done' : esc(catLabel(t.category_code))}</div>
+      <div class="list-s">${esc(m.rank)} ${esc(m.last_name)}${withShop ? ' · ' + esc(shopName(m.shop_id)) : ''}${t.note ? ' — ' + esc(t.note) : ''}${t.details ? ' — ' + esc(t.details) : ''}</div></div>`).join('')}</div>` : '<div class="empty">Nothing flagged. Supervisors flag a task in My Shop to raise it here.</div>');
+}
+
+function medicalCardHTML(members, withShop) {
+  const groups = new Map();
+  for (const m of members) {
+    if (scope === 'present' && !m.present) continue;
+    for (const t of m.tasks) {
+      if (t.category_code !== 'medical' || t.informational) continue;
+      if (!groups.has(t.title)) groups.set(t.title, { title: t.title, who: [], done: 0, total: 0 });
+      const g = groups.get(t.title); g.total++;
+      if (t.state === 'done') g.done++; else g.who.push(m);
+    }
+  }
+  const list = [...groups.values()].sort((a, b) => b.who.length - a.who.length || a.title.localeCompare(b.title));
+  if (!list.length) return card('Medical services', '', '<div class="empty">Nothing due from medical this drill.</div>');
+  const outstanding = list.reduce((n, g) => n + g.who.length, 0);
+  return card('Medical services', `${outstanding} outstanding · tap a service for names`, `<div class="stats">${list.map(g => {
+    const key = 'med|' + (view === 'squadron' ? 'sq' : view) + '|' + g.title;
+    const open = expanded.has(key);
+    return `<button type="button" class="stat ${open ? 'open' : ''}" onclick="toggleGroup(${JSON.stringify(key).replace(/"/g, '&quot;')})">
+      <div class="stat-n">${g.who.length}<small>/ ${g.total}</small></div><div class="stat-l">${esc(g.title)}</div></button>
+      ${open ? `<div class="stat-names">${g.who.map(m => `<span class="pill ${m.present ? '' : 'away'}">${esc(m.rank)} ${esc(m.last_name)}${withShop ? ` <span class="sh">· ${esc(shopName(m.shop_id))}</span>` : ''}</span>`).join('') || '<span class="empty">Everyone done</span>'}</div>` : ''}`;
+  }).join('')}</div>`);
+}
+
+function adoptionCardHTML(shop) {
+  const src = shop || D.squadron;
+  const total = shop ? shop.member_count : D.squadron.members.total;
+  const opened = src.signin.this_cycle;
+  const body = shop
+    ? (() => {
+        const never = shop.members.filter(m => m.signin === 'never'), stale = shop.members.filter(m => m.signin === 'stale');
+        return `<div class="hero-row"><div class="hero-num">${opened}<small>/ ${total}</small></div><div class="hero-cap">opened the app this drill</div></div>
+          ${never.length ? `<div class="sec-lbl">Never signed in · ${never.length}</div><div class="who">${never.map(m => `<span class="pill">${esc(m.rank)} ${esc(m.last_name)}</span>`).join('')}</div>` : ''}
+          ${stale.length ? `<div class="sec-lbl" style="margin-top:.8rem">Not since this drill opened · ${stale.length}</div><div class="who">${stale.map(m => `<span class="pill">${esc(m.rank)} ${esc(m.last_name)}</span>`).join('')}</div>` : ''}
+          ${!never.length && !stale.length ? '<div class="empty">Everyone has opened the app this drill.</div>' : ''}`;
+      })()
+    : `<div class="hero-row"><div class="hero-num">${pct(opened, total) || 0}<small>%</small></div><div class="hero-cap">${opened} of ${total} opened the app this drill · ${src.signin.never} never signed in</div></div>
+       <div class="bars">${D.shops.map(s => ({ s, p: pct(s.signin.this_cycle, s.member_count) || 0 })).sort((a, b) => a.p - b.p).map(({ s }) =>
+         barRow(s.name, s.signin.this_cycle, s.member_count, { onclick: `setView(${s.id})`, sub: s.signin.never ? `${s.signin.never} never signed in` : '' })).join('')}</div>`;
+  return card('App adoption', shop ? '' : 'opened this drill · lowest first', body);
+}
+
+function trendCardHTML(shop) {
+  if (!D.history.length) return card('Completion trend', '', '<div class="empty">Trend appears once a drill has been archived.</div>');
+  if (shop) {
+    const pts = trendPoints(shop.id);
+    return card('Completion trend', `last ${D.history.length} drill${D.history.length === 1 ? '' : 's'} + live`, trendColsHTML(pts));
+  }
+  const sq = trendPoints(null);
+  return card('Completion trend', `last ${D.history.length} drill${D.history.length === 1 ? '' : 's'} + live`, `
+    <div class="grid2"><div>${trendColsHTML(sq)}</div><div class="spark-rows">${D.shops.map(s => { const pts = trendPoints(s.id); const last = pts[pts.length - 1]; return `<div class="spark-row"><span class="nm">${esc(s.name)}</span>${sparkHTML(pts)}<span class="v">${last.pct == null ? '—' : last.pct + '%'}</span></div>`; }).join('')}</div></div>`);
+}
+
+function closedWosCardHTML(wos) {
+  const closed = wos.filter(w => w.closed_this_drill);
+  const withDays = closed.filter(w => w.days_open != null);
+  const avg = withDays.length ? Math.round(withDays.reduce((n, w) => n + w.days_open, 0) / withDays.length) : null;
+  return card('Closed this drill', closed.length ? `${closed.length} closed${avg != null ? ` · ${avg} day${avg === 1 ? '' : 's'} open on average` : ''}` : '', closed.length ? `<div class="list">${closed.map(w => `
+    <div class="list-row"><div class="list-t">${esc(w.wo_number ? w.wo_number + ' · ' : '')}${esc(w.title)}</div><div class="list-r">${esc(w.shop_name)}${w.days_open != null ? ` · ${w.days_open}d` : ''}</div>
+      <div class="list-s">${w.closing_note ? '“' + esc(w.closing_note) + '”' : 'no closing note'}${w.closed_by ? ' — ' + esc(w.closed_by) : ''}${w.closed_day ? ' · ' + esc(w.closed_day) : ''}</div></div>`).join('')}</div>` : '<div class="empty">No work orders closed during this drill yet.</div>');
+}
+
+function periodCardHTML(pbp, memberTotal) {
+  const b = pbp.map(p => ({ label: p.label, value: p.present, display: p.marked ? pct(p.present, p.marked) + '%' : '—', title: `${p.present} present of ${p.marked} marked (${p.total} members)`, x: `<b>${esc(p.label)}</b>` }));
+  return card('At drill by period', 'present share of marked · unmarked shops pull it down', colChart(b));
+}
+
 /* ── squadron view ─────────────────────────────────────────────────────── */
 function squadronHTML() {
   const S = D.squadron;
   const allMembers = D.shops.flatMap(s => s.members);
   let body;
   if (filter === 'work_orders') {
-    body = `<div class="card"><div class="card-hd"><div class="card-title">Work orders · all shops</div><div class="card-meta">${woSummaryHTML(S.work_orders)}</div></div>${woListHTML(D.shops.flatMap(s => s.work_orders), { withShop: true })}</div>`;
+    const wos = D.shops.flatMap(s => s.work_orders);
+    body = `${closedWosCardHTML(wos)}<div class="card"><div class="card-hd"><div class="card-title">Work orders · all shops</div><div class="card-meta">${woSummaryHTML(S.work_orders)}</div></div>${woListHTML(wos, { withShop: true })}</div>`;
   } else if (filter === 'attendance') {
-    body = `<div class="grid2">
+    body = `${periodCardHTML(S.present_by_period, S.members.total)}<div class="grid2">
       <div class="card"><div class="card-hd"><div class="card-title">Attendance marked by shop</div><div class="card-meta">${S.attendance.marked} of ${S.attendance.total} periods</div></div>
         <div class="bars">${D.shops.map(s => barRow(s.name, s.attendance.marked, s.attendance.total, { onclick: `setView(${s.id})` })).join('')}</div></div>
       <div class="card"><div class="card-hd"><div class="card-title">Not at drill</div><div class="card-meta">${S.away.length} of ${S.members.total} members</div></div>${awayListHTML(S.away)}</div>
@@ -463,13 +690,18 @@ function squadronHTML() {
           <div class="bars">${D.categories.filter(c => catCnt(S.tasks, c.code).total > 0).map(c => { const k = catCnt(S.tasks, c.code); return barRow(c.label, k.done, k.total, { onclick: `setFilter('${c.code}')` }); }).join('')}</div></div>`
       : '';
     const right = `${byCat}<div class="card"><div class="card-hd"><div class="card-title">Outstanding${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">grouped by task · critical first</div></div>${outstandingHTML(allMembers, { withShop: true })}</div>`;
-    body = `<div class="grid2"><div>${left}</div><div>${right}</div></div>`;
+    const insights = filter === 'all' ? `
+      <div class="sec-lbl" style="margin-top:.2rem">Insights</div>
+      <div class="grid3">${changeCardHTML()}${timelineCardHTML(null)}${criticalCardHTML()}</div>
+      <div class="grid3" style="margin-top:.9rem">${flaggedCardHTML(allMembers, true)}${medicalCardHTML(allMembers, true)}${adoptionCardHTML(null)}</div>
+      <div style="margin-top:.9rem">${trendCardHTML(null)}</div>` : '';
+    body = `<div class="grid2"><div>${left}</div><div>${right}</div></div>${insights}`;
   }
   return `<div class="head">
       <div class="h1">Squadron<small>${esc(D.cycle.name)} · ${D.shops.length} shops · ${S.members.total} members</small></div>
       ${chipsHTML(S.tasks, S.work_orders, S.attendance)}
     </div>
-    ${tilesHTML(S.tasks, S.members, S.work_orders, S.attendance, S.away.length)}
+    ${tilesHTML(S.tasks, S.members, S.work_orders, S.attendance, S.away.length, D.prior ? D.prior.pct : null)}
     ${body}`;
 }
 
@@ -479,21 +711,25 @@ function shopHTML(s) {
   const away = s.members.filter(m => !m.present);
   let body;
   if (filter === 'work_orders') {
-    body = `<div class="card"><div class="card-hd"><div class="card-title">Work orders</div><div class="card-meta">${woSummaryHTML(s.work_order_counts)}</div></div>${woListHTML(s.work_orders, { withShop: false })}</div>`;
+    body = `${closedWosCardHTML(s.work_orders)}<div class="card"><div class="card-hd"><div class="card-title">Work orders</div><div class="card-meta">${woSummaryHTML(s.work_order_counts)}</div></div>${woListHTML(s.work_orders, { withShop: false })}</div>`;
   } else if (filter === 'attendance') {
-    body = `<div class="card"><div class="card-hd"><div class="card-title">Weekend attendance</div><div class="card-meta">${s.attendance.marked} of ${s.attendance.total} periods marked</div></div>${attGridHTML(s)}</div>
+    body = `${periodCardHTML(s.present_by_period, s.member_count)}<div class="card"><div class="card-hd"><div class="card-title">Weekend attendance</div><div class="card-meta">${s.attendance.marked} of ${s.attendance.total} periods marked</div></div>${attGridHTML(s)}</div>
       <div class="card"><div class="card-hd"><div class="card-title">Not at drill</div><div class="card-meta">${away.length} of ${s.member_count}</div></div>${awayListHTML(away.map(m => ({ ...m, shop_name: s.name })))}</div>`;
   } else {
     const cats = D.categories.filter(c => catCnt(s.tasks, c.code).total > 0);
     const catCard = `<div class="card"><div class="card-hd"><div class="card-title">By category</div><div class="card-meta">${scope === 'present' ? 'members at drill' : 'all members'}</div></div>
       <div class="bars">${cats.map(c => { const k = catCnt(s.tasks, c.code); return barRow(c.label, k.done, k.total, { onclick: `setFilter('${c.code}')` }); }).join('') || '<div class="empty">No tasks this drill.</div>'}</div></div>`;
-    body = `${catCard}<div class="card"><div class="card-hd"><div class="card-title">Members${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">outstanding work per member · critical outlined</div></div>${membersHTML(s)}</div>`;
+    const insights = filter === 'all' ? `
+      <div class="sec-lbl" style="margin-top:.2rem">Insights</div>
+      <div class="grid3">${timelineCardHTML(s.id)}${trendCardHTML(s)}${adoptionCardHTML(s)}</div>
+      <div class="grid3" style="margin-top:.9rem">${flaggedCardHTML(s.members, false)}${medicalCardHTML(s.members, false)}${closedWosCardHTML(s.work_orders)}</div>` : '';
+    body = `${catCard}<div class="card"><div class="card-hd"><div class="card-title">Members${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">outstanding work per member · critical outlined</div></div>${membersHTML(s)}</div>${insights}`;
   }
   return `<div class="head">
       <div class="h1">${esc(s.name)}<small>${sups ? 'Supervisor' + (s.supervisors.length > 1 ? 's' : '') + ': ' + esc(sups) + ' · ' : ''}${s.member_count} members</small></div>
       ${chipsHTML(s.tasks, s.work_order_counts, s.attendance)}
     </div>
-    ${tilesHTML(s.tasks, { total: s.member_count, present: s.present_count }, s.work_order_counts, s.attendance, away.length)}
+    ${tilesHTML(s.tasks, { total: s.member_count, present: s.present_count }, s.work_order_counts, s.attendance, away.length, D.prior ? D.prior.shops[s.id].pct : null)}
     ${body}`;
 }
 
@@ -534,8 +770,11 @@ document.addEventListener('keydown', (e) => {
   if (!D) { if (e.key === 'r' || e.key === 'R') load(); return; }
   const order = ['squadron'].concat(D.shops.map(s => s.id));
   const i = order.findIndex(v => String(v) === String(view));
-  if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); setView(order[(i + 1) % order.length]); }
-  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); setView(order[(i - 1 + order.length) % order.length]); }
+  const stage = $('stage');
+  if (e.key === 'ArrowRight') { e.preventDefault(); setView(order[(i + 1) % order.length]); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); setView(order[(i - 1 + order.length) % order.length]); }
+  else if (e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); stage.scrollBy({ top: stage.clientHeight * (e.key === 'ArrowDown' ? .35 : .85), behavior: 'smooth' }); }
+  else if (e.key === 'PageUp' || e.key === 'ArrowUp') { e.preventDefault(); stage.scrollBy({ top: -stage.clientHeight * (e.key === 'ArrowUp' ? .35 : .85), behavior: 'smooth' }); }
   else if (e.key === 'Home') setView('squadron');
   else if (/^[0-9]$/.test(e.key)) { const v = order[Number(e.key)]; if (v !== undefined) setView(v); }
   else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
