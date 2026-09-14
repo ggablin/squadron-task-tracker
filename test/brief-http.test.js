@@ -84,7 +84,19 @@ async function seedWorld() {
   await pool.query(
     `INSERT INTO attendance (uta_cycle_id, member_id, shop_id, period, status)
      VALUES ($1,$2,$3,1,'ruta_excused'), ($1,$2,$3,2,'ruta_excused')`, [live, b, shop]);
-  return { live, shop, a, b };
+  // The archived drill finished 1 of 2 → prior 50%. A status log closes the WO
+  // on the Saturday of the live drill (stored UTC; 14:00Z is 10:00 local).
+  await task(old, a, 'Old done', true);
+  const { rows: [{ id: wo }] } = await pool.query(`SELECT id FROM shop_events WHERE title = 'Fix the chiller'`);
+  await pool.query(`UPDATE shop_events SET status = 'complete', created_at = '2026-09-01 12:00:00' WHERE id = $1`, [wo]);
+  await pool.query(
+    `INSERT INTO shop_event_status_log (shop_event_id, status, note, updated_by_id, created_at)
+     VALUES ($1,'complete','Chiller back on line',$2,'2026-09-12 14:00:00')`, [wo, a]);
+  // a ticked Cyber Awareness on Saturday morning local time; a signed in on the drill, b never.
+  await pool.query(`UPDATE task_completions SET updated_at = '2026-09-12 13:30:00'`);
+  await pool.query(`UPDATE members SET last_login_at = '2026-09-12 12:00:00' WHERE id = $1`, [a]);
+  await pool.query(`UPDATE members SET last_login_at = NULL, must_change_password = true WHERE id = $1`, [b]);
+  return { live, shop, a, b, wo };
 }
 
 test('the brief is leadership only, as an API and as a page', async () => {
@@ -117,7 +129,25 @@ test('the payload reads the live cycle and agrees with the Squadron rollups', as
   assert.deepStrictEqual(hvac.tasks.all, { total: 2, done: 1, critical: 2, critical_done: 1 });
   assert.deepStrictEqual(hvac.tasks.present, { total: 1, done: 1, critical: 1, critical_done: 1 });
   assert.deepStrictEqual(hvac.work_orders.map(w => w.title), ['Fix the chiller'], 'schedule rows are not work orders');
-  assert.deepStrictEqual(hvac.work_order_counts, { open: 0, in_progress: 1, complete: 0, total: 1 });
+  assert.deepStrictEqual(hvac.work_order_counts, { open: 0, in_progress: 0, complete: 1, total: 1 });
+
+  // Insight data: prior drill, timeline, closed work order, sign-in state.
+  assert.strictEqual(b.prior.name, 'Aug 2026');
+  assert.strictEqual(b.prior.pct, 50);
+  assert.strictEqual(b.history.length, 1);
+  const satAm = b.timeline.find(t => t.key === 'p1');
+  assert.strictEqual(satAm.label, 'Sat AM');
+  assert.strictEqual(satAm.count, 1, '13:30Z on 12 Sep is 09:30 local, Saturday AM');
+  const chiller = hvac.work_orders[0];
+  assert.strictEqual(chiller.closed_this_drill, true);
+  assert.strictEqual(chiller.closing_note, 'Chiller back on line');
+  assert.strictEqual(chiller.days_open, 11);
+  // a signed in on the drill; leadtest just signed in to make this request; b
+  // and suptest have no login recorded.
+  assert.deepStrictEqual(hvac.signin, { never: 2, stale: 0, this_cycle: 2 });
+  // Only b is marked (RUTA), so period 1 shows 0 present of 1 marked; the three
+  // unmarked members count as present overall but not in the per-period bars.
+  assert.deepStrictEqual(hvac.present_by_period[0], { period: 1, present: 0, marked: 1, total: 4 });
   assert.deepStrictEqual(hvac.attendance, { marked: 2, total: 16 });
   assert.deepStrictEqual(b.squadron.away.map(m => m.id), [w.b]);
   assert.ok(!JSON.stringify(b).includes('Old thing'), 'the archived cycle is not in the brief');

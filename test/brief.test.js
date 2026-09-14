@@ -5,7 +5,7 @@
 // numbers for one thing.
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { shapeBrief, WO_STATUSES } = require('../lib/brief');
+const { shapeBrief, shapeHistory, shapeTimeline, WO_STATUSES, HISTORY_CYCLES } = require('../lib/brief');
 
 const cycle = { id: 7, name: 'Sep 2026 UTA', status: 'live', start_date: '2026-09-12', end_date: '2026-09-13', period_count: 4 };
 const shops = [{ id: 1, name: 'Structures' }, { id: 2, name: 'HVAC' }];
@@ -119,4 +119,91 @@ test('the squadron away list names shop and reason, and marks outside the drill 
 
 test('work order statuses are the three the schema allows', () => {
   assert.deepStrictEqual(WO_STATUSES, ['open', 'in_progress', 'complete']);
+});
+
+// ── the insight data ────────────────────────────────────────────────────────
+
+test('history keeps the newest archived drills, per shop, and prior is the latest', () => {
+  const rows = [];
+  for (let i = 1; i <= HISTORY_CYCLES + 2; i++) {
+    rows.push({ cycle_id: 100 + i, name: 'Cycle ' + i, created_at: new Date(2026, 0, i).toISOString(), shop_id: 1, total: 10, done: i });
+    rows.push({ cycle_id: 100 + i, name: 'Cycle ' + i, created_at: new Date(2026, 0, i).toISOString(), shop_id: 2, total: 5, done: 5 });
+  }
+  const h = shapeHistory(rows, shops);
+  assert.strictEqual(h.length, HISTORY_CYCLES);
+  assert.strictEqual(h[0].name, 'Cycle 8', 'newest first');
+  assert.strictEqual(h[0].shops[1].pct, 80);
+  assert.strictEqual(h[0].shops[2].pct, 100);
+  assert.strictEqual(h[0].pct, Math.round(13 / 15 * 100));
+  const b = shapeBrief({ cycle, shops, members, categories, tasks, workOrders, marks, history: rows });
+  assert.strictEqual(b.prior.name, 'Cycle 8');
+  assert.strictEqual(b.prior.shops[1].pct, 80);
+  // A shop with no rows in a past cycle is present with null, not missing.
+  const one = shapeHistory([rows[0]], shops);
+  assert.deepStrictEqual(one[0].shops[2], { total: 0, done: 0, pct: null });
+});
+
+test('the timeline buckets ticks by drill period in local time, before and after the drill', () => {
+  const periods = [
+    { period: 1, day: 'Saturday', half: 'AM' }, { period: 2, day: 'Saturday', half: 'PM' },
+    { period: 3, day: 'Sunday', half: 'AM' },   { period: 4, day: 'Sunday', half: 'PM' },
+  ];
+  const ticks = [
+    { shop_id: 1, day: '2026-09-01', hour: 20 },   // weeks before
+    { shop_id: 1, day: '2026-09-12', hour: 8 },    // Sat AM
+    { shop_id: 2, day: '2026-09-12', hour: 13 },   // Sat PM (the split is noon)
+    { shop_id: 1, day: '2026-09-13', hour: 15 },   // Sun PM
+    { shop_id: 1, day: '2026-09-14', hour: 9 },    // the Monday after
+  ];
+  const t = shapeTimeline(ticks, cycle, periods, shops);
+  assert.deepStrictEqual(t.map(b => [b.key, b.count]), [['before', 1], ['p1', 1], ['p2', 1], ['p3', 0], ['p4', 1], ['after', 1]]);
+  assert.strictEqual(t[1].label, 'Sat AM');
+  assert.deepStrictEqual(t[2].by_shop, { 1: 0, 2: 1 });
+  // An undated cycle collapses to a single "during" bucket rather than guessing.
+  const u = shapeTimeline(ticks, { ...cycle, start_date: null, end_date: null }, periods, shops);
+  assert.deepStrictEqual(u.map(b => [b.key, b.count]), [['before', 0], ['during', 5], ['after', 0]]);
+});
+
+test('sign-in state per member rolls up per shop and squadron', () => {
+  const mem = members.map(m => ({ ...m, activated: true, last_login_day: '2026-09-12' }));
+  mem[0].activated = false;                    // Ebbert never changed his password
+  mem[1].last_login_day = '2026-08-30';         // Becerra: before this drill opened
+  mem[2].last_login_day = null;                 // DeRose: activated but never seen
+  const b = shapeBrief({ cycle, shops, members: mem, categories, tasks, workOrders, marks });
+  const st = b.shops.find(s => s.name === 'Structures');
+  assert.deepStrictEqual(st.members.map(m => m.signin), ['never', 'stale', 'never']);
+  assert.deepStrictEqual(st.signin, { never: 2, stale: 1, this_cycle: 0 });
+  assert.deepStrictEqual(b.squadron.signin, { never: 2, stale: 1, this_cycle: 1 });
+});
+
+test('attendance by period counts present marks against marked and members', () => {
+  const b = brief();
+  const st = b.shops.find(s => s.name === 'Structures');
+  // Period 1: Becerra present, DeRose away → 1 present of 2 marked, 3 members.
+  assert.deepStrictEqual(st.present_by_period[0], { period: 1, present: 1, marked: 2, total: 3 });
+  assert.deepStrictEqual(st.present_by_period[1], { period: 2, present: 0, marked: 1, total: 3 });
+  assert.strictEqual(b.squadron.present_by_period[0].label, 'Sat AM');
+  assert.deepStrictEqual([b.squadron.present_by_period[0].present, b.squadron.present_by_period[0].marked, b.squadron.present_by_period[0].total], [1, 2, 4]);
+});
+
+test('the work-order log yields closed-this-drill, the closing note, and days open', () => {
+  const wos = workOrders.map(w => ({ ...w, created_day: '2026-09-01' }));
+  const woLog = [
+    { shop_event_id: 1, status: 'in_progress', note: 'started', day: '2026-09-12', time: '08:10', rank: 'TSgt', last_name: 'Ebbert' },
+    { shop_event_id: 1, status: 'complete', note: 'Door hung and tested', day: '2026-09-12', time: '10:40', rank: 'TSgt', last_name: 'Ebbert' },
+    { shop_event_id: 2, status: 'in_progress', note: 'primed', day: '2026-09-13', time: '09:00', rank: null, last_name: null },
+  ];
+  const b = shapeBrief({ cycle, shops, members, categories, tasks, workOrders: wos, marks, woLog });
+  const st = b.shops.find(s => s.name === 'Structures');
+  const door = st.work_orders.find(w => w.title === 'Fix door'), paint = st.work_orders.find(w => w.title === 'Paint bay');
+  assert.strictEqual(door.closed_this_drill, true);
+  assert.strictEqual(door.closing_note, 'Door hung and tested');
+  assert.strictEqual(door.closed_by, 'TSgt Ebbert');
+  assert.strictEqual(door.days_open, 11);
+  assert.strictEqual(door.log.length, 2);
+  assert.strictEqual(paint.closed_this_drill, false);
+  assert.strictEqual(paint.log[0].by, null);
+  // Complete with no log at all (legacy rows) is not claimed as closed this drill.
+  const legacy = shapeBrief({ cycle, shops, members, categories, tasks, workOrders: wos, marks, woLog: [] });
+  assert.strictEqual(legacy.shops[0].work_orders.find(w => w.title === 'Fix door').closed_this_drill, false);
 });
