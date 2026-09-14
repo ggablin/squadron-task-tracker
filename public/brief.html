@@ -722,8 +722,10 @@ function shopHTML(s) {
     const insights = filter === 'all' ? `
       <div class="sec-lbl" style="margin-top:.2rem">Insights</div>
       <div class="grid3">${timelineCardHTML(s.id)}${trendCardHTML(s)}${adoptionCardHTML(s)}</div>
-      <div class="grid3" style="margin-top:.9rem">${flaggedCardHTML(s.members, false)}${medicalCardHTML(s.members, false)}${closedWosCardHTML(s.work_orders)}</div>` : '';
-    body = `${catCard}<div class="card"><div class="card-hd"><div class="card-title">Members${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">outstanding work per member · critical outlined</div></div>${membersHTML(s)}</div>${insights}`;
+      <div class="grid3" style="margin-top:.9rem;margin-bottom:1.2rem">${flaggedCardHTML(s.members, false)}${medicalCardHTML(s.members, false)}${closedWosCardHTML(s.work_orders)}</div>` : '';
+    // Insights sit above the member table: the room reads the shop's shape
+    // first, then walks the names.
+    body = `${catCard}${insights}<div class="sec-lbl" style="margin-top:.2rem">Members</div><div class="card"><div class="card-hd"><div class="card-title">Members${filter !== 'all' ? ' · ' + esc(catLabel(filter)) : ''}</div><div class="card-meta">outstanding work per member · critical outlined</div></div>${membersHTML(s)}</div>`;
   }
   return `<div class="head">
       <div class="h1">${esc(s.name)}<small>${sups ? 'Supervisor' + (s.supervisors.length > 1 ? 's' : '') + ': ' + esc(sups) + ' · ' : ''}${s.member_count} members</small></div>
