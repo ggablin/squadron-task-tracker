@@ -46,6 +46,7 @@ const records = require('./lib/records');
 const brief = require('./lib/brief');
 const roster = require('./lib/roster');
 const activity = require('./lib/activity');
+const chat = require('./lib/chat');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -358,7 +359,7 @@ app.ready = (async () => {
     // it absent; every later boot is a no-op, so rows an admin deletes stay
     // gone. schema.sql carries the twin CREATEs, empty, for tests and seed.js.
     for (const [name, mod] of [['additional_duties', duties], ['drill_dates', drillCal],
-                               ['calendar_events', calEvents]]) {
+                               ['calendar_events', calEvents], ['channels', chat]]) {
       const r = await mod.ensureTable(pool);
       if (r.created) console.log(`Created ${name} and seeded ${r.seeded} rows`);
     }

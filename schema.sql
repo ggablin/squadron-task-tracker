@@ -49,6 +49,46 @@ CREATE TABLE IF NOT EXISTS members (
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
+-- ── Chat ──────────────────────────────────────────────────────────────────
+-- Squadron-wide, leadership-only, and one per shop. Not user-creatable: seeded
+-- once at table-creation time in lib/chat.js's ensureTable, from the live
+-- shops table plus two literal rows. A shop added later needs a manual insert,
+-- the same way everything else about a new shop is manual today.
+CREATE TABLE IF NOT EXISTS channels (
+  id       SERIAL PRIMARY KEY,
+  type     VARCHAR(20) NOT NULL CHECK (type IN ('squadron','leadership','shop')),
+  shop_id  INTEGER REFERENCES shops(id),
+  name     VARCHAR(100) NOT NULL,
+  CHECK ((type = 'shop') = (shop_id IS NOT NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS channels_shop_key
+  ON channels (shop_id) WHERE shop_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS channels_singleton_key
+  ON channels (type) WHERE type IN ('squadron','leadership');
+
+-- hidden_at IS NULL means visible, same convention as notifications.read_at.
+-- A hidden row is never deleted, so who hid what and when is always answerable.
+CREATE TABLE IF NOT EXISTS messages (
+  id           SERIAL PRIMARY KEY,
+  channel_id   INTEGER NOT NULL REFERENCES channels(id),
+  author_id    INTEGER NOT NULL REFERENCES members(id),
+  body         VARCHAR(2000) NOT NULL,
+  created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+  hidden_at    TIMESTAMP,
+  hidden_by_id INTEGER REFERENCES members(id)
+);
+CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages (channel_id, created_at);
+
+-- Per-member-per-channel read tracking, independent of the notifications
+-- table's read_at — chat's unread state is a different concern from a
+-- one-shot system alert and deliberately doesn't share that table.
+CREATE TABLE IF NOT EXISTS channel_reads (
+  member_id    INTEGER NOT NULL REFERENCES members(id),
+  channel_id   INTEGER NOT NULL REFERENCES channels(id),
+  last_read_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (member_id, channel_id)
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
   id             SERIAL PRIMARY KEY,
   uta_cycle_id   INTEGER REFERENCES uta_cycles(id),
