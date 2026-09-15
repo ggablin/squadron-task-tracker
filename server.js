@@ -978,6 +978,17 @@ app.delete('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded,
   } catch (err) { dutyError(err, res); }
 });
 
+// ── Chat ──────────────────────────────────────────────────────────────────
+app.get('/api/chat/channels', requireAuth, async (req, res) => {
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    res.json({ channels: await chat.listChannels(pool, member) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── The calendar (Resources → Calendar) ──────────────────────────────────────
 // One read endpoint for the whole year: merging two tables and regrouping them
 // by month in the browser would duplicate buildCalendar in a second language.
