@@ -28,8 +28,7 @@ test.after(async () => { await new Promise(r => server.close(r)); });
 
 test('seed-on-create: two literal channels plus one per shop, exactly once', async () => {
   await pool.query('DROP TABLE IF EXISTS channel_reads, messages, channels CASCADE');
-  await pool.query(`DROP TYPE IF EXISTS channels CASCADE`);
-  await pool.query(`DELETE FROM members`);
+  await pool.query(`UPDATE members SET shop_id = NULL`);
   await pool.query(`DELETE FROM shops`);
   await pool.query(`INSERT INTO shops (name) VALUES ('Structures'), ('EA')`);
 
@@ -51,7 +50,6 @@ test('seed-on-create: two literal channels plus one per shop, exactly once', asy
 
 test('at most one squadron channel and one leadership channel', async () => {
   await pool.query('DROP TABLE IF EXISTS channel_reads, messages, channels CASCADE');
-  await pool.query(`DROP TYPE IF EXISTS channels CASCADE`);
   await chat.ensureTable(pool);
   await assert.rejects(
     () => pool.query(`INSERT INTO channels (type, name) VALUES ('squadron', 'Squadron 2')`),
@@ -60,7 +58,6 @@ test('at most one squadron channel and one leadership channel', async () => {
 
 test('a shop channel requires a shop_id, and a non-shop channel forbids one', async () => {
   await pool.query('DROP TABLE IF EXISTS channel_reads, messages, channels CASCADE');
-  await pool.query(`DROP TYPE IF EXISTS channels CASCADE`);
   await chat.ensureTable(pool);
   await assert.rejects(
     () => pool.query(`INSERT INTO channels (type, name) VALUES ('shop', 'Orphan')`),
