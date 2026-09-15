@@ -46,6 +46,7 @@ const records = require('./lib/records');
 const brief = require('./lib/brief');
 const roster = require('./lib/roster');
 const activity = require('./lib/activity');
+const chat = require('./lib/chat');
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -358,7 +359,7 @@ app.ready = (async () => {
     // it absent; every later boot is a no-op, so rows an admin deletes stay
     // gone. schema.sql carries the twin CREATEs, empty, for tests and seed.js.
     for (const [name, mod] of [['additional_duties', duties], ['drill_dates', drillCal],
-                               ['calendar_events', calEvents]]) {
+                               ['calendar_events', calEvents], ['channels', chat]]) {
       const r = await mod.ensureTable(pool);
       if (r.created) console.log(`Created ${name} and seeded ${r.seeded} rows`);
     }
@@ -566,6 +567,16 @@ async function notify(memberIds, { type, title, body = null, link = null }) {
   } catch (err) {
     console.error('notify() failed:', err.message);
   }
+}
+
+// Mirrors notify()'s shape exactly: never awaited in the request path, and a
+// push failure is caught and logged, never allowed to fail the message post.
+function pushChatMessage(recipientIds, payload) {
+  if (!recipientIds.length) return;
+  setImmediate(() => {
+    require('./lib/push').pushToMembers(pool, recipientIds, payload)
+      .catch(e => console.error('chat push failed:', e.message));
+  });
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -975,6 +986,93 @@ app.delete('/api/duties/:id', requireAuth, requireRosterAdmin, requireOnboarded,
     if (!await duties.remove(pool, id)) return res.status(404).json({ error: 'That duty no longer exists' });
     res.status(204).end();
   } catch (err) { dutyError(err, res); }
+});
+
+// ── Chat ──────────────────────────────────────────────────────────────────
+app.get('/api/chat/channels', requireAuth, async (req, res) => {
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    res.json({ channels: await chat.listChannels(pool, member) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/chat/channels/:id/messages', requireAuth, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid channel id' });
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    const channel = await chat.getChannel(pool, id);
+    if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
+    if (!chat.canAccess(member, channel)) return res.status(403).json({ error: 'Forbidden' });
+    const since = req.query.since ? reqId(req.query.since) : null;
+    if (req.query.since && !since) return res.status(400).json({ error: 'Invalid since id' });
+    const messages = await chat.listMessages(pool, id, { since, canSeeHidden: chat.canHide(member) });
+    res.json({ messages });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/chat/channels/:id/messages', requireAuth, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid channel id' });
+  const v = chat.validateBody(req.body && req.body.body);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    const channel = await chat.getChannel(pool, id);
+    if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
+    if (!chat.canPost(member, channel)) return res.status(403).json({ error: 'Forbidden' });
+    const message = await chat.postMessage(pool, id, member.id, v.value);
+    try {
+      const recipients = await chat.recipientsFor(pool, channel, member.id);
+      pushChatMessage(recipients, {
+        title: channel.name,
+        body: v.value.slice(0, 120),
+        url: `/?view=chat&channel=${id}`,
+        tag: `chat-${id}`,
+      });
+    } catch (pushErr) {
+      console.error('chat push setup failed:', pushErr.message);
+    }
+    res.status(201).json(message);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/chat/channels/:id/read', requireAuth, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid channel id' });
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    const channel = await chat.getChannel(pool, id);
+    if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
+    if (!chat.canAccess(member, channel)) return res.status(403).json({ error: 'Forbidden' });
+    await chat.markRead(pool, member.id, id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/chat/messages/:id/hide', requireAuth, requireOnboarded, requireRole('leadership'), async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid message id' });
+  try {
+    const result = await chat.hideMessage(pool, id, req.session.memberId);
+    if (!result.found) return res.status(404).json({ error: 'That message no longer exists' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ── The calendar (Resources → Calendar) ──────────────────────────────────────

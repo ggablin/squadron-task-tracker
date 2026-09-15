@@ -108,6 +108,7 @@
   <script src="/duties.js" defer></script>
   <script src="/calendar.js" defer></script>
   <script src="/promotion-package.js" defer></script>
+  <script src="/chat.js" defer></script>
   <style>
     /* Self-hosted General Sans — survives base-network blocking of api.fontshare.com */
     @font-face { font-family: 'General Sans'; src: url('/fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
@@ -2544,6 +2545,43 @@
       .cal-when { min-width: 84px; }
     }
 
+    /* ── Chat ────────────────────────────────────────────────────────────────
+       Follows the existing design-token vocabulary from design.css (--cream,
+       --bm, --border, --urgent, --t2, --t3-nav-text, --text, --bg, --rs).
+       Row/badge/button dimensions match the app's 44px touch-target floor and
+       the font-size/weight/letter-spacing used by the member-row and duty-row
+       patterns. The .chat-msg-rank rank chip follows the same rank-chip
+       pattern as design.css's .member-row .rk.
+       ──────────────────────────────────────────────────────────────────────── */
+    .chat-layout { display: flex; gap: 12px; height: calc(100vh - 180px); min-height: 320px; }
+    .chat-channels { width: 220px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); }
+    .chat-channel-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 13.5px; color: var(--text); }
+    .chat-channel-row:hover { background: var(--cream); }
+    .chat-channel-row.active { background: var(--cream); font-weight: 600; }
+    .chat-unread-badge { background: var(--urgent); color: var(--bg); border-radius: 999px; font-size: 11px; font-weight: 600; padding: 1px 7px; min-width: 18px; text-align: center; }
+    .chat-thread { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .chat-thread-hd { font-size: 14px; font-weight: 700; letter-spacing: -.01em; padding-bottom: 8px; border-bottom: 1px solid var(--bm); margin-bottom: 8px; }
+    .chat-msg-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+    .chat-msg { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 8px 10px; background: var(--cream); border-radius: var(--rs); }
+    .chat-msg-meta { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+    .chat-msg-author { font-size: 13px; font-weight: 600; color: var(--text); }
+    .chat-msg-rank { font-size: 10.5px; font-weight: 600; color: var(--t2); background: var(--bg); border-radius: 12px; padding: 2px 7px; }
+    .chat-msg-time { font-size: 11px; color: var(--t3-nav-text); margin-left: auto; }
+    .chat-msg-body { font-size: 13.5px; line-height: 1.45; }
+    .chat-msg-hidden { padding: 8px 10px; color: var(--t3-nav-text); font-size: 13px; font-style: italic; }
+    .chat-composer { display: flex; gap: 8px; margin-top: 10px; }
+    .chat-composer input { flex: 1; min-height: 44px; padding: 0 13px; border: 2px solid var(--border); border-radius: var(--rs); font-size: 14px; color: var(--text); background: var(--bg); }
+    .chat-composer input:focus { border-color: var(--text); outline: none; }
+    .chat-composer button { min-height: 44px; min-width: 64px; border-radius: var(--rs); border: 2px solid var(--text); background: var(--text); color: var(--bg); font-size: 13px; font-weight: 600; cursor: pointer; }
+    .chat-composer button:hover { opacity: .88; }
+    .chat-hide { min-width: 44px; min-height: 44px; background: none; border: none; color: var(--t3-nav-text); cursor: pointer; flex-shrink: 0; }
+    .chat-hide:hover { color: var(--urgent); }
+    .chat-hide svg { width: 15px; height: 15px; }
+    @media (max-width: 480px) {
+      .chat-layout { flex-direction: column; height: auto; }
+      .chat-channels { width: 100%; max-height: 160px; border-right: none; border-bottom: 1px solid var(--border); }
+    }
+
     /* Category drill-in: category rows expand to task → who hasn't done it */
     .cat-row.drillable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
     /* Three children in a space-between row parked the numbers mid-card; the
@@ -2685,6 +2723,11 @@
       <button class="sb-item" data-view="resources" onclick="switchView(this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg>
         Resources
+      </button>
+      <button class="sb-item" data-view="chat" onclick="switchView(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        Chat
+        <span class="sb-badge" id="navb-chat" hidden></span>
       </button>
       <div class="sb-spacer"></div>
       <button class="theme-toggle notif-btn" onclick="toggleNotifPanel(event)" aria-label="Notifications" title="Notifications">
@@ -3887,6 +3930,12 @@
 
     </div><!-- /#view-resources -->
 
+    <!-- ═══ CHAT VIEW ═════════════════════════════ -->
+    <div id="view-chat" class="view">
+      <h1 class="vh">Chat</h1>
+      <div id="chat-host"><div class="skeleton"></div><div class="skeleton"></div></div>
+    </div><!-- /#view-chat -->
+
   </main>
 
   <!-- ═══ MOBILE NAV ══════════════════════════════ -->
@@ -3909,6 +3958,13 @@
     <button class="mob-btn" data-view="resources" onclick="switchView(this)">
       <span class="mob-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg></span>
       Resources
+    </button>
+    <button class="mob-btn" data-view="chat" onclick="switchView(this)">
+      <div class="mob-badge-wrap mob-ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <span class="mob-badge" id="navb-chat-m" hidden></span>
+      </div>
+      Chat
     </button>
   </nav>
 
@@ -4720,6 +4776,7 @@ async function doLogout() {
   // one of those scripts never loaded.
   if (window.dutiesInit && window.dutiesInit.reset) window.dutiesInit.reset();
   if (window.calendarInit && window.calendarInit.reset) window.calendarInit.reset();
+  if (window.chatInit && window.chatInit.reset) window.chatInit.reset();
   document.getElementById('app').style.display = 'none';
   showLogin();
 }
@@ -5306,6 +5363,7 @@ function updateNavBadges() {
   set('pillb-wo',    woCount);
   set('navb-tasks',   tasksLeft + woCount);
   set('navb-tasks-m', tasksLeft + woCount);
+  if (window.chatInit && window.chatInit.badgeCheck) window.chatInit.badgeCheck();
 }
 
 async function cycleTask(el, event) {
@@ -6704,6 +6762,7 @@ function switchView(btn) {
     supervisor: [viewedShop+' Shop',  'Supervisor View'],
     leadership: ['108th CES',         'Leadership View'],
     resources:  ['Resources',         'Calculators, forms, links, people & calendar'],
+    chat:       ['Chat',              'Squadron and shop channels'],
   };
   const [t, s] = titles[name] || ['',''];
   document.getElementById('mob-title').textContent  = t;
@@ -6726,6 +6785,7 @@ function switchView(btn) {
     loadActivity();
   }
   if (name === 'resources') { switchResPane('calc'); syncInstallCard(); }
+  if (name === 'chat') { window.chatInit && window.chatInit({ canHide: currentMember?.role === 'leadership' }); }
 }
 
 /* ══ Install to home screen ═══════════════════════════════════════════════
@@ -6942,7 +7002,7 @@ async function disablePush() {
    pane. Used by chat/newsletter links now, and by notification taps in Phase 2 —
    notifications.link already stores exactly these names. switchView() takes an
    ELEMENT, so hand it the same {dataset} shape onNotifClick() uses. */
-const DEEP_LINK_VIEWS = ['member', 'supervisor', 'leadership', 'resources'];
+const DEEP_LINK_VIEWS = ['member', 'supervisor', 'leadership', 'resources', 'chat'];
 
 function applyDeepLink(url) {
   const u = url || new URL(location.href);
