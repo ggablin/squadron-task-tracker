@@ -989,6 +989,58 @@ app.get('/api/chat/channels', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/chat/channels/:id/messages', requireAuth, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid channel id' });
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    const channel = await chat.getChannel(pool, id);
+    if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
+    if (!chat.canAccess(member, channel)) return res.status(403).json({ error: 'Forbidden' });
+    const since = req.query.since ? reqId(req.query.since) : null;
+    if (req.query.since && !since) return res.status(400).json({ error: 'Invalid since id' });
+    const messages = await chat.listMessages(pool, id, { since, canSeeHidden: chat.canHide(member) });
+    res.json({ messages });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/chat/channels/:id/messages', requireAuth, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid channel id' });
+  const v = chat.validateBody(req.body && req.body.body);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    const channel = await chat.getChannel(pool, id);
+    if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
+    if (!chat.canPost(member, channel)) return res.status(403).json({ error: 'Forbidden' });
+    const message = await chat.postMessage(pool, id, member.id, v.value);
+    res.status(201).json(message);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/chat/channels/:id/read', requireAuth, requireOnboarded, async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid channel id' });
+  try {
+    const member = { id: req.session.memberId, role: req.session.role, shopId: req.session.shopId };
+    const channel = await chat.getChannel(pool, id);
+    if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
+    if (!chat.canAccess(member, channel)) return res.status(403).json({ error: 'Forbidden' });
+    await chat.markRead(pool, member.id, id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── The calendar (Resources → Calendar) ──────────────────────────────────────
 // One read endpoint for the whole year: merging two tables and regrouping them
 // by month in the browser would duplicate buildCalendar in a second language.

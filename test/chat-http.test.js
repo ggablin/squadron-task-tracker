@@ -182,3 +182,109 @@ test('a shop channel requires a shop_id, and a non-shop channel forbids one', as
     () => pool.query(`INSERT INTO channels (type, shop_id, name) VALUES ('squadron', $1, 'Bad')`, [shop.id]),
     /violates check constraint/);
 });
+
+test('signed out: message routes are 401', async () => {
+  const ids = await seed();
+  for (const [m, p] of [
+    ['GET', `/api/chat/channels/${ids.shopACh}/messages`],
+    ['POST', `/api/chat/channels/${ids.shopACh}/messages`],
+    ['POST', `/api/chat/channels/${ids.shopACh}/read`],
+  ]) {
+    const body = m === 'GET' ? undefined : {};
+    assert.strictEqual((await api(m, p, null, body)).status, 401, `${m} ${p}`);
+  }
+});
+
+test('403: a shop-B member cannot read or post into shop-A\'s channel or the leadership channel', async () => {
+  const ids = await seed();
+  const memB = await login('mbtest');
+  assert.strictEqual((await api('GET', `/api/chat/channels/${ids.shopACh}/messages`, memB)).status, 403);
+  assert.strictEqual((await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, memB, { body: 'hi' })).status, 403);
+  assert.strictEqual((await api('GET', `/api/chat/channels/${ids.leadershipCh}/messages`, memB)).status, 403);
+  assert.strictEqual((await api('POST', `/api/chat/channels/${ids.leadershipCh}/messages`, memB, { body: 'hi' })).status, 403);
+});
+
+test('leadership can read and post into every channel, including a shop it is not in', async () => {
+  const ids = await seed();
+  const leader = await login('leadtest');
+  for (const ch of [ids.squadronCh, ids.leadershipCh, ids.shopACh, ids.shopBCh]) {
+    assert.strictEqual((await api('GET', `/api/chat/channels/${ch}/messages`, leader)).status, 200, `read ${ch}`);
+    assert.strictEqual((await api('POST', `/api/chat/channels/${ch}/messages`, leader, { body: 'hi' })).status, 201, `post ${ch}`);
+  }
+});
+
+test('post/list round-trip, ascending order, and a 400 on empty or oversized body', async () => {
+  const ids = await seed();
+  const memA = await login('matest');
+  let res = await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, memA, { body: '  first  ' });
+  assert.strictEqual(res.status, 201);
+  const first = await res.json();
+  assert.strictEqual(first.body, 'first', 'body is trimmed');
+
+  await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, memA, { body: 'second' });
+  const { messages } = await (await api('GET', `/api/chat/channels/${ids.shopACh}/messages`, memA)).json();
+  assert.deepStrictEqual(messages.map(m => m.body), ['first', 'second']);
+
+  assert.strictEqual((await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, memA, { body: '   ' })).status, 400);
+  assert.strictEqual((await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, memA, { body: 'x'.repeat(2001) })).status, 400);
+});
+
+test('?since= returns only messages after that id', async () => {
+  const ids = await seed();
+  const memA = await login('matest');
+  const a = await (await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, memA, { body: 'a' })).json();
+  await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, memA, { body: 'b' });
+  const { messages } = await (await api('GET', `/api/chat/channels/${ids.shopACh}/messages?since=${a.id}`, memA)).json();
+  assert.deepStrictEqual(messages.map(m => m.body), ['b']);
+});
+
+test('a hidden message is invisible to a member and redacted-but-visible to leadership', async () => {
+  const ids = await seed();
+  await pool.query(
+    `INSERT INTO messages (channel_id, author_id, body, hidden_at, hidden_by_id)
+     VALUES ($1, $2, 'secret', NOW(), $2)`, [ids.shopACh, ids.leaderId]);
+  const memA = await login('matest');
+  const { messages: forMember } = await (await api('GET', `/api/chat/channels/${ids.shopACh}/messages`, memA)).json();
+  assert.strictEqual(forMember.length, 0);
+  const leader = await login('leadtest');
+  const { messages: forLeader } = await (await api('GET', `/api/chat/channels/${ids.shopACh}/messages`, leader)).json();
+  assert.strictEqual(forLeader.length, 1);
+  assert.strictEqual(forLeader[0].hidden, true);
+  assert.strictEqual(forLeader[0].body, null, 'body is redacted even for leadership');
+  assert.ok(forLeader[0].author_rank, 'author_rank is present even on hidden messages');
+  assert.ok(forLeader[0].author_name, 'author_name is present even on hidden messages');
+});
+
+test('messages include author rank and name', async () => {
+  const ids = await seed();
+  await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, await login('matest'), { body: 'hello' });
+  const leader = await login('leadtest');
+  const { messages } = await (await api('GET', `/api/chat/channels/${ids.shopACh}/messages`, leader)).json();
+  assert.strictEqual(messages[0].author_rank, 'SrA');
+  assert.strictEqual(messages[0].author_name, 'matest');
+});
+
+test('marking read updates last_read_at and clears the unread count', async () => {
+  const ids = await seed();
+  const memA = await login('matest');
+  await pool.query(
+    `INSERT INTO messages (channel_id, author_id, body) VALUES ($1, $2, 'hi')`,
+    [ids.shopACh, ids.leaderId]);
+  let list = await (await api('GET', '/api/chat/channels', memA)).json();
+  assert.strictEqual(list.channels.find(c => c.id === ids.shopACh).unread_count, 1);
+
+  assert.strictEqual((await api('POST', `/api/chat/channels/${ids.shopACh}/read`, memA)).status, 200);
+  list = await (await api('GET', '/api/chat/channels', memA)).json();
+  assert.strictEqual(list.channels.find(c => c.id === ids.shopACh).unread_count, 0);
+
+  // Reads twice without error (upsert, not insert).
+  assert.strictEqual((await api('POST', `/api/chat/channels/${ids.shopACh}/read`, memA)).status, 200);
+});
+
+test('an unknown channel id is 404 on read and list, 403 is not confused with it', async () => {
+  await seed();
+  const memA = await login('matest');
+  assert.strictEqual((await api('GET', '/api/chat/channels/999999/messages', memA)).status, 404);
+  assert.strictEqual((await api('POST', '/api/chat/channels/999999/messages', memA, { body: 'x' })).status, 404);
+  assert.strictEqual((await api('GET', '/api/chat/channels/abc/messages', memA)).status, 400);
+});
