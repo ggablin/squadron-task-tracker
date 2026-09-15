@@ -81,7 +81,6 @@
     messages = [];
     messagesLoaded = false;
     renderChannels();
-    renderThread();
     await loadMessages();
     await fetch(`/api/chat/channels/${id}/read`, { method: 'POST' }).catch(() => {});
     await loadChannels(); // picks up the now-cleared unread badge
