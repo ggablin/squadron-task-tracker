@@ -1028,13 +1028,17 @@ app.post('/api/chat/channels/:id/messages', requireAuth, requireOnboarded, async
     if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
     if (!chat.canPost(member, channel)) return res.status(403).json({ error: 'Forbidden' });
     const message = await chat.postMessage(pool, id, member.id, v.value);
-    const recipients = await chat.recipientsFor(pool, channel, member.id);
-    pushChatMessage(recipients, {
-      title: channel.name,
-      body: v.value.slice(0, 120),
-      url: `/?view=chat&channel=${id}`,
-      tag: `chat-${id}`,
-    });
+    try {
+      const recipients = await chat.recipientsFor(pool, channel, member.id);
+      pushChatMessage(recipients, {
+        title: channel.name,
+        body: v.value.slice(0, 120),
+        url: `/?view=chat&channel=${id}`,
+        tag: `chat-${id}`,
+      });
+    } catch (pushErr) {
+      console.error('chat push setup failed:', pushErr.message);
+    }
     res.status(201).json(message);
   } catch (err) {
     console.error(err);
