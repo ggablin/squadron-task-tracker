@@ -288,3 +288,42 @@ test('an unknown channel id is 404 on read and list, 403 is not confused with it
   assert.strictEqual((await api('POST', '/api/chat/channels/999999/messages', memA, { body: 'x' })).status, 404);
   assert.strictEqual((await api('GET', '/api/chat/channels/abc/messages', memA)).status, 400);
 });
+
+test('403: a supervisor and a plain member cannot hide a message; leadership can', async () => {
+  const ids = await seed();
+  const { rows: [msg] } = await pool.query(
+    `INSERT INTO messages (channel_id, author_id, body) VALUES ($1, $2, 'oops') RETURNING id`,
+    [ids.shopACh, ids.memAId]);
+  const sup = await login('suptest');
+  assert.strictEqual((await api('POST', `/api/chat/messages/${msg.id}/hide`, sup)).status, 403);
+  const memA = await login('matest');
+  assert.strictEqual((await api('POST', `/api/chat/messages/${msg.id}/hide`, memA)).status, 403);
+  const leader = await login('leadtest');
+  assert.strictEqual((await api('POST', `/api/chat/messages/${msg.id}/hide`, leader)).status, 200);
+  const { rows: [row] } = await pool.query(
+    `SELECT hidden_at, hidden_by_id FROM messages WHERE id = $1`, [msg.id]);
+  assert.ok(row.hidden_at);
+  assert.strictEqual(row.hidden_by_id, ids.leaderId);
+});
+
+test('hiding is idempotent: a second hide is a 200 no-op, not a 404 or 409', async () => {
+  const ids = await seed();
+  const { rows: [msg] } = await pool.query(
+    `INSERT INTO messages (channel_id, author_id, body) VALUES ($1, $2, 'oops') RETURNING id`,
+    [ids.shopACh, ids.memAId]);
+  const leader = await login('leadtest');
+  const first = await api('POST', `/api/chat/messages/${msg.id}/hide`, leader);
+  assert.strictEqual(first.status, 200);
+  const { rows: [afterFirst] } = await pool.query(`SELECT hidden_at FROM messages WHERE id = $1`, [msg.id]);
+  const second = await api('POST', `/api/chat/messages/${msg.id}/hide`, leader);
+  assert.strictEqual(second.status, 200);
+  const { rows: [afterSecond] } = await pool.query(`SELECT hidden_at FROM messages WHERE id = $1`, [msg.id]);
+  assert.deepStrictEqual(afterFirst.hidden_at, afterSecond.hidden_at, 'the timestamp must not move on a re-hide');
+});
+
+test('hiding an unknown message id is 404', async () => {
+  await seed();
+  const leader = await login('leadtest');
+  assert.strictEqual((await api('POST', '/api/chat/messages/999999/hide', leader)).status, 404);
+  assert.strictEqual((await api('POST', '/api/chat/messages/abc/hide', leader)).status, 400);
+});

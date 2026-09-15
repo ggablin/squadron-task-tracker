@@ -1062,6 +1062,19 @@ app.post('/api/chat/channels/:id/read', requireAuth, requireOnboarded, async (re
   }
 });
 
+app.post('/api/chat/messages/:id/hide', requireAuth, requireOnboarded, requireRole('leadership'), async (req, res) => {
+  const id = reqId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid message id' });
+  try {
+    const result = await chat.hideMessage(pool, id, req.session.memberId);
+    if (!result.found) return res.status(404).json({ error: 'That message no longer exists' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── The calendar (Resources → Calendar) ──────────────────────────────────────
 // One read endpoint for the whole year: merging two tables and regrouping them
 // by month in the browser would duplicate buildCalendar in a second language.
