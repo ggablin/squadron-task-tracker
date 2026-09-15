@@ -590,7 +590,7 @@ git commit -m "Add GET /api/chat/channels with per-member unread counts"
 
 **Interfaces:**
 - Consumes: `getChannel`, `canAccess`, `canHide` from Tasks 2–3.
-- Produces: `chat.listMessages(db, channelId, { since, canSeeHidden })` → array of `{id, channel_id, author_id, body, created_at, hidden}` (body is `null` when `hidden` and the caller `canSeeHidden`); `chat.validateBody(raw)` → `{ok:true, value}` or `{ok:false, error}`; `chat.postMessage(db, channelId, authorId, body)` → inserted row; `chat.markRead(db, memberId, channelId)` → `void`. Task 5 (push) calls `postMessage`'s return value to build the push payload; Task 6 (hide) shares the same `getChannel` access-check pattern.
+- Produces: `chat.listMessages(db, channelId, { since, canSeeHidden })` → array of `{id, channel_id, author_id, author_rank, author_name, body, created_at, hidden}` (body is `null` when `hidden`; author fields are always present so leadership can see who wrote a hidden message); `chat.validateBody(raw)` → `{ok:true, value}` or `{ok:false, error}`; `chat.postMessage(db, channelId, authorId, body)` → inserted row; `chat.markRead(db, memberId, channelId)` → `void`. Task 5 (push) calls `postMessage`'s return value to build the push payload; Task 6 (hide) shares the same `getChannel` access-check pattern.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -665,6 +665,17 @@ test('a hidden message is invisible to a member and redacted-but-visible to lead
   assert.strictEqual(forLeader.length, 1);
   assert.strictEqual(forLeader[0].hidden, true);
   assert.strictEqual(forLeader[0].body, null, 'body is redacted even for leadership');
+  assert.ok(forLeader[0].author_rank, 'author_rank is present even on hidden messages');
+  assert.ok(forLeader[0].author_name, 'author_name is present even on hidden messages');
+});
+
+test('messages include author rank and name', async () => {
+  const ids = await seed();
+  await api('POST', `/api/chat/channels/${ids.shopACh}/messages`, await login('matest'), { body: 'hello' });
+  const leader = await login('leadtest');
+  const { messages } = await (await api('GET', `/api/chat/channels/${ids.shopACh}/messages`, leader)).json();
+  assert.strictEqual(messages[0].author_rank, 'SrA');
+  assert.strictEqual(messages[0].author_name, 'matest');
 });
 
 test('marking read updates last_read_at and clears the unread count', async () => {
@@ -705,14 +716,19 @@ Add to `lib/chat.js`, below `listChannels`:
 ```javascript
 async function listMessages(db, channelId, { since, canSeeHidden } = {}) {
   const params = [channelId];
-  let where = 'channel_id = $1';
-  if (!canSeeHidden) where += ' AND hidden_at IS NULL';
-  if (since) { params.push(since); where += ` AND id > $${params.length}`; }
+  let where = 'msg.channel_id = $1';
+  if (!canSeeHidden) where += ' AND msg.hidden_at IS NULL';
+  if (since) { params.push(since); where += ` AND msg.id > $${params.length}`; }
   const { rows } = await db.query(
-    `SELECT id, channel_id, author_id, body, created_at, hidden_at, hidden_by_id
-       FROM messages WHERE ${where} ORDER BY id ASC LIMIT 200`, params);
+    `SELECT msg.id, msg.channel_id, msg.author_id, msg.body, msg.created_at,
+            msg.hidden_at, msg.hidden_by_id,
+            m.rank AS author_rank, m.last_name AS author_name
+       FROM messages msg
+       JOIN members m ON m.id = msg.author_id
+      WHERE ${where} ORDER BY msg.id ASC LIMIT 200`, params);
   return rows.map(r => ({
     id: r.id, channel_id: r.channel_id, author_id: r.author_id,
+    author_rank: r.author_rank, author_name: r.author_name,
     created_at: r.created_at,
     hidden: !!r.hidden_at,
     body: r.hidden_at ? null : r.body,
@@ -1327,7 +1343,7 @@ After the `if (name === 'resources') { ... }` block, add:
 
 - [ ] **Step 4: Load the new script**
 
-In the block of `<script src="..." defer></script>` tags, add a sixth line after `calendar.js`:
+In the block of `<script src="..." defer></script>` tags, add a sixth line after `promotion-package.js` (the last script in the block):
 
 ```html
   <script src="/chat.js" defer></script>
@@ -1376,6 +1392,14 @@ In the block of `<script src="..." defer></script>` tags, add a sixth line after
     shellReady = true;
   }
 
+  function updateBadge() {
+    const total = channels.reduce((n, c) => n + (c.unread_count || 0), 0);
+    const desk = $('navb-chat');
+    const mob  = $('navb-chat-m');
+    if (desk) { desk.textContent = total; desk.hidden = !total; }
+    if (mob)  { mob.textContent  = total; mob.hidden  = !total; }
+  }
+
   async function loadChannels() {
     try {
       const res = await fetch('/api/chat/channels');
@@ -1387,6 +1411,7 @@ In the block of `<script src="..." defer></script>` tags, add a sixth line after
       loaded = false;
     }
     renderChannels();
+    updateBadge();
   }
 
   function renderChannels() {
@@ -1455,12 +1480,25 @@ In the block of `<script src="..." defer></script>` tags, add a sixth line after
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      + ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+
   function messageRow(m) {
     if (m.hidden) {
-      return `<div class="chat-msg chat-msg-hidden">Message hidden</div>`;
+      return `<div class="chat-msg chat-msg-hidden">Message hidden by leadership</div>`;
     }
     return `<div class="chat-msg">
-      <div class="chat-msg-body">${esc(m.body)}</div>
+      <div>
+        <div class="chat-msg-meta">
+          <span class="chat-msg-rank">${esc(m.author_rank)}</span>
+          <span class="chat-msg-author">${esc(m.author_name)}</span>
+          <span class="chat-msg-time">${fmtTime(m.created_at)}</span>
+        </div>
+        <div class="chat-msg-body">${esc(m.body)}</div>
+      </div>
       ${canHide ? `<button class="chat-hide" type="button" aria-label="Hide message" data-id="${m.id}">${TRASH}</button>` : ''}
     </div>`;
   }
@@ -1539,6 +1577,18 @@ In the block of `<script src="..." defer></script>` tags, add a sixth line after
     if (activeChannelId) renderThread();
   };
 
+  // Called from index.html's updateNavBadges() on its regular poll cycle
+  // to keep the chat badge current even when the user is on a different tab.
+  window.chatInit.badgeCheck = async function () {
+    try {
+      const res = await fetch('/api/chat/channels');
+      if (!res.ok) return;
+      channels = (await res.json()).channels;
+      loaded = true;
+      updateBadge();
+    } catch (_) { /* badge stays stale until next poll — acceptable */ }
+  };
+
   // Logout hook (called from index.html's doLogout), same pattern as
   // calendarInit.reset()/dutiesInit.reset(): a same-tab sign-in as a
   // different member must not show the previous member's channels or
@@ -1553,6 +1603,7 @@ In the block of `<script src="..." defer></script>` tags, add a sixth line after
     loaded = false;
     messagesLoaded = false;
     stopPolling();
+    updateBadge();
     const host = $('chat-host');
     if (host) host.innerHTML = '';
   };
@@ -1567,33 +1618,57 @@ Find `doLogout()` in `public/index.html` (it already calls `calendarInit.reset()
   if (window.chatInit && window.chatInit.reset) window.chatInit.reset();
 ```
 
+- [ ] **Step 6b: Wire the chat badge into `updateNavBadges()`**
+
+Find `updateNavBadges()` in `public/index.html` (around line 5297). It follows a `set(id, n)` pattern for other badge elements. Add at the end of the function body:
+
+```javascript
+  if (window.chatInit && window.chatInit.badgeCheck) window.chatInit.badgeCheck();
+```
+
+This piggybacks on the existing nav badge polling interval (~12s) so the chat badge stays current even when the user is on Duties, Calendar, etc. — no second timer needed.
+
 - [ ] **Step 7: Add minimal CSS for the new elements**
 
 In the page's `<style>` block, near the other feature-scoped CSS (e.g. after `.cal-list`/`.duty-list` rules), add:
 
 ```css
+/* ── Chat ────────────────────────────────────────────────────────────────
+   Follows the existing design-token vocabulary from design.css (--cream,
+   --bm, --border, --urgent, --t2, --t3-nav-text, --text, --bg, --r, --rs).
+   Row/badge/button dimensions match the app's 44px touch-target floor and
+   the font-size/weight/letter-spacing used by the member-row and duty-row
+   patterns. The .rk rank chip mirrors design.css's .member-row .rk exactly.
+   ──────────────────────────────────────────────────────────────────────── */
 .chat-layout { display: flex; gap: 12px; height: calc(100vh - 180px); min-height: 320px; }
-.chat-channels { width: 220px; flex-shrink: 0; overflow-y: auto; }
-.chat-channel-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.chat-channels { width: 220px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); }
+.chat-channel-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 13.5px; color: var(--text); }
 .chat-channel-row:hover { background: var(--cream); }
 .chat-channel-row.active { background: var(--cream); font-weight: 600; }
-.chat-unread-badge { background: var(--urgent); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; }
+.chat-unread-badge { background: var(--urgent); color: var(--bg); border-radius: 999px; font-size: 11px; font-weight: 600; padding: 1px 7px; min-width: 18px; text-align: center; }
 .chat-thread { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.chat-thread-hd { font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
-.chat-msg-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.chat-msg { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 8px 10px; background: var(--cream); border-radius: 8px; }
-.chat-msg-hidden { padding: 8px 10px; color: var(--t3-nav-text); font-style: italic; }
+.chat-thread-hd { font-size: 14px; font-weight: 700; letter-spacing: -.01em; padding-bottom: 8px; border-bottom: 1px solid var(--bm); margin-bottom: 8px; }
+.chat-msg-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.chat-msg { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 8px 10px; background: var(--cream); border-radius: var(--rs); }
+.chat-msg-meta { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+.chat-msg-author { font-size: 13px; font-weight: 600; color: var(--text); }
+.chat-msg-rank { font-size: 10.5px; font-weight: 600; color: var(--t2); background: var(--cream); border-radius: 12px; padding: 2px 7px; }
+.chat-msg-time { font-size: 11px; color: var(--t3-nav-text); margin-left: auto; }
+.chat-msg-body { font-size: 13.5px; line-height: 1.45; }
+.chat-msg-hidden { padding: 8px 10px; color: var(--t3-nav-text); font-size: 13px; font-style: italic; }
 .chat-composer { display: flex; gap: 8px; margin-top: 10px; }
-.chat-composer input { flex: 1; min-height: 44px; }
-.chat-composer button { min-height: 44px; min-width: 44px; }
-.chat-hide { min-width: 32px; min-height: 32px; background: none; border: none; color: var(--t3-nav-text); cursor: pointer; }
+.chat-composer input { flex: 1; min-height: 44px; padding: 0 13px; border: 2px solid var(--border); border-radius: var(--rs); font-size: 14px; color: var(--text); background: var(--bg); }
+.chat-composer input:focus { border-color: var(--text); outline: none; }
+.chat-composer button { min-height: 44px; min-width: 64px; border-radius: var(--rs); border: 2px solid var(--text); background: var(--text); color: var(--bg); font-size: 13px; font-weight: 600; cursor: pointer; }
+.chat-composer button:hover { opacity: .88; }
+.chat-hide { min-width: 32px; min-height: 32px; background: none; border: none; color: var(--t3-nav-text); cursor: pointer; flex-shrink: 0; }
+.chat-hide:hover { color: var(--urgent); }
+.chat-hide svg { width: 15px; height: 15px; }
 @media (max-width: 480px) {
   .chat-layout { flex-direction: column; height: auto; }
-  .chat-channels { width: 100%; max-height: 160px; }
+  .chat-channels { width: 100%; max-height: 160px; border-right: none; border-bottom: 1px solid var(--border); }
 }
 ```
-
-(Adjust `--line`/`--cream`/`--urgent`/`--t3-nav-text` if the actual token names differ slightly from what the design spec's references assumed — check `design.css`'s token list at implementation time and match exactly; don't invent new tokens.)
 
 - [ ] **Step 8: Manual verification**
 
