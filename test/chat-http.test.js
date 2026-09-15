@@ -109,6 +109,23 @@ test('unread_count counts messages after last_read_at, excludes hidden ones', as
   assert.strictEqual(shopA.unread_count, 1, 'the hidden message must not count');
 });
 
+test('unread_count with a real prior read: counts only after last_read_at', async () => {
+  const ids = await seed();
+  await pool.query(
+    `INSERT INTO messages (channel_id, author_id, body) VALUES ($1, $2, 'before')`,
+    [ids.shopACh, ids.leaderId]);
+  await pool.query(
+    `INSERT INTO channel_reads (member_id, channel_id, last_read_at) VALUES ($1, $2, NOW())`,
+    [ids.memAId, ids.shopACh]);
+  await pool.query(
+    `INSERT INTO messages (channel_id, author_id, body) VALUES ($1, $2, 'after')`,
+    [ids.shopACh, ids.leaderId]);
+  const memA = await login('matest');
+  const { channels } = await (await api('GET', '/api/chat/channels', memA)).json();
+  const shopA = channels.find(c => c.id === ids.shopACh);
+  assert.strictEqual(shopA.unread_count, 1, 'only the after-read message counts');
+});
+
 test.before(async () => {
   // Requiring server.js above kicked off its boot migration, which creates and
   // seeds channels. This file drops and re-creates that table with raw DDL,
