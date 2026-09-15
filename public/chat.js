@@ -81,6 +81,7 @@
     messages = [];
     messagesLoaded = false;
     renderChannels();
+    renderThreadShell(); // header + composer, built once for this channel-open
     await loadMessages();
     await fetch(`/api/chat/channels/${id}/read`, { method: 'POST' }).catch(() => {});
     await loadChannels(); // picks up the now-cleared unread badge
@@ -97,23 +98,27 @@
       console.error('chat', e);
       messagesLoaded = false;
     }
-    renderThread();
+    renderMessages();
   }
 
+  // Full refetch on every tick (not an incremental ?since=) so that a message
+  // hidden by leadership after we'd already seen it, and the 50-message cap,
+  // both correctly reflect current server state — one code path, shared with
+  // loadMessages(), instead of a second one to keep in sync. Trivial load at
+  // this app's message volumes (~70-person squadron, 50-message window).
   async function pollNewMessages() {
     if (!activeChannelId || document.hidden) return;
-    const lastId = messages.length ? messages[messages.length - 1].id : null;
-    try {
-      const url = `/api/chat/channels/${activeChannelId}/messages` + (lastId ? `?since=${lastId}` : '');
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const { messages: fresh } = await res.json();
-      if (fresh.length) {
-        messages = messages.concat(fresh);
-        renderThread();
-        fetch(`/api/chat/channels/${activeChannelId}/read`, { method: 'POST' }).catch(() => {});
-      }
-    } catch (e) { /* a missed poll tick is not worth surfacing */ }
+    const chatView = document.getElementById('view-chat');
+    if (!chatView || !chatView.classList.contains('active')) return;
+    const channelId = activeChannelId;
+    await loadMessages();
+    // Re-check after the await: navigation away from this channel/view while
+    // the fetch was in flight must not mark anything read.
+    const view = document.getElementById('view-chat');
+    const stillActive = activeChannelId === channelId && view && view.classList.contains('active');
+    if (stillActive) {
+      fetch(`/api/chat/channels/${channelId}/read`, { method: 'POST' }).catch(() => {});
+    }
   }
 
   function startPolling() {
@@ -148,34 +153,52 @@
     </div>`;
   }
 
-  function renderThread() {
+  // Built once per channel-open (from openChannel(), and on chat-tab
+  // re-entry via chatInit()) — the header and composer are NOT touched by
+  // subsequent data refreshes (sends, polls, hides; see renderMessages()
+  // below), so an in-progress draft and input focus survive them. The
+  // composer's submit listener is attached here, once, not on every render.
+  function renderThreadShell() {
     if (!activeChannelId) return;
     const channel = channels.find(c => c.id === activeChannelId);
     const title = channel ? esc(channel.name) : '';
-    if (!messagesLoaded) {
-      $('chat-thread').innerHTML = `
-        <div class="chat-thread-hd">${title}</div>
-        <div class="res-offline">Messages need a connection. Try again once you have signal.</div>`;
-      return;
-    }
-    const body = messages.length
-      ? messages.map(messageRow).join('')
-      : '<div class="res-empty">No messages yet — say hi.</div>';
     $('chat-thread').innerHTML = `
       <div class="chat-thread-hd">${title}</div>
-      <div class="chat-msg-list" id="chat-msg-list">${body}</div>
+      <div class="chat-msg-list" id="chat-msg-list"></div>
       <form class="chat-composer" id="chat-composer">
-        <input type="text" id="chat-input" maxlength="2000" placeholder="Message ${title}" autocomplete="off">
+        <input type="text" id="chat-input" maxlength="2000" placeholder="Message ${title}" autocomplete="off" aria-label="Message">
         <button type="submit">Send</button>
       </form>`;
-    $('chat-msg-list').scrollTop = $('chat-msg-list').scrollHeight;
     $('chat-composer').addEventListener('submit', sendMessage);
-    if (canHide) {
-      $('chat-msg-list').addEventListener('click', (e) => {
-        const btn = e.target.closest('.chat-hide');
-        if (btn) hideOne(Number(btn.dataset.id));
-      });
+  }
+
+  // Delegated on #chat-msg-list, which is a persistent node across
+  // renderMessages() calls (only its innerHTML gets replaced below, not the
+  // node itself). A stable function reference means re-attaching it on every
+  // call is a harmless no-op after the first — addEventListener dedupes
+  // identical type+listener+capture triples — instead of piling up one
+  // duplicate handler per render.
+  function onMsgListClick(e) {
+    const btn = e.target.closest('.chat-hide');
+    if (btn) hideOne(Number(btn.dataset.id));
+  }
+
+  // Called on every data refresh (channel open, send, poll, hide) — replaces
+  // only #chat-msg-list's content. Never touches the header or composer;
+  // those belong to renderThreadShell() above.
+  function renderMessages() {
+    if (!activeChannelId) return;
+    const list = $('chat-msg-list');
+    if (!list) return;
+    if (!messagesLoaded) {
+      list.innerHTML = '<div class="res-offline">Messages need a connection. Try again once you have signal.</div>';
+      return;
     }
+    list.innerHTML = messages.length
+      ? messages.map(messageRow).join('')
+      : '<div class="res-empty">No messages yet — say hi.</div>';
+    list.scrollTop = list.scrollHeight;
+    if (canHide) list.addEventListener('click', onMsgListClick);
   }
 
   async function sendMessage(e) {
@@ -219,7 +242,7 @@
     if (!shellReady) { shell(); loadChannels(); return; }
     if (!loaded) { loadChannels(); return; }
     renderChannels();
-    if (activeChannelId) renderThread();
+    if (activeChannelId) { renderThreadShell(); renderMessages(); }
   };
 
   // Called from index.html's updateNavBadges() on its regular poll cycle

@@ -2547,10 +2547,11 @@
 
     /* ── Chat ────────────────────────────────────────────────────────────────
        Follows the existing design-token vocabulary from design.css (--cream,
-       --bm, --border, --urgent, --t2, --t3-nav-text, --text, --bg, --r, --rs).
+       --bm, --border, --urgent, --t2, --t3-nav-text, --text, --bg, --rs).
        Row/badge/button dimensions match the app's 44px touch-target floor and
        the font-size/weight/letter-spacing used by the member-row and duty-row
-       patterns. The .rk rank chip mirrors design.css's .member-row .rk exactly.
+       patterns. The .chat-msg-rank rank chip follows the same rank-chip
+       pattern as design.css's .member-row .rk.
        ──────────────────────────────────────────────────────────────────────── */
     .chat-layout { display: flex; gap: 12px; height: calc(100vh - 180px); min-height: 320px; }
     .chat-channels { width: 220px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); }
