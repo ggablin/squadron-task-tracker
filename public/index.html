@@ -7001,7 +7001,7 @@ async function disablePush() {
    pane. Used by chat/newsletter links now, and by notification taps in Phase 2 —
    notifications.link already stores exactly these names. switchView() takes an
    ELEMENT, so hand it the same {dataset} shape onNotifClick() uses. */
-const DEEP_LINK_VIEWS = ['member', 'supervisor', 'leadership', 'resources'];
+const DEEP_LINK_VIEWS = ['member', 'supervisor', 'leadership', 'resources', 'chat'];
 
 function applyDeepLink(url) {
   const u = url || new URL(location.href);
