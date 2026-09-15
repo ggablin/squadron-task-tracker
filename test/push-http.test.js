@@ -253,3 +253,67 @@ test('with no VAPID keys the whole thing is a no-op, not an error', async () => 
     process.env.VAPID_PUBLIC_KEY = pub;
   }
 });
+
+// ── pushToMembers ─────────────────────────────────────────────────────────
+
+const { pushToMembers } = require('../lib/push');
+
+test('pushToMembers delivers to every listed member\'s subscriptions, nobody else\'s', async () => {
+  const { a, b } = await seed();
+  await api(await login('alpha'), 'POST', '/api/push/subscribe', sub(EP));
+  await api(await login('bravo'), 'POST', '/api/push/subscribe', sub(`${EP}-b`));
+  const seen = [];
+  const r = await pushToMembers(pool, [a], { title: 'Chat', body: 'hi' },
+    { send: (s, payload) => seen.push({ endpoint: s.endpoint, payload }) });
+  assert.strictEqual(r.sent, 1);
+  assert.strictEqual(seen.length, 1);
+  assert.strictEqual(seen[0].endpoint, EP);
+  assert.strictEqual(JSON.parse(seen[0].payload).title, 'Chat');
+});
+
+test('pushToMembers never touches the notifications table', async () => {
+  const { a } = await seed();
+  await api(await login('alpha'), 'POST', '/api/push/subscribe', sub(EP));
+  await pushToMembers(pool, [a], { title: 'Chat', body: 'hi' }, { send: () => {} });
+  const { rows } = await pool.query('SELECT COUNT(*)::int n FROM notifications');
+  assert.strictEqual(rows[0].n, 0);
+});
+
+test('pushToMembers prunes a dead subscription on 410, exactly like flushPush', async () => {
+  const { a } = await seed();
+  await api(await login('alpha'), 'POST', '/api/push/subscribe', sub(EP));
+  const r = await pushToMembers(pool, [a], { title: 'Chat' }, {
+    send: () => { const e = new Error('gone'); e.statusCode = 410; throw e; },
+  });
+  assert.strictEqual(r.pruned, 1);
+  assert.strictEqual(await subCount(), 0);
+});
+
+test('pushToMembers with an empty member list is a no-op', async () => {
+  await seed();
+  const r = await pushToMembers(pool, [], { title: 'Chat' }, { send: () => assert.fail('must not send') });
+  assert.deepStrictEqual(r, { sent: 0, pruned: 0 });
+});
+
+test('with no VAPID keys, pushToMembers is a no-op, not an error', async () => {
+  const { a } = await seed();
+  await api(await login('alpha'), 'POST', '/api/push/subscribe', sub(EP));
+  const pub = process.env.VAPID_PUBLIC_KEY;
+  delete process.env.VAPID_PUBLIC_KEY;
+  try {
+    const r = await pushToMembers(pool, [a], { title: 'Chat' }, { send: () => assert.fail('must not send') });
+    assert.strictEqual(r.skipped, 'no VAPID keys');
+  } finally {
+    process.env.VAPID_PUBLIC_KEY = pub;
+  }
+});
+
+test('flushPush still behaves exactly as before the deliverOne refactor', async () => {
+  const { a } = await seed();
+  await api(await login('alpha'), 'POST', '/api/push/subscribe', sub(EP));
+  await notif(a);
+  const seen = [];
+  const r = await flushPush({ pool, send: (s, payload) => seen.push(JSON.parse(payload)) });
+  assert.strictEqual(r.sent, 1);
+  assert.strictEqual(seen[0].title, 'Your tasks');
+});

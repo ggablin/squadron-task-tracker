@@ -569,6 +569,16 @@ async function notify(memberIds, { type, title, body = null, link = null }) {
   }
 }
 
+// Mirrors notify()'s shape exactly: never awaited in the request path, and a
+// push failure is caught and logged, never allowed to fail the message post.
+function pushChatMessage(recipientIds, payload) {
+  if (!recipientIds.length) return;
+  setImmediate(() => {
+    require('./lib/push').pushToMembers(pool, recipientIds, payload)
+      .catch(e => console.error('chat push failed:', e.message));
+  });
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 app.post('/api/auth/login', async (req, res) => {
@@ -1018,6 +1028,13 @@ app.post('/api/chat/channels/:id/messages', requireAuth, requireOnboarded, async
     if (!channel) return res.status(404).json({ error: 'That channel does not exist' });
     if (!chat.canPost(member, channel)) return res.status(403).json({ error: 'Forbidden' });
     const message = await chat.postMessage(pool, id, member.id, v.value);
+    const recipients = await chat.recipientsFor(pool, channel, member.id);
+    pushChatMessage(recipients, {
+      title: channel.name,
+      body: v.value.slice(0, 120),
+      url: `/?view=chat&channel=${id}`,
+      tag: `chat-${id}`,
+    });
     res.status(201).json(message);
   } catch (err) {
     console.error(err);
